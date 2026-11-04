@@ -1,0 +1,15 @@
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# Allow backend processors
+RewriteRule ^admin/includes/process-users\.php$ - [L,NC]
+RewriteRule ^admin/includes/.*\.php$ - [L,NC]
+
+# Normal routing
+RewriteRule ^index\.php$ - [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . index.php [L]
+</IfModule>

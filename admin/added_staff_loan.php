@@ -1,0 +1,60 @@
+<?php
+
+require "db.php";
+require "services_check.php";
+
+date_default_timezone_set('Africa/Nairobi');
+
+$staff = mysqli_real_escape_string($conn, $_REQUEST['user_id']);
+$amount = floatval($_REQUEST['amount']);
+$loanPeriod = intval($_REQUEST['loan_period']);
+$interestRate = floatval($_REQUEST['interest']);
+$interestDecimal = $interestRate / 100;
+
+$interest = $amount * $interestDecimal;
+$eff_bal = $amount + $interest;
+$status = "OUTSTANDING";
+
+$now = new DateTime();
+$due_date_obj = (clone $now)->modify("+{$loanPeriod} months");
+$due_date = $due_date_obj->format('Y-m-d H:i');
+
+$get_client = mysqli_query($conn, "SELECT * FROM members WHERE user_id='$staff'");
+$fetch_client = mysqli_fetch_assoc($get_client);
+
+if (!$fetch_client) {
+    echo '<script>
+            alert("Client not found.");
+            window.location.replace("adding_staff_loan.php?id=' . $staff . '");
+          </script>';
+    exit;
+}
+
+if ($amount > $fetch_client['loan_limit']) {
+    echo '<script>
+            alert("FAILED. LOAN LIMIT EXCEEDED");
+            window.location.replace("adding_staff_loan.php?id=' . $staff . '");
+          </script>';
+    exit;
+}
+
+$add_loan = mysqli_query($conn, 
+    "INSERT INTO loan (
+        amount, interest_rate, client_id, status, interest, due_date, loan_balance, loan_period
+    ) VALUES (
+        '$amount', '$interestRate', '$staff', '$status', '$interest', '$due_date', '$eff_bal', '$loanPeriod'
+    )"
+);
+
+if ($add_loan) {
+    echo '<script>
+            alert("LOAN SUCCESSFULLY ADDED");
+            window.location.replace("staff_loans.php");
+          </script>';
+} else {
+    echo '<script>
+            alert("LOAN ADDITION FAILED. CONTACT SUPPORT");
+            window.location.replace("adding_staff_loan.php?id=' . $staff . '");
+          </script>';
+}
+?>

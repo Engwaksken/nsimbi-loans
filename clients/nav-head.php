@@ -1,0 +1,68 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../php/db.php';
+if (!isset($_SESSION['logged_in']) || $_SESSION['role'] != '3') {
+    header('Location: ../index.php'); exit();
+}
+$user_id  = (int)$_SESSION['logged_in'];
+$fname    = $_SESSION['fname'] ?? '';
+$lname    = $_SESSION['lname'] ?? '';
+$uname    = htmlspecialchars(trim("$fname $lname"));
+$initials = strtoupper(substr($fname,0,1).substr($lname,0,1));
+$cp       = basename($_SERVER['PHP_SELF']);
+function cn($p,$c){ return $p===$c?' active':''; }
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><?= htmlspecialchars($phead??'My Loans') ?> - Nsimbi Impact </title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/loanpro.css">
+ <!-- <link rel="stylesheet" href="../datatables2/datatables.min.css"> -->
+  <!--<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"> -->
+
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand-text">Nsimbi<span> Impact</span></div>
+  </div>
+  <div class="sidebar-user">
+    <div class="s-avatar"><?= $initials ?></div>
+    <div><div class="s-name"><?= $uname ?></div><div class="s-role">Client Portal</div></div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-group">My Account</div>
+    <a href="dashboard.php" class="nav-link<?= cn('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
+     <a href="requesting_loan.php"  class="nav-link<?= cn('requesting_loan.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>Request a Loan</a> 
+    <a href="my_loans.php"  class="nav-link<?= cn('my_loans.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>My Loans</a>
+    <a href="loan_payments.php" class="nav-link<?= cn('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payment History</a>
+    
+     <a href="books.php" class="nav-link<?= cn('books.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>My Books</a>
+    <a href="repayment_schedule.php" class="nav-link<?= cn('repayment_schedule.php',$cp) ?>"><span class="ni"><i class="fas fa-calendar-alt"></i></span>Schedules</a>
+    <div class="nav-group">Support</div>
+    <a href="messages.php" class="nav-link<?= cn('messages.php',$cp) ?>"><span class="ni"><i class="fas fa-envelope"></i></span>Messages</a>
+    <a href="profile.php"  class="nav-link<?= cn('profile.php',$cp) ?>"><span class="ni"><i class="fas fa-user-circle"></i></span>My Profile</a>
+  </nav>
+  <div class="sidebar-footer">
+    <a href="logout.php" class="nav-link"><span class="ni"><i class="fas fa-sign-out-alt"></i></span>Sign Out</a>
+  </div>
+</aside>
+
+<div class="main-wrapper">
+<header class="topbar">
+  <div class="topbar-left">
+    <button class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    <div>
+      <div class="topbar-title"><?= htmlspecialchars($phead??'Dashboard') ?></div>
+      <div class="topbar-sub"><?= date('l, F j Y') ?></div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <a href="profile.php" class="t-avatar"><?= $initials ?></a>
+  </div>
+</header>
+<main class="page-content">

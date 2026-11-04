@@ -1,0 +1,25 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime logs and user-uploaded files (may contain personal data)
+**/error_log
+**/error_log.*
+**/uploads/
+uploads/
+**/signatures/
+
+# Quarantined legacy/malicious PHP artifacts found under static-content paths
+**/cgi-bin/
+**/assets/**/*.php
+**/media/*.php
+**/bootstrap_Datatable/**/*.php
+**/datatables*/**/*.php
+**/index.html.bak*
+
+# Local/editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
