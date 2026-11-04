@@ -58,11 +58,6 @@ if ($loan_period <= 0) {
     redirect_with_message("Please select a valid loan period.");
 }
 
-$allowed_periods = [1, 2, 3, 6];
-if (!in_array($loan_period, $allowed_periods, true)) {
-    redirect_with_message("Invalid loan period selected.");
-}
-
 $allowed_methods = ['Mobile Money', 'Bank Transfer'];
 if (!in_array($loan_method, $allowed_methods, true)) {
     redirect_with_message("Invalid loan disbursement method selected.");
@@ -95,6 +90,7 @@ $get_client = $conn->prepare("
         c.bank_account,
         c.loan_limit,
         c.active,
+        c.client_category,
         u.fname,
         u.lname,
         u.username,
@@ -120,6 +116,27 @@ if (!$client) {
 }
 
 $client_id = (int)$client['id'];
+$is_new_onboarded = ($client['client_category'] ?? 'business') === 'new_onboarded';
+$collateral_description = clean_text($_POST['collateral_description'] ?? '');
+$collateral_document = '';
+if ($is_new_onboarded) {
+    $upload = $_FILES['collateral_document'] ?? [];
+    if ($collateral_description === '' || empty($upload['tmp_name']) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || (int)($upload['size'] ?? 0) > 5 * 1024 * 1024) {
+        redirect_with_message('Collateral details and valid evidence (up to 5 MB) are required.');
+    }
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']);
+    $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'application/pdf' => 'pdf'][$mime] ?? '';
+    if ($ext === '') redirect_with_message('Collateral evidence must be JPG, PNG, or PDF.');
+    $dir = __DIR__ . '/uploads/collateral';
+    if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) redirect_with_message('Unable to save collateral evidence.');
+    $filename = bin2hex(random_bytes(18)) . '.' . $ext;
+    if (!move_uploaded_file($upload['tmp_name'], $dir . '/' . $filename)) redirect_with_message('Unable to save collateral evidence.');
+    $collateral_document = 'uploads/collateral/' . $filename;
+}
+$allowed_periods = $is_new_onboarded ? [8, 9, 10, 11, 12] : [1, 2, 3, 6];
+if (!in_array($loan_period, $allowed_periods, true)) {
+    redirect_with_message("Invalid loan period selected.");
+}
 $loan_limit = (float)($client['loan_limit'] ?? 0);
 $is_active = (int)($client['active'] ?? 0);
 
@@ -166,8 +183,8 @@ if ($loan_limit > 0 && $amount > $loan_limit) {
 }
 
 
-$interest_rate = ($loan_period === 1) ? 10.0 : 6.6;
-$interest = round($amount * ($interest_rate / 100), 2);
+$interest_rate = $is_new_onboarded ? 3.0 : (($loan_period === 1) ? 10.0 : 6.6);
+$interest = round($amount * ($interest_rate / 100) * ($is_new_onboarded ? $loan_period : 1), 2);
 $effective_balance = round($amount + $interest, 2);
 $status = "PENDING";
 $due_date = (new DateTime())->modify("+{$loan_period} months")->format("Y-m-d H:i:s");
@@ -223,8 +240,11 @@ try {
             loan_method,
             phone,
             bank_name,
-            bank_account
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bank_account,
+            loan_category,
+            collateral_description,
+            collateral_document
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     if (!$stmt) {
@@ -232,7 +252,7 @@ try {
     }
 
     $stmt->bind_param(
-        "ddisdsdissss",
+        "ddisdsdisssssss",
         $amount,
         $interest_rate,
         $client_id,
@@ -244,7 +264,10 @@ try {
         $loan_method,
         $phone,
         $bank_name,
-        $bank_account
+        $bank_account,
+        $is_new_onboarded ? 'new_onboarded' : 'business',
+        $collateral_description,
+        $collateral_document
     );
 
     if (!$stmt->execute()) {

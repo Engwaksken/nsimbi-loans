@@ -131,11 +131,11 @@ function creditScore(string $type): int
 function parseAmountRange(string $str): float
 {
     $patterns = [
-        '/10,?000?\s*[-–]\s*50,?000?/i'         => 30_000,
-        '/50,?000?\s*[-–]\s*100,?000?/i'         => 75_000,
-        '/100,?000?\s*[-–]\s*500,?000?/i'        => 300_000,
-        '/500,?000?\s*[-–]\s*(1m|1,000,000)/i'  => 750_000,
-        '/1\s*[-–]\s*2\s*m/i'                    => 1_500_000,
+        '/10,?000?\s*[-ï¿½]\s*50,?000?/i'         => 30_000,
+        '/50,?000?\s*[-ï¿½]\s*100,?000?/i'         => 75_000,
+        '/100,?000?\s*[-ï¿½]\s*500,?000?/i'        => 300_000,
+        '/500,?000?\s*[-ï¿½]\s*(1m|1,000,000)/i'  => 750_000,
+        '/1\s*[-ï¿½]\s*2\s*m/i'                    => 1_500_000,
         '/(above|over|more than)\s*2\s*m/i'      => 2_500_000,
     ];
 
@@ -143,7 +143,7 @@ function parseAmountRange(string $str): float
         if (preg_match($pattern, $str)) return (float)$value;
     }
 
-    if (preg_match('/([\d,.]+)\s*([kKmM]?)\s*[-–]\s*([\d,.]+)\s*([kKmM]?)/', $str, $m)) {
+    if (preg_match('/([\d,.]+)\s*([kKmM]?)\s*[-ï¿½]\s*([\d,.]+)\s*([kKmM]?)/', $str, $m)) {
         $v1 = (float)str_replace(',', '', $m[1]) * match(strtolower($m[2])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
         $v2 = (float)str_replace(',', '', $m[3]) * match(strtolower($m[4])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
         return ($v1 + $v2) / 2;
@@ -196,6 +196,7 @@ $bank_account    = post('bank_account');
 $district        = post('district');
 $business_name   = post('business_name');
 $business_type   = post('business_type');
+$client_category = post('client_category') === 'new_onboarded' ? 'new_onboarded' : 'business';
 $location        = post('location');
 $business_period = post('business_period');
 $amount_last_raw = post('amount_last');
@@ -300,7 +301,7 @@ try {
             user_id, gender, dob, nin,
             id_front, id_back,
             phone, bank_name, bank_account, email,
-            district, business_name, business_type, location,
+            district, business_name, business_type, client_category, location,
             stock, amount_last, amount_this, license,
             nok_name, nok_tel, nok_rel, business_period,
             loan_limit, password, credit_score,
@@ -308,7 +309,7 @@ try {
         ) VALUES (
             ?, ?, ?, ?,
             ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
@@ -319,12 +320,12 @@ try {
     if (!$stmt) throw new RuntimeException('Prepare customer: ' . $conn->error);
 
     $stmt->bind_param(
-        'isssssssssssssddssssssdiss',
+        'issssssssssssssddssssssdiss',
         $user_id,
         $gender, $dob, $nin,
         $id_front, $id_back,
         $phone, $bank_name, $bank_account, $email,
-        $district, $business_name, $business_type, $location,
+        $district, $business_name, $business_type, $client_category, $location,
         $stock, $amount_last_num, $amount_this_num, $license,
         $nok_name, $nok_tel, $nok_rel, $business_period,
         $loan_limit, $hashedPassword, $credit_score,

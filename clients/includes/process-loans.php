@@ -83,6 +83,7 @@ function get_client(mysqli $conn, int $user_id): array
             c.bank_account,
             c.loan_limit,
             c.active,
+            c.client_category,
             u.fname,
             u.lname,
             u.username,

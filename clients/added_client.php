@@ -94,7 +94,7 @@ function saveSignature($base64) {
     $base64 = trim($base64);
 
     if ($base64 === '') {
-        return '';
+        jsonResponse("error", "Please draw your signature before registering.", 400);
     }
 
     if (!preg_match('/^data:image\/png;base64,/', $base64)) {
@@ -106,14 +106,21 @@ function saveSignature($base64) {
     $data = preg_replace('/^data:image\/png;base64,/', '', $base64);
     $image = base64_decode($data, true);
 
-    if ($image === false) {
-        return '';
+    if ($image === false || strlen($image) > 1024 * 1024) {
+        jsonResponse("error", "The signature image is invalid or too large.", 400);
+    }
+
+    $imageInfo = getimagesizefromstring($image);
+    if (!$imageInfo || $imageInfo['mime'] !== 'image/png') {
+        jsonResponse("error", "The signature must be a valid PNG image.", 400);
     }
 
     $name = "signature_" . date("YmdHis") . "_" . bin2hex(random_bytes(6)) . ".png";
     $path = "signatures/" . $name;
 
-    file_put_contents(__DIR__ . "/" . $path, $image);
+    if (file_put_contents(__DIR__ . "/" . $path, $image, LOCK_EX) === false) {
+        jsonResponse("error", "Could not save the signature. Please try again.", 500);
+    }
 
     return $path;
 }
@@ -225,12 +232,12 @@ try {
         $stmt->close();
     }
 
+    $applicant_signature = saveSignature($_POST["applicant_signature"] ?? "");
     $profile_img = uploadFile("profile_img");
     $id_front = uploadFile("uploadid1");
     $id_back = uploadFile("uploadid2");
     $stock = uploadFile("stock");
     $license = uploadFile("license");
-    $applicant_signature = saveSignature($_POST["applicant_signature"] ?? "");
 
     $amount_last = amountToNumber($amount_last_raw);
     $amount_this = amountToNumber($amount_this_raw);

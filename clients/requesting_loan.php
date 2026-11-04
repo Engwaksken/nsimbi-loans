@@ -36,7 +36,7 @@ function money($amount): string
 
 $stmt = $conn->prepare("
     SELECT
-        id, user_id, gender, dob, phone, bank_name, bank_account, email,
+        id, user_id, gender, dob, phone, bank_name, bank_account, email, client_category,
         business_name, business_type, business_period, amount_last, amount_this,
         district, location, nok_name, nok_tel, nok_rel, nin, loan_limit,
         credit_score, active, created_at
@@ -77,6 +77,7 @@ $business_name = trim((string)($customer['business_name'] ?? ''));
 $district      = trim((string)($customer['district'] ?? ''));
 $location_name = trim((string)($customer['location'] ?? ''));
 $active_flag   = (int)($customer['active'] ?? 0);
+$is_new_onboarded = ($customer['client_category'] ?? 'business') === 'new_onboarded';
 
 $full_name = trim((string)($_SESSION['fname'] ?? '') . ' ' . (string)($_SESSION['lname'] ?? ''));
 if ($full_name === '') {
@@ -211,7 +212,7 @@ $can_request = ($active_flag === 1 && !$active_loan);
         </div>
 
         <div class="card-body">
-            <form method="post" action="requested_loan.php" id="loanRequestForm" novalidate>
+            <form method="post" enctype="multipart/form-data" action="requested_loan.php" id="loanRequestForm" novalidate>
                 <div class="loan-request-grid">
                     <div>
                         <div class="form-group">
@@ -239,10 +240,16 @@ $can_request = ($active_flag === 1 && !$active_loan);
                                 <?= !$can_request ? 'disabled' : ''; ?>
                             >
                                 <option value="">Select loan period</option>
-                                <option value="1">1 Month - 10% Interest</option>
-                                <option value="2">2 Months - 6.6% Interest</option>
-                                <option value="3">3 Months - 6.6% Interest</option>
-                                <option value="6">6 Months - 6.6% Interest</option>
+                                <?php if ($is_new_onboarded): ?>
+                                    <?php for ($months = 8; $months <= 12; $months++): ?>
+                                        <option value="<?= $months; ?>"><?= $months; ?> Months - 3% monthly interest</option>
+                                    <?php endfor; ?>
+                                <?php else: ?>
+                                    <option value="1">1 Month - 10% Interest</option>
+                                    <option value="2">2 Months - 6.6% Interest</option>
+                                    <option value="3">3 Months - 6.6% Interest</option>
+                                    <option value="6">6 Months - 6.6% Interest</option>
+                                <?php endif; ?>
                             </select>
                         </div>
 
@@ -304,6 +311,18 @@ $can_request = ($active_flag === 1 && !$active_loan);
                             </div>
                         </div>
                     </div>
+
+                    <?php if ($is_new_onboarded): ?>
+                        <div class="form-group mt-3">
+                            <label for="collateral_description" class="form-label">Collateral Details (required)</label>
+                            <textarea class="form-control" id="collateral_description" name="collateral_description" rows="3" required <?= !$can_request ? 'disabled' : ''; ?> placeholder="Describe the collateral offered"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="collateral_document" class="form-label">Collateral Evidence (required)</label>
+                            <input class="form-control" type="file" id="collateral_document" name="collateral_document" accept=".jpg,.jpeg,.png,.pdf" required <?= !$can_request ? 'disabled' : ''; ?>>
+                            <small class="form-help">Upload a JPG, PNG, or PDF (maximum 5 MB).</small>
+                        </div>
+                    <?php endif; ?>
 
                     <div>
                         <div class="loan-summary-box">

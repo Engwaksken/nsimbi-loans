@@ -335,6 +335,13 @@
 
                         <!-- Business -->
                         <div class="ac-section-label">Business Details</div>
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="client_category">Client Category</label>
+                            <select class="form-select" id="client_category" name="client_category" required>
+                                <option value="business" selected>Business Loans</option>
+                                <option value="new_onboarded">New Onboarded Clients</option>
+                            </select>
+                        </div>
                         <div class="info-grid mb-4">
                             <div class="form-group">
                                 <label class="form-label" for="business_name">Business Name</label>
@@ -892,7 +899,7 @@
 
         const btn  = document.getElementById('btn-submit');
         const orig = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Registering…';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Registeringï¿½';
         btn.disabled  = true;
 
         fetch('added_client.php', { method: 'POST', body: new FormData(form) })

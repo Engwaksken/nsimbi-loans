@@ -1,5 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Outfit:wght@400;500;600;700;800;900&display=swap');
 
+/* Client registration wizard */
+.client-registration-page .form-step { display: none; animation: registrationFadeIn .3s ease-in; }
+.client-registration-page .form-step.active { display: block; }
+.client-registration-page .is-invalid { border: 2px solid #dc3545 !important; background-color: #fff0f0; }
+.client-registration-page .card { border: 0; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+.client-registration-page .card-header { background: linear-gradient(45deg,#17a2b8,#007bff); border-radius: 15px 15px 0 0; padding: 20px; }
+.client-registration-page .form-control { border-radius: 8px; margin-bottom: 15px; padding: 12px; }
+.client-registration-page .btn { border-radius: 8px; padding: 10px 20px; font-weight: 600; }
+.client-registration-page .main-content { background: linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%); min-height: 100vh; }
+.client-registration-page .step-indicator { display: flex; justify-content: center; margin-bottom: 30px; }
+.client-registration-page .step { width: 30px; height: 30px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; margin: 0 10px; font-weight: 700; transition: all .3s ease; }
+.client-registration-page .step.active { background: #17a2b8; color: #fff; }
+.client-registration-page .step.completed { background: #28a745; color: #fff; }
+.client-registration-page .signature-wrapper { width: 100%; height: 150px; position: relative; overflow: hidden; background: #fff; border: 2px solid #dee2e6; border-radius: 8px; }
+.client-registration-page #signature-pad { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.client-registration-page .signature-status { margin-top: .4rem; font-size: .875rem; }
+.client-registration-page .signature-status.signed { color: #198754; }
+.client-registration-page .signature-status.empty { color: #6c757d; }
+@keyframes registrationFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
 /* ── DESIGN TOKENS ─────────────────────────────────────────── */
 :root {
   --primary:          #123299;
