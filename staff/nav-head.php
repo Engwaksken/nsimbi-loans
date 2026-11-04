@@ -2,7 +2,7 @@
 session_start();
 require "db.php";
 if (!isset($_SESSION['logged_in']) || $_SESSION['role'] != '4') {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 

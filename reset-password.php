@@ -2,7 +2,7 @@
 $token = $_GET['token'] ?? '';
 
 if (empty($token) || !preg_match('/^[a-zA-Z0-9]{32,}$/', $token)) {
-    header("Location: index.php?error=invalid_token");
+    header("Location: login.php?error=invalid_token");
     exit;
 }
 

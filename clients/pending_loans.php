@@ -11,7 +11,7 @@ $phead = "PENDING LOANS";
 if (!isset($_SESSION['user_id']) && !isset($_SESSION['logged_in'])) {
     $_SESSION['message'] = "Please login first.";
     $_SESSION['message_type'] = "error";
-    header("Location: ../index.php");
+    header("Location: ../login.php");
     exit;
 }
 

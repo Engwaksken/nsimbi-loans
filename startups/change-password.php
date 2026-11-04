@@ -5,7 +5,7 @@ require '../db.php';
 require 'nav.php';
 if (!isset($_SESSION['id'], $_SESSION['role']) || (int)$_SESSION['role'] !== 5) {
     $_SESSION['error'] = "Please login to continue.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 
@@ -47,7 +47,7 @@ $stmt->close();
 
 if (!$user) {
     $_SESSION['error'] = "Startup account not found.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 
@@ -56,7 +56,7 @@ if ((int)($user['status'] ?? 0) !== 1) {
     session_destroy();
     session_start();
     $_SESSION['error'] = "Your account is inactive.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 

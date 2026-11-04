@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/db.php';
 if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1','2',1,2])) {
-    header('Location: ../index.php'); exit();
+    header('Location: ../login.php'); exit();
 }
 $user_id  = $_SESSION['logged_in'] ?? null;
 $role     = $_SESSION['role'];
@@ -72,6 +72,7 @@ function asset_url(string $relative): string {
   <nav class="sidebar-nav">
     <div class="nav-group">Overview</div>
     <a href="dashboard.php"   class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
+    <a href="pages.php" class="nav-link<?= nav_cls('pages.php',$cp) ?>"><span class="ni"><i class="fas fa-globe"></i></span>Frontend Pages</a>
 
     <div class="nav-group">Loans</div>
     <a href="loans.php"       class="nav-link<?= nav_cls('loans.php',$cp) ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>All Loans</a>

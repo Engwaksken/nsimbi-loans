@@ -8,7 +8,7 @@ require_once __DIR__ . '/db.php';
 function redirect_login(string $message): void
 {
     $_SESSION['error'] = $message;
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -18,7 +18,7 @@ function clean_input(string $data): string
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 

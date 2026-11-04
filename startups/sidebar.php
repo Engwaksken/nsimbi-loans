@@ -5,7 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (!isset($_SESSION['id'], $_SESSION['role']) || (int)$_SESSION['role'] !== 5) {
     $_SESSION['error'] = "Please login to access the startup panel.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 

@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../php/db.php';
 if (!isset($_SESSION['logged_in']) || $_SESSION['role'] != '3') {
-    header('Location: ../index.php'); exit();
+    header('Location: ../login.php'); exit();
 }
 $user_id  = (int)$_SESSION['logged_in'];
 $fname    = $_SESSION['fname'] ?? '';

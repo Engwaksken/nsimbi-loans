@@ -6,7 +6,7 @@ require 'nav.php';
 
 if (!isset($_SESSION['id'], $_SESSION['role']) || (int)$_SESSION['role'] !== 5) {
     $_SESSION['error'] = "Please login to access your profile.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 
@@ -121,7 +121,7 @@ if ((int)($startup['user_status'] ?? 0) !== 1) {
     session_destroy();
     session_start();
     $_SESSION['error'] = "Your account is inactive.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 
@@ -130,7 +130,7 @@ if (isset($startup['startup_status']) && $startup['startup_status'] === 'blocked
     session_destroy();
     session_start();
     $_SESSION['error'] = "Your startup account has been blocked.";
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit();
 }
 

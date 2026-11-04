@@ -12,7 +12,7 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
     require_once __DIR__ . '/includes/books-tab.php';
 
     if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1', '2', 1, 2], true)) {
-        header('Location: ../index.php');
+        header('Location: ../login.php');
         exit;
     }
 

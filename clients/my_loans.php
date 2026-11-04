@@ -12,19 +12,19 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 $conn->set_charset('utf8mb4');
 
 if (empty($_SESSION['is_logged_in']) || empty($_SESSION['logged_in'])) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
 if ((int)($_SESSION['role'] ?? 0) !== 3) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
 $user_id = (int)($_SESSION['user_id'] ?? $_SESSION['logged_in'] ?? 0);
 
 if ($user_id <= 0) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 

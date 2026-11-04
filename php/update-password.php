@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn->query("DELETE FROM password_resets WHERE email = '$email'");
 
         $_SESSION['status'] = "Password successfully updated. You can now log in.";
-        header("Location: ../index.php");
+        header("Location: ../login.php");
         exit;
     } else {
         $_SESSION['status'] = "Invalid or expired token.";

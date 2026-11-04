@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * My Books — authenticated dashboard with voice/manual record creation.
+ * My Books ï¿½ authenticated dashboard with voice/manual record creation.
  *
  * Dependencies:
  *   /php/db.php
@@ -17,13 +17,13 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 if (empty($_SESSION['is_logged_in']) || empty($_SESSION['logged_in'])) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
 if ((int)($_SESSION['role'] ?? 0) !== 3) {
     http_response_code(403);
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -32,7 +32,7 @@ $user_id = filter_var($_SESSION['user_id'] ?? null, FILTER_VALIDATE_INT, [
     'options' => ['min_range' => 1],
 ]);
 if ($user_id === false || $user_id === null) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 $user_id = (int)$user_id;

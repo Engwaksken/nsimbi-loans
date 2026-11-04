@@ -12,12 +12,12 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 $conn->set_charset('utf8mb4');
 
 if (empty($_SESSION['is_logged_in']) || empty($_SESSION['logged_in'])) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
 if ((int)($_SESSION['role'] ?? 0) !== 3) {
-    header('Location: ../index.php');
+    header('Location: ../login.php');
     exit;
 }
 
