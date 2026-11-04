@@ -1,10 +1,13 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/env.php';
+
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_USER', getenv('DB_USER') ?: '');
-define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_PASS', getenv('DB_PASS') !== false ? (string)getenv('DB_PASS') : (getenv('DB_PASSWORD') ?: ''));
 define('DB_NAME', getenv('DB_NAME') ?: '');
+define('DB_PORT', (int)(getenv('DB_PORT') ?: 3306));
 
 define('SITE_NAME', 'Nsimbi Impact');
 define('SITE_URL', getenv('SITE_URL') ?: 'https://fin.nsimbiimpact.com');
@@ -13,18 +16,7 @@ define('ROOT_PATH', dirname(__DIR__));
 define('UPLOAD_DIR', ROOT_PATH . '/uploads/');
 define('UPLOAD_URL', SITE_URL . '/uploads/');
 
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
-try {
-    if (DB_USER === '' || DB_NAME === '') {
-        throw new RuntimeException('Database environment variables are missing.');
-    }
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-    $conn->set_charset('utf8mb4');
-} catch (Throwable $e) {
-    http_response_code(500);
-    exit('Database connection failed.');
-}
+require_once __DIR__ . '/database.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
