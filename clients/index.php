@@ -39,7 +39,7 @@
                     <div id="messageContent"></div>
                   </div>
 
-                  <form method="post" action="added_client.php" enctype="multipart/form-data" id="multiStepForm">
+                  <form method="post" action="/clients/added_client.php" enctype="multipart/form-data" id="multiStepForm">
                 
                     <div class="form-step active" data-step="1">
                       <h5 class="text-info mb-4">Personal Details</h5>
@@ -343,7 +343,7 @@
 
                 <div class="card-footer text-center pt-3">
                 <p class="mb-0 text-sm">Have an account?
-                <a href="../index.php" class="text-info font-weight-bold text-decoration-none">Login</a></p>
+                <a href="../login" class="text-info font-weight-bold text-decoration-none">Login</a></p>
                 </div>
 
               </div>
@@ -353,7 +353,7 @@
       </div>
     </section>
   </main>
-<script src="../assets/js/client-registration.js" defer></script>
+<script src="/assets/js/client-registration.js" defer></script>
 
 </body>
 </html>

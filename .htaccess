@@ -1,0 +1,26 @@
+Options -MultiViews
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Canonical public URLs for the homepage, sign-in and loan application.
+    RewriteCond %{THE_REQUEST} \s/+index\.php(?:[?\s]) [NC]
+    RewriteRule ^index\.php$ / [R=301,L]
+    RewriteCond %{THE_REQUEST} \s/+login\.php(?:[?\s]) [NC]
+    RewriteRule ^login\.php$ /login [R=301,L]
+    RewriteCond %{THE_REQUEST} \s/+clients/index\.php(?:[?\s]) [NC]
+    RewriteRule ^clients/index\.php$ /apply [R=301,L]
+
+    # Friendly routes for the client portal and sign-in page.
+    RewriteRule ^login/?$ login.php [L,QSA,NC]
+    RewriteRule ^apply/?$ clients/index.php [L,QSA,NC]
+
+    # Redirect old CMS URLs to the clean page slug.
+    RewriteCond %{QUERY_STRING} ^slug=([A-Za-z0-9-]+)$
+    RewriteRule ^page\.php$ /%1? [R=301,L,NE]
+
+    # Published CMS pages resolve as /about-us instead of page.php?slug=about-us.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([A-Za-z0-9][A-Za-z0-9-]*)/?$ page.php?slug=$1 [L,QSA,NC]
+</IfModule>

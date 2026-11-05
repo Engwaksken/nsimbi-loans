@@ -199,7 +199,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const formData = new FormData(form);
 
-            fetch("added_client.php", {
+            fetch("/clients/added_client.php", {
                 method: "POST",
                 body: formData
             })
