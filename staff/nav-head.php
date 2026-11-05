@@ -1,6 +1,8 @@
 <?php
 session_start();
 require "db.php";
+require_once dirname(__DIR__) . '/includes/site_cms.php';
+$brand = site_settings($conn);
 if (!isset($_SESSION['logged_in']) || $_SESSION['role'] != '4') {
     header('Location: ../login.php');
     exit();
@@ -51,8 +53,7 @@ $page_active = "active";
 <head>
     <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <link rel="apple-touch-icon" sizes="76x76" href="assets/img/logo.png">
-  <link rel="icon" type="image/png" href="assets/img/favicon.png">
+  <?= site_favicon_tags() ?>
   <title>
   </title>
   <!--     Fonts and icons     -->
@@ -66,6 +67,7 @@ $page_active = "active";
   <!-- CSS Files -->
   <link id="pagestyle" href="assets/css/loanpro.css" rel="stylesheet" /> 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <?= site_panel_font_tags() ?>
 
 </head>
 
@@ -74,7 +76,7 @@ $page_active = "active";
     <div class="sidenav-header">
       <i class="fas fa-times p-3 cursor-pointer text-secondary opacity-5 position-absolute end-0 top-0 d-none d-xl-none" aria-hidden="true" id="iconSidenav"></i>
       <a class="navbar-brand m-0" href="dashboard.php">
-        <img src="assets/img/logo.png" class="navbar-brand-img h-auto" alt="">
+        <img src="<?= site_e($brand['logo']) ?>" class="navbar-brand-img h-auto" alt="">
        
       </a>
     </div><br>

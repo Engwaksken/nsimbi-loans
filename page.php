@@ -1,13 +1,38 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/includes/config.php';
-$slug = strtolower(trim((string)($_GET['slug'] ?? '')));
-if (!preg_match('/^[a-z0-9-]{1,120}$/', $slug) || $slug === 'home') { http_response_code(404); exit('Page not found'); }
+require_once __DIR__ . '/includes/site_public.php';
+
+$slug = preg_replace('/[^a-z0-9-]/', '', strtolower((string)($_GET['slug'] ?? '')));
+if ($slug === 'home') { header('Location: /', true, 301); exit; }
 $stmt = $conn->prepare("SELECT * FROM site_pages WHERE slug=? AND status='published' LIMIT 1");
 $stmt->bind_param('s', $slug); $stmt->execute(); $page = $stmt->get_result()->fetch_assoc(); $stmt->close();
 if (!$page) { http_response_code(404); exit('Page not found'); }
-$e = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-$ctaUrl = trim((string)$page['cta_url']);
-if ($ctaUrl === 'clients/index.php') $ctaUrl = '/apply';
-if ($ctaUrl === 'login.php') $ctaUrl = '/login';
-?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= $e($page['title']) ?> | Nsimbi Impact</title><meta name="description" content="<?= $e($page['meta_description']) ?>"><link rel="stylesheet" href="/assets/css/public-site.css"><link rel="stylesheet" href="/assets/css/nsimbi-theme.css?v=2"><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"></head><body><header class="public-header"><a class="wordmark" href="/"><img src="/assets/img/logo.png" alt="Nsimbi Impact"><span>Nsimbi <b>Impact</b></span></a><nav><a href="/#story">Our story</a><a href="/#approach">Our approach</a><a href="/#impact">Our impact</a></nav><a class="header-cta" href="/apply">Apply for a loan <i class="fa-solid fa-arrow-right"></i></a><button class="menu-toggle" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button></header><main class="editorial-page"><div class="section-label"><span>NSIMBI IMPACT</span> / <?= $e(strtoupper($page['slug'])) ?></div><h1><?= $e($page['hero_title'] ?: $page['title']) ?></h1><?php if ($page['hero_subtitle']): ?><p class="editorial-lede"><?= $e($page['hero_subtitle']) ?></p><?php endif; ?><div class="editorial-copy"><?= nl2br($e($page['body_content'])) ?></div><?php if ($page['cta_label']): ?><a class="button button-dark" href="<?= $e($ctaUrl) ?>"><?= $e($page['cta_label']) ?> <i class="fa-solid fa-arrow-right"></i></a><?php endif; ?></main><footer class="public-footer"><div class="footer-bottom"><span>© <?= date('Y') ?> Nsimbi Impact</span><a href="/">Home</a><a href="/login">Client & staff login</a></div></footer><script>document.querySelector(".menu-toggle").addEventListener("click",()=>document.querySelector(".public-header nav").classList.toggle("open"));</script></body></html>
+
+site_settings($conn);
+[$sections, $slides] = site_page_blocks($conn, (int)$page['id']);
+$sections ??= [];
+$ctaUrl = site_normalize_cta((string)$page['cta_url']);
+$heroTitle = $page['hero_title'] ?: $page['title'];
+
+echo site_public_head($page['title'] . ' | ' . site_settings()['site_name'], (string)$page['meta_description']);
+echo site_public_header(site_section_menu($sections), site_nav_pages($conn));
+?>
+<main>
+<?php if ($slides): ?>
+  <?= site_render_slider($slides, ['title' => $heroTitle, 'subtitle' => $page['hero_subtitle'], 'cta_label' => $page['cta_label'], 'cta_url' => $ctaUrl]) ?>
+  <?php if (trim((string)$page['body_content']) !== ''): ?><div class="editorial-page has-sections"><div class="editorial-copy"><?= site_paragraphs($page['body_content']) ?></div></div><?php endif; ?>
+<?php else: ?>
+  <div class="editorial-page<?= $sections ? ' has-sections' : '' ?>">
+    <div class="section-label"><span><?= site_e(strtoupper(site_settings()['site_name'])) ?></span> / <?= site_e(strtoupper($page['slug'])) ?></div>
+    <h1><?= site_e($heroTitle) ?></h1>
+    <?php if ($page['hero_subtitle']): ?><p class="editorial-lede"><?= site_e($page['hero_subtitle']) ?></p><?php endif; ?>
+    <?php if (site_clean_media((string)$page['hero_image']) !== ''): ?><figure class="media-frame"><img src="<?= site_e(site_clean_media((string)$page['hero_image'])) ?>" alt=""></figure><?php endif; ?>
+    <div class="editorial-copy"><?= site_paragraphs($page['body_content']) ?></div>
+    <?php if ($page['cta_label']): ?><a class="button button-dark" href="<?= site_e($ctaUrl) ?>"><?= site_e($page['cta_label']) ?> <i class="fa-solid fa-arrow-right"></i></a><?php endif; ?>
+  </div>
+<?php endif; ?>
+  <?= site_render_sections($sections) ?>
+</main>
+<?= site_public_footer() ?>

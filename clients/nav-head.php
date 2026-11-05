@@ -1,6 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../php/db.php';
+require_once dirname(__DIR__) . '/includes/site_cms.php';
+$brand = site_settings($conn);
 if (!isset($_SESSION['logged_in']) || $_SESSION['role'] != '3') {
     header('Location: ../login.php'); exit();
 }
@@ -16,10 +18,12 @@ function cn($p,$c){ return $p===$c?' active':''; }
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title><?= htmlspecialchars($phead??'My Loans') ?> - Nsimbi Impact </title>
+  <title><?= htmlspecialchars($phead??'My Loans') ?> - <?= site_e($brand['site_name']) ?></title>
+  <?= site_favicon_tags() ?>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../assets/css/loanpro.css">
+  <?= site_panel_font_tags() ?>
  <!-- <link rel="stylesheet" href="../datatables2/datatables.min.css"> -->
   <!--<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"> -->
 
@@ -28,7 +32,8 @@ function cn($p,$c){ return $p===$c?' active':''; }
 
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <div class="brand-text">Nsimbi<span> Impact</span></div>
+    <img src="<?= site_e($brand['logo']) ?>" alt="Logo" onerror="this.style.display='none'">
+    <div class="brand-text"><?= str_replace(['<b>', '</b>'], ['<span>', '</span>'], site_wordmark_html()) ?></div>
   </div>
   <div class="sidebar-user">
     <div class="s-avatar"><?= $initials ?></div>

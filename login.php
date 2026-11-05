@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once __DIR__ . '/includes/site_cms.php';
+$brand = site_settings($conn);
 
 if (isset($_SESSION['logged_in'])) {
     $role = (int)($_SESSION['role'] ?? 0);
@@ -30,15 +32,15 @@ unset($_SESSION['old_login']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign in | Nsimbi Impact</title>
+    <title>Sign in | <?= site_e($brand['site_name']) ?></title>
 
-    <link rel="icon" type="image/png" href="assets/img/favicon.png">
-    <link rel="apple-touch-icon" href="assets/img/favicon.png">
+    <?= site_favicon_tags() ?>
 
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
     <link rel="stylesheet" href="assets/css/loanpro.css">
+    <?= site_panel_font_tags() ?>
 </head>
 <body>
 
@@ -47,7 +49,7 @@ unset($_SESSION['old_login']);
     <div class="login-brand">
         <div class="login-brand-inner">
             <div class="login-logo-box">
-                <img src="assets/img/logo.png" alt="Nsimbi Impact Logo" style="max-width:80px;max-height:80px;object-fit:contain;">
+                <img src="<?= site_e($brand['logo']) ?>" alt="<?= site_e($brand['site_name']) ?> logo" style="max-width:80px;max-height:80px;object-fit:contain;">
             </div>
 
             <h1>Nsimbi<span> Impact</span></h1>
@@ -76,8 +78,8 @@ unset($_SESSION['old_login']);
         <!-- Logo -->
         <div style="display:flex;justify-content:center;align-items:center;margin-bottom:1.2rem;">
             <img 
-                src="assets/img/logo.png" 
-                alt="Nsimbi Impact Logo"
+                src="<?= site_e($brand['logo']) ?>"
+                alt="<?= site_e($brand['site_name']) ?> logo"
                 style="max-width:90px;max-height:90px;object-fit:contain;"
             >
         </div>

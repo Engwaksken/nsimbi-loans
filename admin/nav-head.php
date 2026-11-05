@@ -1,6 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/site_cms.php';
+$brand = site_settings($conn);
 if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1','2',1,2])) {
     header('Location: ../login.php'); exit();
 }
@@ -45,11 +47,13 @@ function asset_url(string $relative): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title><?= htmlspecialchars($phead ?? 'Admin') ?> - Nsimbi Impact</title>
+  <title><?= htmlspecialchars($phead ?? 'Admin') ?> - <?= htmlspecialchars($brand['site_name']) ?></title>
+  <?= site_favicon_tags() ?>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="<?= htmlspecialchars(asset_url('assets/css/loanpro.css'), ENT_QUOTES, 'UTF-8') ?>">
   <link rel="stylesheet" href="../datatables2/datatables.min.css">
+  <?= site_panel_font_tags() ?>
 </head>
 <body>
 
@@ -57,8 +61,8 @@ function asset_url(string $relative): string {
 <aside class="sidebar" id="sidebar">
 
   <div class="sidebar-logo">
-    <img src="../assets/img/logo.png" alt="Logo" onerror="this.style.display='none'">
-    <div class="brand-text">Nsimbi<span> Impact</span></div>
+    <img src="<?= htmlspecialchars($brand['logo']) ?>" alt="Logo" onerror="this.style.display='none'">
+    <div class="brand-text"><?= str_replace(['<b>', '</b>'], ['<span>', '</span>'], site_wordmark_html()) ?></div>
   </div>
 
   <div class="sidebar-user">
@@ -70,46 +74,66 @@ function asset_url(string $relative): string {
   </div>
 
   <nav class="sidebar-nav">
-    <div class="nav-group">Overview</div>
-    <a href="dashboard.php"   class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
-    <a href="pages.php" class="nav-link<?= nav_cls('pages.php',$cp) ?>"><span class="ni"><i class="fas fa-globe"></i></span>Frontend Pages</a>
-
-    <div class="nav-group">Loans</div>
-    <a href="loans.php"       class="nav-link<?= nav_cls('loans.php',$cp) ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>All Loans</a>
-    <a href="pending_loans.php" class="nav-link<?= nav_cls('pending_loans.php',$cp) ?>">
-      <span class="ni"><i class="fas fa-hourglass-half"></i></span>Pending
-      <?php if ($count_pending > 0): ?><span class="nav-pill red"><?= $count_pending ?></span><?php endif; ?>
-    </a>
-    <a href="outstanding.php" class="nav-link<?= nav_cls('outstanding.php',$cp) ?>"><span class="ni"><i class="fas fa-exclamation-circle"></i></span>Outstanding</a>
-    <a href="overdue.php"     class="nav-link<?= nav_cls('overdue.php',$cp) ?>"><span class="ni"><i class="fas fa-clock"></i></span>Overdue</a>
-    <a href="cleared.php"     class="nav-link<?= nav_cls('cleared.php',$cp) ?>"><span class="ni"><i class="fas fa-check-circle"></i></span>Cleared</a>
-    <a href="rejected_loans.php" class="nav-link<?= nav_cls('rejected_loans.php',$cp) ?>"><span class="ni"><i class="fas fa-times-circle"></i></span>Rejected</a>
-    <a href="loan_products.php" class="nav-link<?= nav_cls('loan_products.php',$cp) ?>"><span class="ni"><i class="fas fa-times-circle"></i></span>Loan Products</a>
-
-
-    <div class="nav-group">People</div>
-    <a href="clients.php"     class="nav-link<?= nav_cls('clients.php',$cp) ?>"><span class="ni"><i class="fas fa-users"></i></span>Clients</a>
-    <a href="staff.php"       class="nav-link<?= nav_cls('staff.php',$cp) ?>"><span class="ni"><i class="fas fa-user-tie"></i></span>Staff</a>
-    <a href="startups.php" class="nav-link<?= nav_cls('startups.php',$cp) ?>"><span class="ni"><i class="fas fa-building"></i></span>Startups</a>
-    <a href="users.php"       class="nav-link<?= nav_cls('users.php',$cp) ?>"><span class="ni"><i class="fas fa-user-shield"></i></span>Users</a>
-
-    <div class="nav-group">Finance</div>
-    <a href="loan_payments.php"    class="nav-link<?= nav_cls('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payments</a>
-    <a href="income_expenses.php"  class="nav-link<?= nav_cls('income_expenses.php',$cp) ?>"><span class="ni"><i class="fas fa-chart-bar"></i></span>Income & Expenses</a>
-    <a href="expenses.php"         class="nav-link<?= nav_cls('expenses.php',$cp) ?>"><span class="ni"><i class="fas fa-receipt"></i></span>Expenses</a>
-    <a href="all_loans_report.php" class="nav-link<?= nav_cls('all_loans_report.php',$cp) ?>"><span class="ni"><i class="fas fa-file-export"></i></span>Reports</a>
-    <a href="books_history.php" class="nav-link<?= nav_cls('books_history.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>Books History</a>
-
-    <div class="nav-group">System</div>
-    <a href="loan_messages.php" class="nav-link<?= nav_cls('loan_messages.php',$cp) ?>">
-      <span class="ni"><i class="fas fa-envelope"></i></span>Messages
-      <?php if ($new_messages > 0): ?><span class="nav-pill"><?= $new_messages ?></span><?php endif; ?>
-    </a>
-     <a href="manage-score-weights.php" class="nav-link<?= nav_cls('manage-score-weights.php',$cp) ?>"><span class="ni"><i class="fas fa-briefcase"></i></span>Manage score Weights</a> 
-       
-     <a href="manage-sectors.php" class="nav-link<?= nav_cls('manage-sectors.php',$cp) ?>"><span class="ni"><i class="fas fa-building"></i></span>Manage Sectors</a>
-   <!-- <a href="settings.php" class="nav-link<?= nav_cls('settings.php',$cp) ?>"><span class="ni"><i class="fas fa-cog"></i></span>Settings</a> -->
-    <a href="profile.php"  class="nav-link<?= nav_cls('profile.php',$cp) ?>"><span class="ni"><i class="fas fa-user-circle"></i></span>My Profile</a>
+    <a href="dashboard.php" class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
+<?php
+// [label, [[href, icon, text, badge, badge class, other pages that mark it active]]]
+$navSections = [
+  'loans' => ['Loans', [
+    ['loans.php', 'fa-file-invoice-dollar', 'All Loans'],
+    ['pending_loans.php', 'fa-hourglass-half', 'Pending', (int)$count_pending, 'red'],
+    ['outstanding.php', 'fa-exclamation-circle', 'Outstanding'],
+    ['overdue.php', 'fa-clock', 'Overdue'],
+    ['cleared.php', 'fa-check-circle', 'Cleared'],
+    ['rejected_loans.php', 'fa-times-circle', 'Rejected'],
+    ['loan_products.php', 'fa-box-open', 'Loan Products'],
+  ]],
+  'people' => ['People', [
+    ['clients.php', 'fa-users', 'Clients'],
+    ['staff.php', 'fa-user-tie', 'Staff'],
+    ['startups.php', 'fa-building', 'Startups'],
+    ['users.php', 'fa-user-shield', 'Users'],
+  ]],
+  'finance' => ['Finance', [
+    ['loan_payments.php', 'fa-money-bill-wave', 'Payments'],
+    ['income_expenses.php', 'fa-chart-bar', 'Income & Expenses'],
+    ['expenses.php', 'fa-receipt', 'Expenses'],
+    ['all_loans_report.php', 'fa-file-export', 'Reports'],
+    ['books_history.php', 'fa-book', 'Books History'],
+  ]],
+  'website' => ['Website', [
+    ['pages.php', 'fa-globe', 'Frontend Pages', 0, '', ['page_builder.php']],
+    ['site_settings.php', 'fa-palette', 'Branding & Fonts'],
+  ]],
+  'system' => ['System', [
+    ['loan_messages.php', 'fa-envelope', 'Messages', (int)$new_messages, ''],
+    ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
+    ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
+    ['profile.php', 'fa-user-circle', 'My Profile'],
+  ]],
+];
+foreach ($navSections as $key => [$groupLabel, $links]):
+  $isOpen = false; $groupBadge = 0;
+  foreach ($links as $link) {
+    if ($cp === $link[0] || in_array($cp, $link[5] ?? [], true)) $isOpen = true;
+    $groupBadge += (int)($link[3] ?? 0);
+  }
+?>
+    <div class="nav-section<?= $isOpen ? ' open' : '' ?>" data-nav-section="<?= $key ?>">
+      <button type="button" class="nav-group nav-group-toggle" aria-expanded="<?= $isOpen ? 'true' : 'false' ?>" aria-controls="nav-<?= $key ?>">
+        <span><?= htmlspecialchars($groupLabel) ?></span>
+        <?php if ($groupBadge > 0): ?><span class="nav-pill red"><?= $groupBadge ?></span><?php endif; ?>
+        <i class="fas fa-chevron-down chev" aria-hidden="true"></i>
+      </button>
+      <div class="nav-items" id="nav-<?= $key ?>"><div>
+<?php foreach ($links as $link):
+  $active = $cp === $link[0] || in_array($cp, $link[5] ?? [], true); ?>
+        <a href="<?= $link[0] ?>" class="nav-link<?= $active ? ' active' : '' ?>"<?= $isOpen ? '' : ' tabindex="-1"' ?>><span class="ni"><i class="fas <?= $link[1] ?>"></i></span><?= htmlspecialchars($link[2]) ?>
+          <?php if (!empty($link[3])): ?><span class="nav-pill <?= $link[4] ?? '' ?>"><?= (int)$link[3] ?></span><?php endif; ?>
+        </a>
+<?php endforeach; ?>
+      </div></div>
+    </div>
+<?php endforeach; ?>
   </nav>
 
   <div class="sidebar-footer">

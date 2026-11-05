@@ -1,12 +1,15 @@
+<?php
+require_once dirname(__DIR__) . '/includes/site_cms.php';
+$brand = site_settings($conn);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nsimbi Impact</title>
+  <title>Apply for a loan | <?= site_e($brand['site_name']) ?></title>
   <!-- Favicon -->
-<link rel="apple-touch-icon" sizes="76x76" href="assets/img/favicon.png">
-<link rel="icon" type="image/png" href="assets/img/favicon.png">
+<?= site_favicon_tags() ?>
 
   <!-- Reuse the shared application styles; avoid loading legacy CDN copies. -->
   <link rel="stylesheet" href="../assets/css/soft-ui-dashboard.css">
@@ -24,7 +27,7 @@
               <div class="card card-plain mt-4">
                 <div class="card-header text-white text-center">
                   <h3 class="font-weight-bold mb-0">Create an Account</h3>
-                  <p class="mb-0">Join Nsimbi Impact today</p>
+                  <p class="mb-0">Join <?= site_e($brand['site_name']) ?> today</p>
                 </div>
                 <div class="card-body p-4">
                  

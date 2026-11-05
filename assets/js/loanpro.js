@@ -1065,3 +1065,24 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+/* =========================================================
+   COLLAPSIBLE SIDEBAR GROUPS (accordion: one group open)
+========================================================= */
+document.addEventListener('click', function (event) {
+    const toggle = event.target.closest('.nav-group-toggle');
+    if (!toggle) return;
+
+    const section = toggle.closest('.nav-section');
+    const opening = !section.classList.contains('open');
+
+    document.querySelectorAll('.nav-section').forEach(function (other) {
+        const open = other === section ? opening : false;
+        other.classList.toggle('open', open);
+        const button = other.querySelector('.nav-group-toggle');
+        if (button) button.setAttribute('aria-expanded', open ? 'true' : 'false');
+        other.querySelectorAll('.nav-items a').forEach(function (link) {
+            if (open) link.removeAttribute('tabindex');
+            else link.setAttribute('tabindex', '-1');
+        });
+    });
+});

@@ -2850,3 +2850,48 @@ a.profile-tab-btn{text-decoration:none;}
 @media(max-width:480px){
     .surplus-card .stat-value{font-size:1.3rem;}
 }
+
+/* ── Collapsible sidebar groups ───────────────────────────── */
+.nav-section{margin-bottom:2px}
+.nav-group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.5rem;background:none;border:0;border-radius:6px;cursor:pointer;font-family:inherit;text-align:left;transition:var(--t)}
+.nav-group-toggle:hover,.nav-group-toggle:focus-visible{color:rgba(255,255,255,.75);background:rgba(255,255,255,.05);outline:none}
+.nav-group-toggle .chev{font-size:.62rem;transition:transform .22s ease}
+.nav-group-toggle[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.nav-group-toggle .nav-pill{margin-left:auto;margin-right:.35rem}
+.nav-group-toggle[aria-expanded="true"] .nav-pill{display:none}
+.nav-items{display:grid;grid-template-rows:0fr;transition:grid-template-rows .24s ease}
+.nav-items>div{overflow:hidden;min-height:0}
+.nav-section.open .nav-items{grid-template-rows:1fr}
+@media(prefers-reduced-motion:reduce){.nav-items,.nav-group-toggle .chev{transition:none}}
+
+/* ── Website CMS admin ────────────────────────────────────── */
+.cms-row{display:flex;align-items:center;gap:1rem;padding:.85rem 1.35rem;border-bottom:1px solid var(--border-light)}
+.cms-row:last-child{border-bottom:0}
+.cms-row.is-hidden{opacity:.55}
+.cms-thumb{width:64px;height:44px;flex-shrink:0;border-radius:8px;background:var(--primary-xlight);color:var(--primary);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:1rem}
+.cms-thumb img{width:100%;height:100%;object-fit:cover}
+.cms-row-main{flex:1;min-width:0}
+.cms-row-title{font-weight:700;color:var(--text-dark);font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cms-row-sub{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin-top:.2rem;font-size:.75rem;color:var(--text-muted)}
+.cms-row-actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+.cms-row-actions form{margin:0}
+.cms-segment{display:inline-flex;border:1.5px solid var(--border);border-radius:var(--r);overflow:hidden}
+.cms-segment label{display:flex;align-items:center;gap:.35rem;padding:.42rem .9rem;font-size:.8rem;font-weight:600;cursor:pointer;color:var(--text-body);border-right:1px solid var(--border);margin:0}
+.cms-segment label:last-child{border-right:0}
+.cms-segment input{position:absolute;opacity:0;pointer-events:none}
+.cms-segment label:has(input:checked){background:var(--primary);color:#fff}
+.cms-segment label:has(input:focus-visible){box-shadow:inset 0 0 0 2px var(--primary-light)}
+.cms-check{display:flex;align-items:center;gap:.5rem;font-size:.84rem;font-weight:600;color:var(--text-body);cursor:pointer;margin-top:.4rem}
+.cms-advanced{border:1px dashed var(--border);border-radius:var(--r);padding:.6rem .9rem;margin-bottom:1rem}
+.cms-advanced summary{cursor:pointer;font-size:.8rem;font-weight:700;color:var(--text-body)}
+.cms-media-current{display:flex;align-items:center;gap:.7rem;padding:.5rem;margin-bottom:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--body-bg);font-size:.75rem;color:var(--text-muted);word-break:break-all}
+.cms-media-current img,.cms-media-current video{width:84px;height:52px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.cms-media-current i{width:84px;text-align:center;font-size:1.3rem;color:var(--primary)}
+.cms-brand-preview{display:flex;align-items:center;justify-content:center;height:110px;margin-bottom:.6rem;border:1px dashed var(--border);border-radius:var(--r);background:repeating-conic-gradient(#f1f5f9 0 25%,#fff 0 50%) 0 0/16px 16px}
+.cms-brand-preview img{max-height:80px;max-width:80%;object-fit:contain}
+.cms-brand-preview.small{height:72px}
+.cms-brand-preview.small img{max-height:40px}
+.cms-font-sample{padding:1rem 1.1rem;border-radius:var(--r);background:var(--body-bg);border:1px solid var(--border)}
+.cms-font-sample [data-font-sample="heading"]{font-size:1.45rem;font-weight:700;color:var(--primary);line-height:1.2;margin-bottom:.5rem}
+.cms-font-sample p{margin:0;font-size:.92rem}
+@media(max-width:640px){.cms-row{flex-wrap:wrap}.cms-row-actions{width:100%;justify-content:flex-end}}

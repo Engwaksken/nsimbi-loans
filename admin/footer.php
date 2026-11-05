@@ -4,6 +4,9 @@
 
 <script src="../datatables2/datatables.min.js"></script>
 <script src="../assets/js/loanpro.js"></script>
+<?php foreach (($pageScripts ?? []) as $pageScript): ?>
+<script src="<?= htmlspecialchars($pageScript, ENT_QUOTES, 'UTF-8') ?>"></script>
+<?php endforeach; ?>
 
 <script>
 $(function() {
