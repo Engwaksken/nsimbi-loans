@@ -2952,3 +2952,8 @@ a.profile-tab-btn{text-decoration:none;}
 .cms-details dd{margin:0;color:var(--text-dark);word-break:break-word}
 .cms-message{white-space:pre-wrap;background:var(--body-bg);border:1px solid var(--border);border-radius:var(--r);padding:1rem;font-size:.88rem;color:var(--text-body)}
 .cms-tabs a[role="tab"]{text-decoration:none}
+.cms-hf-preview .hf-logo{display:inline-flex;align-items:center;gap:8px}
+.cms-hf-preview .hf-logo img{height:26px;width:auto;max-width:110px;object-fit:contain}
+.cms-hf-preview .hf-footer .hf-logo{color:#fff;font-weight:700;text-transform:none}
+.cms-hf-preview [data-mode="logo"]>span,.cms-hf-preview [data-mode="name"]>img{display:none}
+.cms-brand-preview.is-dark{background:var(--preview-bg,#001284)}

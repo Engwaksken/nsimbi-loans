@@ -120,3 +120,7 @@
   .enquiry-grid,.ef-grid,.ef-checks{grid-template-columns:1fr}
   .enquiry-form{padding:22px}
 }
+
+/* Logo-only wordmark: let wide logos keep their shape. */
+.wordmark--logo img{width:auto;height:48px;max-width:220px}
+.public-footer .wordmark--logo img{height:54px}

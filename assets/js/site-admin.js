@@ -268,6 +268,11 @@ document.addEventListener('change', function (event) {
   var el = event.target;
   if (!el.matches || !el.matches('[data-style-preview]')) return;
   var parts = el.dataset.stylePreview.split('_');
+  if (parts[1] === 'brand') {
+    var brand = document.querySelector('[data-brand-preview="' + parts[0] + '"]');
+    if (brand) brand.dataset.mode = el.value;
+    return;
+  }
   var target = document.querySelector('[data-hf-preview="' + parts[0] + '"]');
   if (!target) return;
   if (parts[1] === 'weight') target.style.fontWeight = el.value;

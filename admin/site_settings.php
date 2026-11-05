@@ -51,14 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $replaced = [];
-    foreach (['logo' => 'image', 'favicon' => 'favicon'] as $key => $kind) {
+    $mediaLabels = ['logo' => 'Logo', 'footer_logo' => 'Footer logo', 'favicon' => 'Favicon'];
+    foreach (['logo' => 'image', 'footer_logo' => 'image', 'favicon' => 'favicon'] as $key => $kind) {
         if (!empty($_POST[$key . '_reset'])) {
             $values[$key] = $defaults[$key];
             $replaced[] = $current[$key];
             continue;
         }
         $upload = site_store_upload($_FILES[$key . '_file'] ?? null, $kind);
-        if ($upload['error'] !== null) { $errors[] = ucfirst($key) . ': ' . $upload['error']; continue; }
+        if ($upload['error'] !== null) { $errors[] = $mediaLabels[$key] . ': ' . $upload['error']; continue; }
         if ($upload['url'] !== null) { $values[$key] = $upload['url']; $replaced[] = $current[$key]; }
     }
 
@@ -137,6 +138,13 @@ require __DIR__ . '/nav-head.php';
             <?php if ($s['favicon'] !== $defaults['favicon']): ?><label class="cms-check"><input type="checkbox" name="favicon_reset" value="1"> Restore the original favicon</label><?php endif; ?>
           </div>
         </div>
+        <div class="form-group">
+          <label class="form-label">Footer logo (optional)</label>
+          <div class="cms-brand-preview is-dark" style="--preview-bg:<?= $e($s['color_dark']) ?>"><img src="<?= $e($s['footer_logo'] !== '' ? $s['footer_logo'] : $s['logo']) ?>" alt="Current footer logo" data-file-preview="footer_logo_file"></div>
+          <input class="form-control" type="file" name="footer_logo_file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <div class="form-help">A white or light version of your logo for the dark footer. Shown on the theme's Dark colour above. <?= $s['footer_logo'] === '' ? 'Until you upload one, the footer uses the main logo.' : '' ?> Max 8 MB.</div>
+          <?php if ($s['footer_logo'] !== ''): ?><label class="cms-check"><input type="checkbox" name="footer_logo_reset" value="1"> Remove and use the main logo in the footer</label><?php endif; ?>
+        </div>
       </div>
 
       <!-- Colours -->
@@ -182,6 +190,7 @@ require __DIR__ . '/nav-head.php';
               <?= $select('header_case', 'Letter case') ?>
             </div>
             <?= $select('header_font', 'Font') ?>
+            <?= $select('header_brand', 'Show in header') ?>
           </div>
           <div>
             <div class="card-title mb-3"><span class="card-dot green"></span> Footer</div>
@@ -191,16 +200,18 @@ require __DIR__ . '/nav-head.php';
               <?= $select('footer_case', 'Letter case') ?>
             </div>
             <?= $select('footer_font', 'Font') ?>
+            <?= $select('footer_brand', 'Show in footer') ?>
           </div>
         </div>
         <label class="form-label mt-2">Preview</label>
         <div class="cms-hf-preview" style="--hf-primary:<?= $e($s['color_primary']) ?>;--hf-dark:<?= $e($s['color_dark']) ?>;--hf-accent:<?= $e($s['color_accent']) ?>;--hf-accent-text:<?= $e($s['color_accent_text']) ?>">
           <div class="hf-header" data-hf-preview="header" data-size-sample="header_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('header')) ?>">
-            <span class="hf-logo"><?= str_replace(['<b>', '</b>'], ['<b style="color:var(--hf-accent-text)">', '</b>'], site_wordmark_html()) ?></span>
+            <span class="hf-logo" data-brand-preview="header" data-mode="<?= $e($s['header_brand']) ?>"><img src="<?= $e($s['logo']) ?>" alt=""><span><?= str_replace(['<b>', '</b>'], ['<b style="color:var(--hf-accent-text)">', '</b>'], site_wordmark_html()) ?></span></span>
             <span class="hf-links"><span>Overview</span><span>Our Vision</span><span>Impact</span></span>
             <span class="hf-cta">Apply for a Loan →</span>
           </div>
           <div class="hf-footer" data-hf-preview="footer" data-size-sample="footer_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('footer')) ?>">
+            <span class="hf-logo" data-brand-preview="footer" data-mode="<?= $e($s['footer_brand']) ?>"><img src="<?= $e($s['footer_logo'] !== '' ? $s['footer_logo'] : $s['logo']) ?>" alt=""><span><?= site_wordmark_html() ?></span></span>
             <span>Dignity for women, wrapped in capital.</span>
             <span>© <?= date('Y') ?> <?= $e($s['site_name']) ?> · Client &amp; staff login →</span>
           </div>

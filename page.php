@@ -33,7 +33,6 @@ echo site_public_header(site_section_menu($sections), site_nav_pages($conn));
   <?php if (trim((string)$page['body_content']) !== ''): ?><div class="editorial-page has-sections"><div class="editorial-copy"><?= site_paragraphs($page['body_content']) ?></div></div><?php endif; ?>
 <?php else: ?>
   <div class="editorial-page<?= $sections ? ' has-sections' : '' ?>">
-    <div class="section-label"><span><?= site_e(strtoupper(site_settings()['site_name'])) ?></span> / <?= site_e(strtoupper($page['slug'])) ?></div>
     <h1><?= site_e($heroTitle) ?></h1>
     <?php if ($page['hero_subtitle']): ?><p class="editorial-lede"><?= site_e($page['hero_subtitle']) ?></p><?php endif; ?>
     <?php if (site_clean_media((string)$page['hero_image']) !== ''): ?><figure class="media-frame"><img src="<?= site_e(site_clean_media((string)$page['hero_image'])) ?>" alt=""></figure><?php endif; ?>

@@ -260,6 +260,7 @@ function site_setting_defaults(): array
     return [
         'site_name' => 'Nsimbi Impact',
         'logo' => '/assets/img/logo.png',
+        'footer_logo' => '',
         'favicon' => '/assets/img/favicon.png',
         'heading_font' => 'Playfair Display',
         'body_font' => 'DM Sans',
@@ -277,6 +278,8 @@ function site_setting_defaults(): array
         'footer_weight' => '400',
         'footer_case' => 'none',
         'footer_font' => 'body',
+        'header_brand' => 'both',
+        'footer_brand' => 'both',
         'color_primary' => '#0f3399',
         'color_dark' => '#001284',
         'color_accent' => '#20d959',
@@ -413,6 +416,24 @@ function site_colors_customised(array $s): bool
     return false;
 }
 
+/** How the brand appears in the public header / footer. */
+function site_brand_modes(): array
+{
+    return ['both' => 'Logo and name', 'logo' => 'Logo only', 'name' => 'Name only'];
+}
+
+/** Wordmark link for the public header or footer, following the header_brand / footer_brand setting. */
+function site_brand_link(string $where): string
+{
+    $s = site_settings();
+    $mode = $s[$where . '_brand'] ?? 'both';
+    $name = site_e($s['site_name']);
+    $src = $where === 'footer' && $s['footer_logo'] !== '' ? $s['footer_logo'] : $s['logo'];
+    $logo = $mode !== 'name' ? '<img src="' . site_e($src) . '" alt="' . ($mode === 'logo' ? $name : '') . '">' : '';
+    $text = $mode !== 'logo' ? '<span>' . site_wordmark_html() . '</span>' : '';
+    return '<a class="wordmark wordmark--' . $mode . '" href="/" aria-label="' . $name . ' home">' . $logo . $text . '</a>';
+}
+
 /** Settings with a fixed list of options: key => [value => label]. */
 function site_choice_settings(): array
 {
@@ -422,6 +443,7 @@ function site_choice_settings(): array
     return [
         'header_weight' => $weights, 'header_case' => $cases, 'header_font' => $fonts,
         'footer_weight' => $weights, 'footer_case' => $cases, 'footer_font' => $fonts,
+        'header_brand' => site_brand_modes(), 'footer_brand' => site_brand_modes(),
     ];
 }
 

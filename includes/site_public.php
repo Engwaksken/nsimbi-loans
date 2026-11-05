@@ -39,7 +39,7 @@ function site_public_header(array $menu, array $navPages): string
         . '<a href="https://www.facebook.com/witug/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>'
         . '<a href="https://x.com/wituganda" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>'
         . '<a href="https://www.linkedin.com/company/witu/" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a></div></div>'
-        . '<header class="public-header"><a class="wordmark" href="/"><img src="' . site_e($s['logo']) . '" alt="' . site_e($s['site_name']) . '"><span>' . site_wordmark_html() . '</span></a><nav>';
+        . '<header class="public-header">' . site_brand_link('header') . '<nav>';
     foreach ($menu as $item) {
         $html .= '<a href="' . site_e($item['href']) . '">' . site_e($item['label']) . '</a>';
     }
@@ -55,7 +55,7 @@ function site_public_header(array $menu, array $navPages): string
 function site_public_footer(): string
 {
     $s = site_settings();
-    return '<footer class="public-footer"><div class="footer-top"><a class="wordmark" href="/"><img src="' . site_e($s['logo']) . '" alt=""><span>' . site_wordmark_html() . '</span></a>'
+    return '<footer class="public-footer"><div class="footer-top">' . site_brand_link('footer')
         . '<p>Dignity for women, wrapped in capital.<br>Building opportunity, one business at a time.</p><div class="socials">'
         . '<a href="https://www.facebook.com/witug/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>'
         . '<a href="https://x.com/wituganda" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>'
