@@ -15,11 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($id > 0) {
         $stmt = $conn->prepare('SELECT * FROM site_pages WHERE id=?');
         $stmt->bind_param('i', $id); $stmt->execute(); $existing = $stmt->get_result()->fetch_assoc(); $stmt->close();
-        if (!$existing) { site_flash('error', 'That page no longer exists.'); header('Location: pages.php'); exit; }
+        if (!$existing) { site_flash('error', 'That page no longer exists.'); header('Location: pages'); exit; }
     }
 
     if ($action === 'delete' && $existing) {
-        if ($existing['slug'] === 'home') { site_flash('error', 'The homepage cannot be deleted.'); header('Location: pages.php'); exit; }
+        if ($existing['slug'] === 'home') { site_flash('error', 'The homepage cannot be deleted.'); header('Location: pages'); exit; }
         $media = [(string)$existing['hero_image']];
         foreach (['site_page_sections', 'site_page_slides'] as $table) {
             $q = $conn->prepare("SELECT media_url FROM {$table} WHERE page_id=?");
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param('i', $id); $stmt->execute(); $stmt->close();
         foreach (array_unique($media) as $url) site_discard_media($conn, (string)$url);
         site_flash('success', 'Page deleted.');
-        header('Location: pages.php'); exit;
+        header('Location: pages'); exit;
     }
 
     $title = trim((string)($_POST['title'] ?? ''));
@@ -64,13 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
             if ($existing && $existing['hero_image'] !== $heroImage) site_discard_media($conn, (string)$existing['hero_image']);
             site_flash('success', $existing ? 'Page saved.' : 'Page created. Add sections and slides below.');
-            header('Location: ' . ($existing ? 'pages.php' : 'page_builder.php?page=' . $newId)); exit;
+            header('Location: ' . ($existing ? 'pages' : 'page_builder?page=' . $newId)); exit;
         } catch (mysqli_sql_exception $e) {
             if ($heroImage && (!$existing || $existing['hero_image'] !== $heroImage)) site_discard_media($conn, $heroImage);
             site_flash('error', $e->getCode() === 1062 ? 'Another page already uses the URL “' . $slug . '”. Choose a different slug.' : 'Could not save the page.');
         }
     }
-    header('Location: pages.php'); exit;
+    header('Location: pages'); exit;
 }
 
 $pages = $conn->query('SELECT p.*,
@@ -85,7 +85,7 @@ require __DIR__ . '/nav-head.php';
 <div class="page-header">
   <div><div class="title">Frontend Pages</div><div class="sub">Public pages on the website. Use <b>Build</b> to manage a page's sections and slides.</div></div>
   <div class="d-flex gap-2">
-    <a class="btn btn-outline" href="site_settings.php"><i class="fas fa-palette"></i> Branding &amp; fonts</a>
+    <a class="btn btn-outline" href="site_settings"><i class="fas fa-palette"></i> Branding &amp; fonts</a>
     <button type="button" class="btn btn-primary" data-modal-open="pageModal" data-modal-title="New page" data-record='{"status":"published","cta_label":"Learn more","cta_url":"/apply"}'><i class="fas fa-plus"></i> Add page</button>
   </div>
 </div>
@@ -105,7 +105,7 @@ require __DIR__ . '/nav-head.php';
           <td class="text-muted"><?= $e(date('M j, Y', strtotime((string)$item['updated_at']))) ?></td>
           <td class="text-right">
             <div class="d-flex gap-2 justify-end">
-              <a class="btn btn-sm btn-primary" href="page_builder.php?page=<?= (int)$item['id'] ?>"><i class="fas fa-layer-group"></i> Build</a>
+              <a class="btn btn-sm btn-primary" href="page_builder?page=<?= (int)$item['id'] ?>"><i class="fas fa-layer-group"></i> Build</a>
               <button type="button" class="btn btn-sm btn-outline" data-modal-open="pageModal" data-modal-title="Edit page" data-record="<?= $e(json_encode(array_intersect_key($item, array_flip($recordFields)))) ?>"><i class="fas fa-pen"></i> Edit</button>
               <?php if ($item['slug'] !== 'home'): ?>
               <form method="post" onsubmit="return confirm('Delete “<?= $e(addslashes($item['title'])) ?>” with all its sections and slides?')">

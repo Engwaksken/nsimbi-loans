@@ -10,8 +10,8 @@ site_cms_ensure_schema($conn);
 $pageId = (int)($_GET['page'] ?? $_POST['page_id'] ?? 0);
 $stmt = $conn->prepare('SELECT * FROM site_pages WHERE id=?');
 $stmt->bind_param('i', $pageId); $stmt->execute(); $page = $stmt->get_result()->fetch_assoc(); $stmt->close();
-if (!$page) { site_flash('error', 'Choose a page to build.'); header('Location: pages.php'); exit; }
-$back = 'page_builder.php?page=' . $pageId;
+if (!$page) { site_flash('error', 'Choose a page to build.'); header('Location: pages'); exit; }
+$back = 'page_builder?page=' . $pageId;
 $types = site_section_types();
 
 /** Fetch one section/slide that belongs to this page. */
@@ -115,7 +115,7 @@ require __DIR__ . '/nav-head.php';
 ?>
 <div class="page-header">
   <div>
-    <div class="title"><a href="pages.php" class="text-muted"><i class="fas fa-arrow-left"></i></a> &nbsp;<?= $e($page['title']) ?></div>
+    <div class="title"><a href="pages" class="text-muted"><i class="fas fa-arrow-left"></i></a> &nbsp;<?= $e($page['title']) ?></div>
     <div class="sub">Slides replace the hero banner at the top. Sections appear below it, top to bottom. Hidden items stay saved but don't show on the site.</div>
   </div>
   <div class="d-flex gap-2"><a class="btn btn-outline" href="<?= $e($pageUrl) ?>" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> View page</a></div>

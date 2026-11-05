@@ -250,8 +250,9 @@
     } else if (el.matches('input[type="range"][data-unit]')) {
       var out = document.querySelector('output[for="' + el.id + '"]');
       if (out) out.textContent = el.value + el.dataset.unit;
-      var sample = document.querySelector('[data-size-sample="' + el.name + '"]');
-      if (sample) sample.style.fontSize = el.dataset.unit === '%' ? (el.value / 100 * parseFloat(sample.dataset.base)) + 'px' : el.value + 'px';
+      document.querySelectorAll('[data-size-sample="' + el.name + '"]').forEach(function (sample) {
+        sample.style.fontSize = el.dataset.unit === '%' ? (el.value / 100 * parseFloat(sample.dataset.base)) + 'px' : el.value + 'px';
+      });
     }
   });
 

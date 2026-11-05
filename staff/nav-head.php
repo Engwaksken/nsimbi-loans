@@ -75,7 +75,7 @@ $page_active = "active";
   <aside class="sidenav navbar navbar-vertical navbar-expand-xs border-0 border-radius-xl my-3 fixed-start ms-3 " id="sidenav-main">
     <div class="sidenav-header">
       <i class="fas fa-times p-3 cursor-pointer text-secondary opacity-5 position-absolute end-0 top-0 d-none d-xl-none" aria-hidden="true" id="iconSidenav"></i>
-      <a class="navbar-brand m-0" href="dashboard.php">
+      <a class="navbar-brand m-0" href="dashboard">
         <img src="<?= site_e($brand['logo']) ?>" class="navbar-brand-img h-auto" alt="">
        
       </a>
@@ -83,7 +83,7 @@ $page_active = "active";
     <div class="collapse navbar-collapse  w-auto  max-height-vh-100 h-100" id="sidenav-collapse-main">
       <ul class="navbar-nav">
        <li class="nav-item">
-  <a class="nav-link <?php echo $page_active; ?>" href="dashboard.php">
+  <a class="nav-link <?php echo $page_active; ?>" href="dashboard">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="ni ni-chart-bar-32 text-lg text-white" aria-hidden="true"></i>
     </div>
@@ -91,7 +91,7 @@ $page_active = "active";
   </a>
 </li>
  <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="loans.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="loans">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="ni ni-collection text-lg text-white" aria-hidden="true"></i>
     </div>
@@ -100,7 +100,7 @@ $page_active = "active";
 </li>
 
 <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="requesting_loan.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="requesting_loan">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="ni ni-bullet-list-67 text-lg text-white" aria-hidden="true"></i>
     </div>
@@ -108,7 +108,7 @@ $page_active = "active";
   </a>
 </li>
 <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="loan_calculator.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="loan_calculator">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="fas fa-calculator text-lg text-white" aria-hidden="true"></i>
 
@@ -117,7 +117,7 @@ $page_active = "active";
   </a>
 </li>
 <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="repayment_schedule.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="repayment_schedule">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="fas fa-coins text-lg text-white" aria-hidden="true"></i>
 
@@ -126,7 +126,7 @@ $page_active = "active";
   </a>
 </li>
 <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="pending_loans.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="pending_loans">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="ni ni-time-alarm text-lg text-white" aria-hidden="true"></i>
     </div>
@@ -136,7 +136,7 @@ $page_active = "active";
       
 
        <li class="nav-item">
-   <a class="nav-link <?php echo $page_active; ?>" href="loan_payments.php">
+   <a class="nav-link <?php echo $page_active; ?>" href="loan_payments">
     <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
       <i class="ni ni-credit-card text-lg text-white" aria-hidden="true"></i>
     </div>
@@ -145,7 +145,7 @@ $page_active = "active";
 </li>
         
         <li class="nav-item">
-          <a class="nav-link" href="logout.php">
+          <a class="nav-link" href="logout">
            <div class="icon icon-shape icon-sm shadow border-radius-md bg-danger text-center me-2 d-flex align-items-center justify-content-center">
               <i class="ni ni-user-run text-lg text-white" aria-hidden="true"></i>
             </div>
@@ -191,7 +191,7 @@ $page_active = "active";
       <li class="dropdown-header">Messages</li>
       <?php foreach ($messages as $message): ?>
         <li>
-          <a class="dropdown-item" href="loan_messages.php?id=<?php echo $message['id']; ?>">
+          <a class="dropdown-item" href="loan_messages?id=<?php echo $message['id']; ?>">
             <div class="d-flex align-items-center">
               <div>
                 <i class="bi bi-person-circle me-2"></i>
@@ -221,7 +221,7 @@ $page_active = "active";
       <li class="dropdown-header">Notifications</li>
       <?php foreach ($alerts as $alert): ?>
         <li>
-          <a class="dropdown-item" href="loan_notifications.php">
+          <a class="dropdown-item" href="loan_notifications">
             <div class="d-flex align-items-center">
               <div>
                 <i class="bi bi-info-circle text-primary me-2"></i>
@@ -245,10 +245,10 @@ $page_active = "active";
             <span class="d-sm-inline d-none"><?php echo $uname; ?></span>
           </a>
           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-            <li><a class="dropdown-item" href="profile.php"><i class="bi bi-person me-2"></i>Profile</a></li>
-            <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><a class="dropdown-item" href="profile"><i class="bi bi-person me-2"></i>Profile</a></li>
+            <li><a class="dropdown-item" href="settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="logout"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
           </ul>
         </li>
        

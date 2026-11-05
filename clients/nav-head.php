@@ -41,19 +41,19 @@ function cn($p,$c){ return $p===$c?' active':''; }
   </div>
   <nav class="sidebar-nav">
     <div class="nav-group">My Account</div>
-    <a href="dashboard.php" class="nav-link<?= cn('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
-     <a href="requesting_loan.php"  class="nav-link<?= cn('requesting_loan.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>Request a Loan</a> 
-    <a href="my_loans.php"  class="nav-link<?= cn('my_loans.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>My Loans</a>
-    <a href="loan_payments.php" class="nav-link<?= cn('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payment History</a>
+    <a href="dashboard" class="nav-link<?= cn('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
+     <a href="requesting_loan"  class="nav-link<?= cn('requesting_loan.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>Request a Loan</a> 
+    <a href="my_loans"  class="nav-link<?= cn('my_loans.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>My Loans</a>
+    <a href="loan_payments" class="nav-link<?= cn('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payment History</a>
     
-     <a href="books.php" class="nav-link<?= cn('books.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>My Books</a>
-    <a href="repayment_schedule.php" class="nav-link<?= cn('repayment_schedule.php',$cp) ?>"><span class="ni"><i class="fas fa-calendar-alt"></i></span>Schedules</a>
+     <a href="books" class="nav-link<?= cn('books.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>My Books</a>
+    <a href="repayment_schedule" class="nav-link<?= cn('repayment_schedule.php',$cp) ?>"><span class="ni"><i class="fas fa-calendar-alt"></i></span>Schedules</a>
     <div class="nav-group">Support</div>
-    <a href="messages.php" class="nav-link<?= cn('messages.php',$cp) ?>"><span class="ni"><i class="fas fa-envelope"></i></span>Messages</a>
-    <a href="profile.php"  class="nav-link<?= cn('profile.php',$cp) ?>"><span class="ni"><i class="fas fa-user-circle"></i></span>My Profile</a>
+    <a href="messages" class="nav-link<?= cn('messages.php',$cp) ?>"><span class="ni"><i class="fas fa-envelope"></i></span>Messages</a>
+    <a href="profile"  class="nav-link<?= cn('profile.php',$cp) ?>"><span class="ni"><i class="fas fa-user-circle"></i></span>My Profile</a>
   </nav>
   <div class="sidebar-footer">
-    <a href="logout.php" class="nav-link"><span class="ni"><i class="fas fa-sign-out-alt"></i></span>Sign Out</a>
+    <a href="logout" class="nav-link"><span class="ni"><i class="fas fa-sign-out-alt"></i></span>Sign Out</a>
   </div>
 </aside>
 
@@ -67,7 +67,7 @@ function cn($p,$c){ return $p===$c?' active':''; }
     </div>
   </div>
   <div class="topbar-right">
-    <a href="profile.php" class="t-avatar"><?= $initials ?></a>
+    <a href="profile" class="t-avatar"><?= $initials ?></a>
   </div>
 </header>
 <main class="page-content">

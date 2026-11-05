@@ -132,6 +132,8 @@ function site_setting_defaults(): array
         'text_size' => '14',
         'heading_scale' => '100',
         'panel_text_size' => '14',
+        'sidebar_group_size' => '17',
+        'sidebar_link_size' => '12',
         'color_primary' => '#0f3399',
         'color_dark' => '#001284',
         'color_accent' => '#20d959',
@@ -218,7 +220,7 @@ function site_favicon_tags(): string
 /** Allowed ranges for size settings: key => [min, max]. */
 function site_size_limits(): array
 {
-    return ['text_size' => [12, 20], 'heading_scale' => [70, 140], 'panel_text_size' => [12, 18]];
+    return ['text_size' => [12, 20], 'heading_scale' => [70, 140], 'panel_text_size' => [12, 18], 'sidebar_group_size' => [10, 22], 'sidebar_link_size' => [11, 18]];
 }
 
 /** Theme colour settings: key => [label, help]. */
@@ -325,6 +327,9 @@ function site_panel_style_tags(): string
         $html .= '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$s['panel_font']])) . '">';
         $css .= 'body,body *:not(i):not([class*="fa"]):not([class^="ni"]):not([class*=" ni-"]):not(.material-icons){font-family:'
             . site_font_stack($s['panel_font']) . '!important}';
+    }
+    if ($s['sidebar_group_size'] !== $defaults['sidebar_group_size'] || $s['sidebar_link_size'] !== $defaults['sidebar_link_size']) {
+        $css .= ':root{--sb-group-size:' . (int)$s['sidebar_group_size'] . 'px;--sb-link-size:' . (int)$s['sidebar_link_size'] . 'px}';
     }
     if ($s['panel_text_size'] !== $defaults['panel_text_size']) {
         $css .= 'html{font-size:' . (int)$s['panel_text_size'] . 'px}';

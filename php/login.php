@@ -8,7 +8,7 @@ require_once __DIR__ . '/db.php';
 function redirect_login(string $message): void
 {
     $_SESSION['error'] = $message;
-    header('Location: ../login.php');
+    header('Location: /login');
     exit;
 }
 
@@ -18,7 +18,7 @@ function clean_input(string $data): string
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: ../login.php');
+    header('Location: /login');
     exit;
 }
 
@@ -89,19 +89,19 @@ $_SESSION['email']    = $user['email'] ?? '';
 switch ($roleId) {
     case 1:
     case 2:
-        header('Location: ../admin/dashboard.php');
+        header('Location: /admin/dashboard');
         exit;
 
     case 3:
-        header('Location: ../clients/dashboard.php');
+        header('Location: /clients/dashboard');
         exit;
 
     case 4:
-        header('Location: ../staff/dashboard.php');
+        header('Location: /staff/dashboard');
         exit;
 
     case 5:
-        header('Location: ../startups/dashboard.php');
+        header('Location: /startups/dashboard');
         exit;
 
     default:

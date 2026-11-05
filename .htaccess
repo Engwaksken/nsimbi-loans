@@ -11,6 +11,19 @@ Options -MultiViews
     RewriteCond %{THE_REQUEST} \s/+clients/index\.php(?:[?\s]) [NC]
     RewriteRule ^clients/index\.php$ /apply [R=301,L]
 
+    # Dashboard pages without ".php": /admin/dashboard.php -> /admin/dashboard.
+    # Only GET requests are redirected so form posts to *.php keep their data;
+    # sub-folders (ajax, includes) are left alone.
+    RewriteCond %{REQUEST_METHOD} =GET
+    RewriteCond %{THE_REQUEST} \s/+(admin|clients|staff|startups)/[A-Za-z0-9_-]+\.php[?\s] [NC]
+    RewriteRule ^(admin|clients|staff|startups)/([A-Za-z0-9_-]+)\.php$ /$1/$2 [R=301,L,NC]
+
+    # Serve /admin/dashboard from admin/dashboard.php.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(admin|clients|staff|startups)/([A-Za-z0-9_-]+)$ $1/$2.php [L,QSA,NC]
+
     # Friendly routes for the client portal and sign-in page.
     RewriteRule ^login/?$ login.php [L,QSA,NC]
     RewriteRule ^apply/?$ clients/index.php [L,QSA,NC]

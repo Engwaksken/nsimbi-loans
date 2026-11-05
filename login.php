@@ -7,13 +7,13 @@ if (isset($_SESSION['logged_in'])) {
     $role = (int)($_SESSION['role'] ?? 0);
 
     if ($role === 1 || $role === 2) {
-        header('Location: admin/dashboard.php');
+        header('Location: /admin/dashboard');
     } elseif ($role === 3) {
-        header('Location: clients/dashboard.php');
+        header('Location: /clients/dashboard');
     } elseif ($role === 4) {
-        header('Location: staff/dashboard.php');
+        header('Location: /staff/dashboard');
     } elseif ($role === 5) {
-        header('Location: startups/dashboard.php');
+        header('Location: /startups/dashboard');
     } else {
         session_destroy();
         header('Location: index.php');

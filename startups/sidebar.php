@@ -264,19 +264,19 @@ if ($startupName === '') {
         <div class="stp-nav-title">Main</div>
         <ul class="stp-nav">
             <li>
-                <a class="<?= startup_nav_is_active(['dashboard.php']) ?>" href="dashboard.php">
+                <a class="<?= startup_nav_is_active(['dashboard.php']) ?>" href="dashboard">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
             </li>
             <li>
-                <a class="<?= startup_nav_is_active(['profile.php']) ?>" href="profile.php">
+                <a class="<?= startup_nav_is_active(['profile.php']) ?>" href="profile">
                     <i class="fas fa-user-edit"></i>
                     <span>My Profile</span>
                 </a>
             </li>
             <li>
-                <a class="<?= startup_nav_is_active(['change-password.php']) ?>" href="change-password.php">
+                <a class="<?= startup_nav_is_active(['change-password.php']) ?>" href="change-password">
                     <i class="fas fa-key"></i>
                     <span>Change Password</span>
                 </a>
@@ -286,13 +286,13 @@ if ($startupName === '') {
         <div class="stp-nav-title">Applications</div>
         <ul class="stp-nav">
             <li>
-                <a class="<?= startup_nav_is_active(['applications.php']) ?>" href="applications.php">
+                <a class="<?= startup_nav_is_active(['applications.php']) ?>" href="applications">
                     <i class="fas fa-file-alt"></i>
                     <span>My Applications</span>
                 </a>
             </li>
             <li>
-                <a class="<?= startup_nav_is_active(['new-application.php']) ?>" href="new-application.php">
+                <a class="<?= startup_nav_is_active(['new-application.php']) ?>" href="new-application">
                     <i class="fas fa-plus-circle"></i>
                     <span>New Application</span>
                 </a>
@@ -302,13 +302,13 @@ if ($startupName === '') {
         <div class="stp-nav-title">Finance</div>
         <ul class="stp-nav">
             <li>
-                <a class="<?= startup_nav_is_active(['loans.php']) ?>" href="loans.php">
+                <a class="<?= startup_nav_is_active(['loans.php']) ?>" href="loans">
                     <i class="fas fa-hand-holding-usd"></i>
                     <span>Loans</span>
                 </a>
             </li>
             <li>
-                <a class="<?= startup_nav_is_active(['repayments.php']) ?>" href="repayments.php">
+                <a class="<?= startup_nav_is_active(['repayments.php']) ?>" href="repayments">
                     <i class="fas fa-money-check-alt"></i>
                     <span>Repayments</span>
                 </a>

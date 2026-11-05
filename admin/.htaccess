@@ -6,6 +6,17 @@ RewriteBase /
 RewriteRule ^admin/includes/process-users\.php$ - [L,NC]
 RewriteRule ^admin/includes/.*\.php$ - [L,NC]
 
+# Clean URLs: /admin/dashboard.php -> /admin/dashboard (GET only, so form posts keep their data).
+RewriteCond %{REQUEST_METHOD} =GET
+RewriteCond %{THE_REQUEST} \s/+admin/[A-Za-z0-9_-]+\.php[?\s] [NC]
+RewriteRule ^([A-Za-z0-9_-]+)\.php$ /admin/$1 [R=301,L,NC]
+
+# Serve /admin/dashboard from admin/dashboard.php.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([A-Za-z0-9_-]+)$ /admin/$1.php [L,QSA]
+
 # Normal routing
 RewriteRule ^index\.php$ - [L]
 

@@ -74,7 +74,7 @@ function asset_url(string $relative): string {
   </div>
 
   <nav class="sidebar-nav">
-    <a href="dashboard.php" class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
+    <a href="dashboard" class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
 <?php
 // [label, [[href, icon, text, badge, badge class, other pages that mark it active]]]
 $navSections = [
@@ -127,7 +127,7 @@ foreach ($navSections as $key => [$groupLabel, $links]):
       <div class="nav-items" id="nav-<?= $key ?>"><div>
 <?php foreach ($links as $link):
   $active = $cp === $link[0] || in_array($cp, $link[5] ?? [], true); ?>
-        <a href="<?= $link[0] ?>" class="nav-link<?= $active ? ' active' : '' ?>"<?= $isOpen ? '' : ' tabindex="-1"' ?>><span class="ni"><i class="fas <?= $link[1] ?>"></i></span><?= htmlspecialchars($link[2]) ?>
+        <a href="<?= substr($link[0], 0, -4) ?>" class="nav-link<?= $active ? ' active' : '' ?>"<?= $isOpen ? '' : ' tabindex="-1"' ?>><span class="ni"><i class="fas <?= $link[1] ?>"></i></span><?= htmlspecialchars($link[2]) ?>
           <?php if (!empty($link[3])): ?><span class="nav-pill <?= $link[4] ?? '' ?>"><?= (int)$link[3] ?></span><?php endif; ?>
         </a>
 <?php endforeach; ?>
@@ -137,7 +137,7 @@ foreach ($navSections as $key => [$groupLabel, $links]):
   </nav>
 
   <div class="sidebar-footer">
-    <a href="logout.php" class="nav-link"><span class="ni"><i class="fas fa-sign-out-alt"></i></span>Sign Out</a>
+    <a href="logout" class="nav-link"><span class="ni"><i class="fas fa-sign-out-alt"></i></span>Sign Out</a>
   </div>
 </aside>
 
@@ -179,18 +179,18 @@ foreach ($navSections as $key => [$groupLabel, $links]):
             <div class="notif-item-time"><?= $n['t'] ?></div>
           </div>
         <?php endforeach; endif; ?>
-        <div class="notif-foot"><a href="mark_all_read.php">Mark all as read</a></div>
+        <div class="notif-foot"><a href="mark_all_read">Mark all as read</a></div>
       </div>
     </div>
 
     <!-- Messages -->
-    <a href="loan_messages.php" class="t-btn" title="Messages">
+    <a href="loan_messages" class="t-btn" title="Messages">
       <i class="fas fa-envelope"></i>
       <?php if ($new_messages > 0): ?><span class="t-dot"></span><?php endif; ?>
     </a>
 
     <!-- Profile -->
-    <a href="profile.php" class="t-avatar" title="My Profile"><?= $initials ?></a>
+    <a href="profile" class="t-avatar" title="My Profile"><?= $initials ?></a>
   </div>
 </header>
 

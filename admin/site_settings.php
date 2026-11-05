@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     site_settings_save($conn, $values);
     foreach ($replaced as $old) site_discard_media($conn, (string)$old);
     site_flash($errors ? 'error' : 'success', $errors ? implode(' ', $errors) : 'Branding saved. Changes apply across the website and dashboards.');
-    header('Location: site_settings.php#' . $tab); exit;
+    header('Location: site_settings#' . $tab); exit;
 }
 
 $s = site_settings($conn, true);
@@ -78,7 +78,7 @@ require __DIR__ . '/nav-head.php';
 <link rel="stylesheet" href="<?= $e(site_google_fonts_url(array_keys($fonts))) ?>">
 <div class="page-header">
   <div><div class="title">Branding &amp; Fonts</div><div class="sub">Name, logo, colours and typography used on the public website, sign-in page and dashboards.</div></div>
-  <a class="btn btn-outline" href="pages.php"><i class="fas fa-globe"></i> Frontend pages</a>
+  <a class="btn btn-outline" href="pages"><i class="fas fa-globe"></i> Frontend pages</a>
 </div>
 
 <form method="post" enctype="multipart/form-data" data-tabs-root>
@@ -165,6 +165,18 @@ require __DIR__ . '/nav-head.php';
             <?= $range('panel_text_size', 'Dashboard text size', 'px', 'Scales the whole dashboard layout, including tables and forms.') ?>
           </div>
           <div class="cms-font-sample"><p data-font-sample="panel" data-size-sample="panel_text_size" data-base="14" style="font-family:<?= $e(site_font_stack($s['panel_font'])) ?>;font-size:<?= (int)$s['panel_text_size'] ?>px">Pending loans · 12 &nbsp; Outstanding · UGX 4,250,000</p></div>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:1.2rem 0">
+        <div class="grid-2">
+          <div>
+            <?= $range('sidebar_group_size', 'Sidebar group titles', 'px', 'Size of the collapsible group headings (Loans, People, Finance…).') ?>
+            <?= $range('sidebar_link_size', 'Sidebar links', 'px', 'Size of the menu items inside each group.') ?>
+          </div>
+          <div class="cms-sidebar-sample">
+            <div class="nav-group" data-size-sample="sidebar_group_size" style="font-size:<?= (int)$s['sidebar_group_size'] ?>px">Loans</div>
+            <div class="nav-link active" data-size-sample="sidebar_link_size" style="font-size:<?= (int)$s['sidebar_link_size'] ?>px"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>All Loans</div>
+            <div class="nav-link" data-size-sample="sidebar_link_size" style="font-size:<?= (int)$s['sidebar_link_size'] ?>px"><span class="ni"><i class="fas fa-hourglass-half"></i></span>Pending</div>
+          </div>
         </div>
       </div>
     </div>
