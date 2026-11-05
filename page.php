@@ -6,8 +6,16 @@ require_once __DIR__ . '/includes/site_public.php';
 
 $slug = preg_replace('/[^a-z0-9-]/', '', strtolower((string)($_GET['slug'] ?? '')));
 if ($slug === 'home') { header('Location: /', true, 301); exit; }
-$stmt = $conn->prepare("SELECT * FROM site_pages WHERE slug=? AND status='published' LIMIT 1");
-$stmt->bind_param('s', $slug); $stmt->execute(); $page = $stmt->get_result()->fetch_assoc(); $stmt->close();
+$findPage = static function () use ($conn, $slug): ?array {
+    $stmt = $conn->prepare("SELECT * FROM site_pages WHERE slug=? AND status='published' LIMIT 1");
+    $stmt->bind_param('s', $slug); $stmt->execute(); $row = $stmt->get_result()->fetch_assoc(); $stmt->close();
+    return $row ?: null;
+};
+$page = $findPage();
+// Contact, Join as Donor / ESO and Privacy Policy are created on first visit after deploy.
+if (!$page && in_array($slug, array_column(site_default_pages(), 'slug'), true) && site_settings($conn)['default_pages_seeded'] !== '1') {
+    try { site_cms_ensure_schema($conn); $page = $findPage(); } catch (Throwable $e) { error_log('Default page setup failed: ' . $e->getMessage()); }
+}
 if (!$page) { http_response_code(404); exit('Page not found'); }
 
 site_settings($conn);

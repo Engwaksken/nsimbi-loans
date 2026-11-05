@@ -32,7 +32,7 @@ if ($sections === null || (!$sections && $settings['home_sections_seeded'] !== '
 
 $heroImage = site_clean_media((string)$page['hero_image']);
 $ctaUrl = site_normalize_cta((string)$page['cta_url']);
-$donorButton = '<a class="button button-outline" href="mailto:info@nsimbiimpact.com?subject=Donor%20or%20ESO%20enquiry">Join as Donor / ESO</a>';
+$donorButton = '<a class="button button-outline" href="/join-us">Join as Donor / ESO</a>';
 $pageTitle = strcasecmp(trim((string)$page['title']), 'Home') === 0 ? $settings['site_name'] . ' | Capital for women-led businesses' : (string)$page['title'];
 
 echo site_public_head($pageTitle, (string)$page['meta_description']);

@@ -2947,3 +2947,8 @@ a.profile-tab-btn{text-decoration:none;}
 .cms-hf-preview .hf-links{display:flex;gap:1.1rem;flex:1}
 .cms-hf-preview .hf-cta{background:var(--hf-primary);color:#fff;padding:.45rem .8rem;border-radius:3px;font-weight:700}
 .cms-hf-preview .hf-footer{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem 1.1rem;background:var(--hf-dark);color:rgba(255,255,255,.78)}
+.cms-details{display:grid;grid-template-columns:130px 1fr;gap:.55rem 1rem;margin:0 0 1rem;font-size:.86rem}
+.cms-details dt{font-weight:700;color:var(--text-muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.cms-details dd{margin:0;color:var(--text-dark);word-break:break-word}
+.cms-message{white-space:pre-wrap;background:var(--body-bg);border:1px solid var(--border);border-radius:var(--r);padding:1rem;font-size:.88rem;color:var(--text-body)}
+.cms-tabs a[role="tab"]{text-decoration:none}

@@ -337,6 +337,7 @@ $brand = site_settings($conn);
     <span toggle="#con_password" class="fa fa-fw fa-eye toggle-password" style="position:absolute; top:50%; right:15px; transform:translateY(-50%); cursor:pointer;"></span>
   </div>
 </div>
+                      <p class="text-sm mt-3 mb-0">By registering you agree that we may use your details to assess and manage your application, as explained in our <a href="/privacy-policy" target="_blank" class="text-info font-weight-bold">privacy policy</a>.</p>
                       <div class="d-flex justify-content-between mt-4">
                         <button type="button" class="btn btn-secondary prev-btn"><i class="fas fa-arrow-left me-2"></i> Previous</button>
                         <button type="submit" class="btn btn-success"><i class="fas fa-check me-2"></i> Register Now</button>

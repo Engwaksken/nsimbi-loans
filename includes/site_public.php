@@ -33,7 +33,7 @@ function site_asset(string $path): string
 function site_public_header(array $menu, array $navPages): string
 {
     $s = site_settings();
-    $donor = 'mailto:info@nsimbiimpact.com?subject=Donor%20or%20ESO%20enquiry';
+    $donor = '/join-us';
     $html = '<div class="top-strip"><span><i class="fa-solid fa-location-dot"></i> Plot 12, Corporation Rise, Bukoto | Kampala | Uganda</span><div>'
         . '<a href="' . $donor . '">Join as Donor / ESO</a>'
         . '<a href="https://www.facebook.com/witug/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>'
@@ -60,8 +60,9 @@ function site_public_footer(): string
         . '<a href="https://www.facebook.com/witug/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>'
         . '<a href="https://x.com/wituganda" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>'
         . '<a href="https://www.linkedin.com/company/witu/" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a></div></div>'
-        . '<div class="footer-bottom"><span>© ' . date('Y') . ' ' . site_e($s['site_name']) . '</span><span>Plot 12, Corporation Rise, Bukoto · Kampala, Uganda</span>'
-        . '<a href="/login">Client &amp; staff login <i class="fa-solid fa-arrow-right"></i></a></div></footer>'
+        . '<div class="footer-bottom"><span>© ' . date('Y') . ' ' . site_e($s['site_name']) . ' · Plot 12, Corporation Rise, Bukoto · Kampala, Uganda</span>'
+        . '<nav class="footer-links" aria-label="Footer"><a href="/contact-us">Contact us</a><a href="/join-us">Join as Donor / ESO</a><a href="/privacy-policy">Privacy policy</a>'
+        . '<a href="/login">Client &amp; staff login <i class="fa-solid fa-arrow-right"></i></a></nav></div></footer>'
         . '<script src="' . site_asset('/assets/js/site-builder.js') . '" defer></script></body></html>';
 }
 
@@ -69,9 +70,14 @@ function site_public_footer(): string
 function site_nav_pages(mysqli $db): array
 {
     try {
-        return $db->query("SELECT title, slug FROM site_pages WHERE status='published' AND slug <> 'home' ORDER BY title LIMIT 5")->fetch_all(MYSQLI_ASSOC);
+        return $db->query("SELECT title, slug FROM site_pages WHERE status='published' AND slug <> 'home' AND show_in_menu = 1 ORDER BY title LIMIT 5")->fetch_all(MYSQLI_ASSOC);
     } catch (Throwable $ignored) {
-        return [];
+        // Before the CMS upgrade adds show_in_menu.
+        try {
+            return $db->query("SELECT title, slug FROM site_pages WHERE status='published' AND slug <> 'home' ORDER BY title LIMIT 5")->fetch_all(MYSQLI_ASSOC);
+        } catch (Throwable $alsoIgnored) {
+            return [];
+        }
     }
 }
 

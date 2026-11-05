@@ -66,3 +66,28 @@ CREATE TABLE IF NOT EXISTS site_page_slides (
     INDEX idx_slides_page (page_id, sort_order),
     CONSTRAINT fk_slides_page FOREIGN KEY (page_id) REFERENCES site_pages(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Pages can be hidden from the header menu (added automatically if missing).
+-- ALTER TABLE site_pages ADD COLUMN show_in_menu TINYINT(1) NOT NULL DEFAULT 1 AFTER status;
+
+-- Contact and Join as Donor / ESO form submissions (admin: Website -> Enquiries).
+CREATE TABLE IF NOT EXISTS site_enquiries (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_type ENUM('contact','donor') NOT NULL,
+    partner_type VARCHAR(40) NOT NULL DEFAULT '',
+    name VARCHAR(150) NOT NULL,
+    organisation VARCHAR(200) NOT NULL DEFAULT '',
+    email VARCHAR(190) NOT NULL,
+    phone VARCHAR(40) NOT NULL DEFAULT '',
+    country VARCHAR(100) NOT NULL DEFAULT '',
+    website VARCHAR(255) NOT NULL DEFAULT '',
+    subject VARCHAR(200) NOT NULL DEFAULT '',
+    interests VARCHAR(500) NOT NULL DEFAULT '',
+    message TEXT NULL,
+    status ENUM('new','read','handled') NOT NULL DEFAULT 'new',
+    ip_hash CHAR(64) NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_enquiries_status (status, created_at),
+    INDEX idx_enquiries_ip (ip_hash, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

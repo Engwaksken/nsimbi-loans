@@ -76,6 +76,13 @@ function asset_url(string $relative): string {
   <nav class="sidebar-nav">
     <a href="dashboard" class="nav-link<?= nav_cls('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
 <?php
+$new_enquiries = 0;
+try {
+  $enq = $conn->query("SELECT COUNT(*) AS c FROM site_enquiries WHERE status='new'");
+  if ($enq) $new_enquiries = (int)$enq->fetch_assoc()['c'];
+} catch (Throwable $ignored) {
+  // Table appears once an admin opens the website CMS.
+}
 // [label, [[href, icon, text, badge, badge class, other pages that mark it active]]]
 $navSections = [
   'loans' => ['Loans', [
@@ -102,6 +109,7 @@ $navSections = [
   ]],
   'website' => ['Website', [
     ['pages.php', 'fa-globe', 'Frontend Pages', 0, '', ['page_builder.php']],
+    ['enquiries.php', 'fa-inbox', 'Enquiries', $new_enquiries, 'red'],
     ['site_settings.php', 'fa-palette', 'Branding & Fonts'],
   ]],
   'system' => ['System', [

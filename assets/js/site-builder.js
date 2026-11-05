@@ -59,4 +59,27 @@
         .catch(function () { if (message) message.textContent = 'Unable to subscribe right now. Please try again later.'; });
     });
   });
+  document.querySelectorAll('form[data-enquiry-form]').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var status = form.querySelector('.ef-status');
+      var button = form.querySelector('button[type="submit"]');
+      if (!form.checkValidity()) { form.reportValidity(); return; }
+      status.textContent = 'Sending…';
+      status.className = 'ef-status';
+      button.disabled = true;
+      fetch('/includes/site_enquiry.php', { method: 'POST', body: new FormData(form) })
+        .then(function (response) { return response.json(); })
+        .then(function (result) {
+          status.textContent = result.message || 'Thank you.';
+          status.className = 'ef-status ' + (result.success ? 'is-success' : 'is-error');
+          if (result.success) form.reset();
+        })
+        .catch(function () {
+          status.textContent = 'We could not send your message right now. Please email us instead.';
+          status.className = 'ef-status is-error';
+        })
+        .then(function () { button.disabled = false; });
+    });
+  });
 })();

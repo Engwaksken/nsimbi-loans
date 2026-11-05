@@ -68,7 +68,142 @@ function site_cms_ensure_schema(mysqli $db): void
         CONSTRAINT fk_slides_page FOREIGN KEY (page_id) REFERENCES site_pages(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    $db->query("CREATE TABLE IF NOT EXISTS site_enquiries (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        form_type ENUM('contact','donor') NOT NULL,
+        partner_type VARCHAR(40) NOT NULL DEFAULT '',
+        name VARCHAR(150) NOT NULL,
+        organisation VARCHAR(200) NOT NULL DEFAULT '',
+        email VARCHAR(190) NOT NULL,
+        phone VARCHAR(40) NOT NULL DEFAULT '',
+        country VARCHAR(100) NOT NULL DEFAULT '',
+        website VARCHAR(255) NOT NULL DEFAULT '',
+        subject VARCHAR(200) NOT NULL DEFAULT '',
+        interests VARCHAR(500) NOT NULL DEFAULT '',
+        message TEXT NULL,
+        status ENUM('new','read','handled') NOT NULL DEFAULT 'new',
+        ip_hash CHAR(64) NOT NULL DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_enquiries_status (status, created_at),
+        INDEX idx_enquiries_ip (ip_hash, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    if ($db->query("SHOW COLUMNS FROM site_pages LIKE 'show_in_menu'")->num_rows === 0) {
+        $db->query("ALTER TABLE site_pages ADD COLUMN show_in_menu TINYINT(1) NOT NULL DEFAULT 1 AFTER status");
+    }
+
     site_cms_seed_home_sections($db);
+    site_cms_seed_default_pages($db);
+}
+
+/** Create Contact, Join as Donor / ESO and Privacy Policy pages once (skips slugs already in use). */
+function site_cms_seed_default_pages(mysqli $db): void
+{
+    if (site_settings($db)['default_pages_seeded'] === '1') return;
+    $base = ['label' => '', 'heading' => '', 'heading_accent' => '', 'body' => '', 'items' => '', 'media_type' => 'none', 'media_url' => '', 'button_label' => '', 'button_url' => '', 'anchor' => '', 'menu_label' => '', 'is_active' => 1];
+    foreach (site_default_pages() as $page) {
+        $check = $db->prepare('SELECT id FROM site_pages WHERE slug=?');
+        $check->bind_param('s', $page['slug']); $check->execute();
+        $exists = $check->get_result()->fetch_assoc(); $check->close();
+        if ($exists) continue;
+        $empty = '';
+        $stmt = $db->prepare("INSERT INTO site_pages (title, slug, meta_description, hero_title, hero_subtitle, body_content, cta_label, cta_url, hero_image, status, show_in_menu) VALUES (?,?,?,?,?,?,?,?,?,'published',?)");
+        $stmt->bind_param('sssssssssi', $page['title'], $page['slug'], $page['meta'], $page['hero_title'], $page['hero_subtitle'], $empty, $empty, $empty, $empty, $page['menu']);
+        $stmt->execute(); $pageId = (int)$stmt->insert_id; $stmt->close();
+        $order = 0;
+        foreach ($page['sections'] as $section) {
+            $section += $base;
+            $section['sort_order'] = ($order += 10);
+            site_section_save($db, $pageId, 0, $section);
+        }
+    }
+    site_settings_save($db, ['default_pages_seeded' => '1']);
+}
+
+function site_default_pages(): array
+{
+    $privacy = <<<'TXT'
+Last updated: 5 November 2026
+
+Nsimbi Impact ("we", "us") respects your privacy. This policy explains what personal information we collect through this website, our loan application and our client, staff and partner portals, how we use it, and the choices you have. We handle personal data in line with Uganda's Data Protection and Privacy Act, 2019 and its regulations.
+
+## Information we collect
+- Contact details you give us: name, email address, phone number and postal or business address.
+- Loan application details: date of birth, gender, National Identification Number (NIN), copies of your national ID, bank name and account number, business information, next-of-kin details and your electronic signature.
+- Loan account information: loan amounts, repayments, schedules and credit assessments.
+- Donor, ESO and partner enquiries: your organisation, role, country, website and how you would like to work with us.
+- Messages you send through our contact forms, and newsletter subscriptions.
+- Basic technical information such as your browser type and the pages you visit, used to keep the site secure and working.
+
+## How we use your information
+- To assess and process loan applications, verify identity and manage loans and repayments.
+- To provide business support, training and partner programmes.
+- To respond to enquiries and keep in touch with donors, ESOs and partners.
+- To send newsletters you have subscribed to. You can unsubscribe at any time.
+- To meet legal, regulatory, audit and reporting obligations, and to prevent fraud.
+
+## Legal basis
+We process personal data with your consent, to take steps towards or perform a loan agreement with you, to comply with the law, or where we have a legitimate interest that does not override your rights.
+
+## Sharing your information
+We do not sell your personal data. We share it only where needed with:
+- Our staff and loan officers who process your application or account.
+- Service providers that host our systems, send email or process payments for us, under confidentiality obligations.
+- Funding and programme partners, using aggregated or anonymised data wherever possible.
+- Regulators, law enforcement or courts when the law requires it.
+
+## Keeping your information safe
+Access to personal data is limited to authorised people, accounts are protected by passwords, and documents you upload are stored on secured servers. No system is completely secure, so please keep your login details private and tell us straight away if you think your account has been misused.
+
+## How long we keep it
+We keep personal data only for as long as needed for the purposes above, including for the life of a loan and any period afterwards required by law, accounting or audit rules. We then delete or anonymise it.
+
+## Your rights
+You may ask to access the personal data we hold about you, correct it, object to or restrict certain processing, withdraw consent, or ask us to delete it where the law allows. To make a request, contact us using the details below. You may also complain to Uganda's Personal Data Protection Office.
+
+## Cookies
+We use essential cookies to keep you signed in and to keep the site secure. We do not use advertising cookies.
+
+## Changes to this policy
+We may update this policy from time to time. The latest version will always be on this page with the date it was last updated.
+
+## Contact us
+Nsimbi Impact, Plot 12, Corporation Rise, Bukoto, Kampala, Uganda
+Email: info@nsimbiimpact.com
+TXT;
+    return [
+        [
+            'title' => 'Contact Us', 'slug' => 'contact-us', 'menu' => 1,
+            'meta' => 'Get in touch with Nsimbi Impact in Kampala, Uganda.',
+            'hero_title' => 'Contact us', 'hero_subtitle' => "Questions about financing, partnerships or your account? We'd love to hear from you.",
+            'sections' => [[
+                'section_type' => 'contact_form', 'label' => 'GET IN TOUCH', 'heading' => "Let's talk about", 'heading_accent' => 'what comes next.',
+                'body' => 'Send us a message and our team will get back to you. Existing clients can also reach their loan officer through the client portal.',
+                'items' => "fa-location-dot | Plot 12, Corporation Rise, Bukoto, Kampala, Uganda | https://www.google.com/maps/search/?api=1&query=Corporation+Rise+Bukoto+Kampala
+fa-envelope | info@nsimbiimpact.com | mailto:info@nsimbiimpact.com
+fa-clock | Monday – Friday, 8:30am – 5:00pm",
+            ]],
+        ],
+        [
+            'title' => 'Join as Donor / ESO', 'slug' => 'join-us', 'menu' => 0,
+            'meta' => 'Support women-led businesses as a donor, enterprise support organisation (ESO) or partner.',
+            'hero_title' => 'Join as a donor or ESO', 'hero_subtitle' => 'Partner with us to put capital, skills and networks behind women-led businesses.',
+            'sections' => [[
+                'section_type' => 'donor_form', 'label' => 'PARTNER WITH US', 'heading' => 'Invest in women.', 'heading_accent' => 'Multiply the impact.',
+                'body' => 'Tell us a little about yourself and how you would like to get involved. We will follow up to explore the best way to work together.',
+                'items' => "fa-hand-holding-dollar | Donors & funders | Provide grants or loan capital that reaches women-led businesses.
+fa-people-group | Enterprise Support Organisations | Offer training, mentorship and business development to our clients.
+fa-handshake | Corporate & programme partners | Open markets, supply chains and opportunities for growth.",
+            ]],
+        ],
+        [
+            'title' => 'Privacy Policy', 'slug' => 'privacy-policy', 'menu' => 0,
+            'meta' => 'How Nsimbi Impact collects, uses and protects personal information.',
+            'hero_title' => 'Privacy policy', 'hero_subtitle' => 'How we collect, use and protect your personal information.',
+            'sections' => [['section_type' => 'prose', 'body' => $privacy]],
+        ],
+    ];
 }
 
 /** Copy the original homepage layout into editable sections, once. */
@@ -146,7 +281,9 @@ function site_setting_defaults(): array
         'color_dark' => '#001284',
         'color_accent' => '#20d959',
         'color_accent_text' => '#25a073',
+        'enquiry_email' => 'info@nsimbiimpact.com',
         'home_sections_seeded' => '0',
+        'default_pages_seeded' => '0',
     ];
 }
 
@@ -547,6 +684,9 @@ function site_section_types(): array
         'media' => ['name' => 'Image / video', 'icon' => 'photo-film', 'help' => 'A wide image or video with an optional heading and caption.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'media']],
         'cta' => ['name' => 'Call to action', 'icon' => 'bullhorn', 'help' => 'A bold band with a heading, a sentence and a button.', 'fields' => ['heading', 'heading_accent', 'body', 'button']],
         'newsletter' => ['name' => 'Newsletter signup', 'icon' => 'envelope-open-text', 'help' => 'Email signup form. The text field becomes the form label.', 'fields' => ['label', 'heading', 'heading_accent', 'body']],
+        'prose' => ['name' => 'Long text / article', 'icon' => 'file-lines', 'help' => 'Single-column text for policies and articles. Use "## " for a sub-heading and "- " for bullet points.', 'fields' => ['label', 'heading', 'heading_accent', 'body']],
+        'contact_form' => ['name' => 'Contact form', 'icon' => 'address-card', 'help' => 'Contact details beside a message form. Messages arrive in Website → Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
+        'donor_form' => ['name' => 'Donor / ESO form', 'icon' => 'hand-holding-heart', 'help' => 'Ways to get involved beside a donor, ESO and partner sign-up form. Sign-ups arrive in Website → Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
     ];
 }
 
@@ -733,7 +873,7 @@ function site_render_sections(array $sections): string
             $out .= '</div></section>';
             continue;
         }
-        $numbered = !in_array($s['section_type'], ['newsletter', 'cta'], true) && $s['label'] !== '';
+        $numbered = !in_array($s['section_type'], ['newsletter', 'cta', 'prose', 'contact_form', 'donor_form'], true) && $s['label'] !== '';
         $label = $s['label'] !== '' ? ($numbered ? site_section_label($s['label'], ++$number) : '<div class="section-label">' . site_e($s['label']) . '</div>') : '';
         $out .= site_render_section($s, $label);
     }
@@ -802,6 +942,34 @@ function site_render_section(array $s, string $label): string
                 . ($s['button_label'] !== '' ? '<a class="button button-lime" href="' . site_e($s['button_url'] ?: '#') . '">' . site_e($s['button_label']) . ' <i class="fa-solid fa-arrow-right"></i></a>' : '')
                 . '</div></section>';
 
+        case 'prose':
+            return '<section class="prose-section section-wrap"' . $id . '>' . $label . ($heading !== '' ? '<h2>' . $heading . '</h2>' : '')
+                . '<div class="prose">' . site_prose_html((string)$s['body']) . '</div></section>';
+
+        case 'contact_form':
+        case 'donor_form':
+            $isDonor = $s['section_type'] === 'donor_form';
+            $list = '';
+            foreach (preg_split('/\R/', (string)$s['items']) as $line) {
+                $line = trim($line);
+                if ($line === '') continue;
+                $parts = array_map('trim', explode('|', $line));
+                $icon = preg_match('/^fa-[a-z0-9-]+$/', $parts[0]) ? array_shift($parts) : 'fa-circle-check';
+                if ($isDonor) {
+                    $list .= '<li><i class="fa-solid ' . $icon . '" aria-hidden="true"></i><div><strong>' . site_e($parts[0] ?? '') . '</strong>'
+                        . (isset($parts[1]) ? '<span>' . site_e($parts[1]) . '</span>' : '') . '</div></li>';
+                } else {
+                    $text = site_e($parts[0] ?? '');
+                    $link = isset($parts[1]) ? site_clean_link($parts[1]) : '';
+                    $list .= '<li><i class="fa-solid ' . $icon . '" aria-hidden="true"></i><div>'
+                        . ($link !== '' && $link !== '#' ? '<a href="' . site_e($link) . '"' . (str_starts_with($link, 'http') ? ' target="_blank" rel="noopener"' : '') . '>' . $text . '</a>' : $text) . '</div></li>';
+                }
+            }
+            return '<section class="enquiry-section section-wrap"' . $id . '><div class="enquiry-grid"><div class="enquiry-intro">' . $label
+                . ($heading !== '' ? '<h2>' . $heading . '</h2>' : '') . site_paragraphs($s['body'])
+                . ($list !== '' ? '<ul class="' . ($isDonor ? 'support-list' : 'contact-list') . '">' . $list . '</ul>' : '') . '</div>'
+                . ($isDonor ? site_donor_form_html() : site_contact_form_html()) . '</div></section>';
+
         case 'newsletter':
             return '<section class="newsletter-section"' . $id . '><div>' . ($s['label'] !== '' ? '<span class="section-label">' . site_e($s['label']) . '</span>' : '') . '<h2>' . $heading . '</h2></div>'
                 . '<form class="site-newsletter"><label>' . site_e($s['body'] !== '' ? $s['body'] : 'Subscribe to our newsletter')
@@ -834,6 +1002,104 @@ function site_parse_feature_items(string $items): array
         $cards[count($cards) - 1]['points'][] = ltrim($line, "-* \t");
     }
     return [$cards, $highlight];
+}
+
+/* ------------------------------------------------------------------ */
+/* Public forms                                                        */
+/* ------------------------------------------------------------------ */
+
+/** Simple formatting for long text: "## " sub-headings, "- " bullets, blank lines between paragraphs. */
+function site_prose_html(string $text): string
+{
+    $html = ''; $para = []; $list = [];
+    $flushPara = static function () use (&$para, &$html): void {
+        if ($para) $html .= '<p>' . implode('<br>', array_map('site_e', $para)) . '</p>';
+        $para = [];
+    };
+    $flushList = static function () use (&$list, &$html): void {
+        if ($list) $html .= '<ul>' . implode('', array_map(static fn($i) => '<li>' . site_e($i) . '</li>', $list)) . '</ul>';
+        $list = [];
+    };
+    foreach (preg_split('/\R/', $text) as $line) {
+        $trim = trim($line);
+        if ($trim === '') { $flushPara(); $flushList(); continue; }
+        if (str_starts_with($trim, '## ')) { $flushPara(); $flushList(); $html .= '<h3>' . site_e(substr($trim, 3)) . '</h3>'; continue; }
+        if (preg_match('/^[-*•]\s+(.*)$/u', $trim, $m)) { $flushPara(); $list[] = $m[1]; continue; }
+        $flushList(); $para[] = $trim;
+    }
+    $flushPara(); $flushList();
+    return $html;
+}
+
+/** Choices offered on the donor / ESO form. */
+function site_partner_types(): array
+{
+    return [
+        'donor_individual' => 'Individual donor',
+        'donor_organisation' => 'Foundation or institutional donor',
+        'eso' => 'Enterprise Support Organisation (ESO)',
+        'corporate' => 'Corporate or programme partner',
+        'other' => 'Other',
+    ];
+}
+
+function site_partner_interests(): array
+{
+    return [
+        'funding' => 'Funding or loan capital',
+        'mentorship' => 'Mentorship & coaching',
+        'training' => 'Training & capacity building',
+        'market_access' => 'Market access & partnerships',
+        'volunteering' => 'Volunteering',
+        'other' => 'Something else',
+    ];
+}
+
+/** Hidden anti-spam fields shared by the public forms. */
+function site_form_guard_fields(string $type): string
+{
+    return '<input type="hidden" name="form_type" value="' . site_e($type) . '"><input type="hidden" name="started" value="' . time() . '">'
+        . '<div class="hp-field" aria-hidden="true"><label>Leave this empty<input type="text" name="company_url" tabindex="-1" autocomplete="off"></label></div>';
+}
+
+function site_form_consent_html(): string
+{
+    return '<label class="consent"><input type="checkbox" name="consent" value="1" required> <span>I agree that ' . site_e(site_settings()['site_name'])
+        . ' may store and use these details to respond to me, as described in the <a href="/privacy-policy" target="_blank">privacy policy</a>.</span></label>';
+}
+
+function site_contact_form_html(): string
+{
+    return '<form class="enquiry-form" data-enquiry-form novalidate>' . site_form_guard_fields('contact')
+        . '<div class="ef-grid"><label>Full name *<input name="name" required maxlength="150" autocomplete="name"></label>'
+        . '<label>Email *<input type="email" name="email" required maxlength="190" autocomplete="email"></label></div>'
+        . '<div class="ef-grid"><label>Phone<input type="tel" name="phone" maxlength="40" autocomplete="tel"></label>'
+        . '<label>Subject<input name="subject" maxlength="200"></label></div>'
+        . '<label>Message *<textarea name="message" rows="6" required maxlength="5000"></textarea></label>'
+        . site_form_consent_html()
+        . '<button type="submit" class="button button-lime">Send message <i class="fa-solid fa-arrow-right"></i></button><p class="ef-status" role="status" aria-live="polite"></p></form>';
+}
+
+function site_donor_form_html(): string
+{
+    $types = '';
+    foreach (site_partner_types() as $value => $label) $types .= '<option value="' . site_e($value) . '">' . site_e($label) . '</option>';
+    $interests = '';
+    foreach (site_partner_interests() as $value => $label) {
+        $interests .= '<label class="check"><input type="checkbox" name="interests[]" value="' . site_e($value) . '"> ' . site_e($label) . '</label>';
+    }
+    return '<form class="enquiry-form" data-enquiry-form novalidate>' . site_form_guard_fields('donor')
+        . '<label>I am joining as *<select name="partner_type" required><option value="">Choose one…</option>' . $types . '</select></label>'
+        . '<div class="ef-grid"><label>Full name *<input name="name" required maxlength="150" autocomplete="name"></label>'
+        . '<label>Organisation<input name="organisation" maxlength="200" autocomplete="organization"></label></div>'
+        . '<div class="ef-grid"><label>Email *<input type="email" name="email" required maxlength="190" autocomplete="email"></label>'
+        . '<label>Phone<input type="tel" name="phone" maxlength="40" autocomplete="tel"></label></div>'
+        . '<div class="ef-grid"><label>Country<input name="country" maxlength="100" autocomplete="country-name"></label>'
+        . '<label>Website<input type="url" name="website" maxlength="255" placeholder="https://"></label></div>'
+        . '<fieldset><legend>How would you like to support?</legend><div class="ef-checks">' . $interests . '</div></fieldset>'
+        . '<label>Tell us more<textarea name="message" rows="4" maxlength="5000"></textarea></label>'
+        . site_form_consent_html()
+        . '<button type="submit" class="button button-lime">Submit <i class="fa-solid fa-arrow-right"></i></button><p class="ef-status" role="status" aria-live="polite"></p></form>';
 }
 
 /* ------------------------------------------------------------------ */

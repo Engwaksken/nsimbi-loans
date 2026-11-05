@@ -22,6 +22,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim((string)($_POST['site_name'] ?? ''));
     $values['site_name'] = $name !== '' ? mb_substr($name, 0, 80) : $defaults['site_name'];
 
+    $notifyEmail = trim((string)($_POST['enquiry_email'] ?? ''));
+    if (!filter_var($notifyEmail, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Enquiry notification email is not a valid address.';
+        $notifyEmail = $current['enquiry_email'];
+    }
+    $values['enquiry_email'] = $notifyEmail;
+
     foreach (['heading_font', 'body_font', 'panel_font'] as $key) {
         $font = (string)($_POST[$key] ?? '');
         $values[$key] = isset($fonts[$font]) ? $font : $defaults[$key];
@@ -113,6 +120,7 @@ require __DIR__ . '/nav-head.php';
       <!-- Brand -->
       <div class="cms-tab-panel" role="tabpanel" data-tab-panel="brand">
         <div class="form-group"><label class="form-label" for="st-name">Platform name</label><input class="form-control" id="st-name" name="site_name" maxlength="80" value="<?= $e($s['site_name']) ?>"><div class="form-help">Used in the header wordmark, page titles and footer. The last word is highlighted.</div></div>
+        <div class="form-group"><label class="form-label" for="st-enquiry">Enquiry notification email</label><input class="form-control" type="email" id="st-enquiry" name="enquiry_email" maxlength="190" required value="<?= $e($s['enquiry_email']) ?>" placeholder="info@nsimbiimpact.com"><div class="form-help">Contact and Donor / ESO submissions are emailed here (uses the SMTP settings in the email_settings table) and always saved under Website → Enquiries.</div></div>
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label">Logo</label>

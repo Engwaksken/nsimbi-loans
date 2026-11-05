@@ -51,13 +51,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ctaLabel = trim((string)($_POST['cta_label'] ?? ''));
         $ctaUrl = site_clean_link((string)($_POST['cta_url'] ?? '')) ?: '#';
         $status = ($_POST['status'] ?? '') === 'published' ? 'published' : 'draft';
+        $inMenu = isset($_POST['show_in_menu']) ? 1 : 0;
         try {
             if ($existing) {
-                $stmt = $conn->prepare('UPDATE site_pages SET title=?, slug=?, meta_description=?, hero_title=?, hero_subtitle=?, body_content=?, cta_label=?, cta_url=?, hero_image=?, status=? WHERE id=?');
-                $stmt->bind_param('ssssssssssi', $title, $slug, $meta, $heroTitle, $heroSubtitle, $body, $ctaLabel, $ctaUrl, $heroImage, $status, $id);
+                $stmt = $conn->prepare('UPDATE site_pages SET title=?, slug=?, meta_description=?, hero_title=?, hero_subtitle=?, body_content=?, cta_label=?, cta_url=?, hero_image=?, status=?, show_in_menu=? WHERE id=?');
+                $stmt->bind_param('ssssssssssii', $title, $slug, $meta, $heroTitle, $heroSubtitle, $body, $ctaLabel, $ctaUrl, $heroImage, $status, $inMenu, $id);
             } else {
-                $stmt = $conn->prepare('INSERT INTO site_pages (title,slug,meta_description,hero_title,hero_subtitle,body_content,cta_label,cta_url,hero_image,status) VALUES (?,?,?,?,?,?,?,?,?,?)');
-                $stmt->bind_param('ssssssssss', $title, $slug, $meta, $heroTitle, $heroSubtitle, $body, $ctaLabel, $ctaUrl, $heroImage, $status);
+                $stmt = $conn->prepare('INSERT INTO site_pages (title,slug,meta_description,hero_title,hero_subtitle,body_content,cta_label,cta_url,hero_image,status,show_in_menu) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+                $stmt->bind_param('ssssssssssi', $title, $slug, $meta, $heroTitle, $heroSubtitle, $body, $ctaLabel, $ctaUrl, $heroImage, $status, $inMenu);
             }
             $stmt->execute();
             $newId = $existing ? $id : (int)$stmt->insert_id;
@@ -78,7 +79,7 @@ $pages = $conn->query('SELECT p.*,
         (SELECT COUNT(*) FROM site_page_slides sl WHERE sl.page_id = p.id) AS slide_count
     FROM site_pages p ORDER BY p.slug = "home" DESC, p.title ASC')->fetch_all(MYSQLI_ASSOC);
 $e = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-$recordFields = ['id', 'title', 'slug', 'meta_description', 'hero_title', 'hero_subtitle', 'body_content', 'cta_label', 'cta_url', 'hero_image', 'status'];
+$recordFields = ['id', 'title', 'slug', 'meta_description', 'hero_title', 'hero_subtitle', 'body_content', 'cta_label', 'cta_url', 'hero_image', 'status', 'show_in_menu'];
 $pageScripts = ['../assets/js/site-admin.js'];
 require __DIR__ . '/nav-head.php';
 ?>
@@ -86,7 +87,7 @@ require __DIR__ . '/nav-head.php';
   <div><div class="title">Frontend Pages</div><div class="sub">Public pages on the website. Use <b>Build</b> to manage a page's sections and slides.</div></div>
   <div class="d-flex gap-2">
     <a class="btn btn-outline" href="site_settings"><i class="fas fa-palette"></i> Branding &amp; fonts</a>
-    <button type="button" class="btn btn-primary" data-modal-open="pageModal" data-modal-title="New page" data-record='{"status":"published","cta_label":"Learn more","cta_url":"/apply"}'><i class="fas fa-plus"></i> Add page</button>
+    <button type="button" class="btn btn-primary" data-modal-open="pageModal" data-modal-title="New page" data-record='{"status":"published","cta_label":"Learn more","cta_url":"/apply","show_in_menu":1}'><i class="fas fa-plus"></i> Add page</button>
   </div>
 </div>
 
@@ -167,6 +168,8 @@ require __DIR__ . '/nav-head.php';
 
         <div class="cms-tab-panel" role="tabpanel" data-tab-panel="page-publish" hidden>
           <div class="form-group"><label class="form-label" for="pg-status">Status</label><select class="form-select" id="pg-status" name="status"><option value="published">Published</option><option value="draft">Draft (hidden)</option></select></div>
+          <label class="cms-check mb-3"><input type="checkbox" name="show_in_menu" value="1" checked> Show in the header menu</label>
+          <div class="form-help mb-3">Up to five published pages appear in the menu. Footer links to Contact, Join as Donor / ESO and Privacy policy are always shown.</div>
           <div class="form-group"><label class="form-label" for="pg-meta">SEO description</label><textarea class="form-control" id="pg-meta" name="meta_description" rows="4" maxlength="320"></textarea><div class="form-help">Shown in search results. Up to 320 characters.</div></div>
         </div>
       </div>

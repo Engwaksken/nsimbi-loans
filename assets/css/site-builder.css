@@ -70,3 +70,53 @@
 .public-header .wordmark{flex-shrink:0}
 .public-header nav{flex-wrap:wrap;justify-content:center;row-gap:6px}
 .header-actions{flex-shrink:0}
+
+/* Long text / article (privacy policy) */
+.prose-section{padding-top:30px;padding-bottom:90px}
+.prose-section>h2{font:700 clamp(30px,3vw,42px)/1.15 var(--display);color:var(--color-2);margin:16px 0 26px}
+.prose{max-width:780px;color:#45526f;font-size:15px;line-height:1.85}
+.prose h3{font:700 22px/1.3 var(--display);color:var(--color-2);margin:38px 0 12px}
+.prose p{margin:0 0 16px}
+.prose ul{margin:0 0 18px;padding-left:22px}
+.prose li{margin:6px 0}
+.prose li::marker{color:var(--color-7)}
+
+/* Contact and donor / ESO forms */
+.enquiry-section{padding-top:40px;padding-bottom:100px}
+.enquiry-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:60px;align-items:start}
+.enquiry-intro h2{font:700 clamp(32px,3.4vw,46px)/1.12 var(--display);letter-spacing:-1px;color:var(--color-2);margin:18px 0 18px}
+.enquiry-intro h2 em{color:var(--color-7)}
+.enquiry-intro p{color:#56658d;font-size:14px;line-height:1.85;max-width:460px}
+.contact-list,.support-list{list-style:none;padding:0;margin:30px 0 0;display:grid;gap:16px}
+.contact-list li,.support-list li{display:flex;gap:14px;align-items:flex-start;font-size:14px;color:var(--ink)}
+.contact-list i,.support-list i{width:40px;height:40px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:#f4f7ff;color:var(--color-7);font-size:15px}
+.contact-list li>div{padding-top:10px}
+.contact-list a{color:var(--color-2);text-decoration:underline;text-underline-offset:3px}
+.support-list strong{display:block;font:700 18px/1.3 var(--display);color:var(--color-2);margin:2px 0 4px}
+.support-list span{display:block;color:#56658d;font-size:13px;line-height:1.7}
+.enquiry-form{background:#fff;border-top:3px solid var(--color-3);box-shadow:0 14px 40px rgba(var(--primary-rgb),.1);padding:32px;display:grid;gap:16px}
+.enquiry-form label{display:grid;gap:7px;font-size:12px;font-weight:700;color:var(--color-2)}
+.enquiry-form input:not([type=checkbox]),.enquiry-form select,.enquiry-form textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:3px;font:inherit;font-size:14px;font-weight:400;color:var(--ink);background:#fff}
+.enquiry-form textarea{resize:vertical}
+.enquiry-form input:focus,.enquiry-form select:focus,.enquiry-form textarea:focus{outline:2px solid rgba(var(--primary-rgb),.25);border-color:var(--color-2)}
+.ef-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.enquiry-form fieldset{border:0;padding:0;margin:0}
+.enquiry-form legend{font-size:12px;font-weight:700;color:var(--color-2);margin-bottom:10px}
+.ef-checks{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.enquiry-form .check,.enquiry-form .consent{display:flex;gap:9px;align-items:flex-start;font-weight:400;font-size:13px;color:var(--ink)}
+.enquiry-form .check input,.enquiry-form .consent input{margin-top:3px;accent-color:var(--color-2)}
+.enquiry-form .consent a{color:var(--color-2);text-decoration:underline}
+.enquiry-form .button{justify-self:start;border:0;cursor:pointer;font-family:inherit;background:var(--color-3);color:var(--color-5)}
+.enquiry-form .button:disabled{opacity:.6;cursor:wait}
+.ef-status{margin:0;font-size:13px;min-height:1em}
+.ef-status.is-success{color:var(--color-7);font-weight:700}
+.ef-status.is-error{color:#c0392b;font-weight:700}
+.hp-field{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* Footer links */
+.footer-links{display:flex;flex-wrap:wrap;gap:18px}
+
+@media(max-width:800px){
+  .enquiry-grid,.ef-grid,.ef-checks{grid-template-columns:1fr}
+  .enquiry-form{padding:22px}
+}
