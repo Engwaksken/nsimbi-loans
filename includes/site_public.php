@@ -15,7 +15,7 @@ function site_public_head(string $title, string $description): string
         . '<link rel="stylesheet" href="' . site_asset('/assets/css/public-site.css') . '">'
         . '<link rel="stylesheet" href="' . site_asset('/assets/css/nsimbi-theme.css') . '">'
         . '<link rel="stylesheet" href="' . site_asset('/assets/css/site-builder.css') . '">'
-        . site_public_font_tags()
+        . site_public_style_tags()
         . '</head><body>';
 }
 

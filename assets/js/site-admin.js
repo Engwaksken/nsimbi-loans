@@ -152,3 +152,112 @@
     }
   });
 })();
+
+/* Tabs, colour pickers and range sliders for the CMS forms. */
+(function () {
+  'use strict';
+
+  function tabRoot(el) { return el.closest('[data-tabs-root]') || el.closest('form'); }
+
+  function activateTab(root, name, focus) {
+    if (!root) return;
+    root.querySelectorAll('.cms-tabs [role="tab"]').forEach(function (tab) {
+      var on = tab.dataset.tab === name;
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      if (on && focus) tab.focus();
+    });
+    root.querySelectorAll('.cms-tab-panel').forEach(function (panel) {
+      panel.hidden = panel.dataset.tabPanel !== name;
+    });
+  }
+
+  function firstVisibleTab(root) {
+    var tab = Array.prototype.find.call(root.querySelectorAll('.cms-tabs [role="tab"]'), function (t) { return !t.hidden; });
+    return tab ? tab.dataset.tab : null;
+  }
+
+  // Hide a tab when every type-dependent field in its panel is hidden.
+  function syncTabVisibility(root) {
+    root.querySelectorAll('.cms-tab-panel[data-auto-hide]').forEach(function (panel) {
+      var groups = panel.querySelectorAll('[data-field]');
+      var anyVisible = Array.prototype.some.call(groups, function (g) { return !g.hidden; });
+      var tab = root.querySelector('.cms-tabs [data-tab="' + panel.dataset.tabPanel + '"]');
+      if (tab) tab.hidden = !anyVisible;
+    });
+    var selected = root.querySelector('.cms-tabs [aria-selected="true"]');
+    if (selected && selected.hidden) activateTab(root, firstVisibleTab(root));
+  }
+
+  document.addEventListener('click', function (event) {
+    var tab = event.target.closest('.cms-tabs [role="tab"]');
+    if (tab) { activateTab(tabRoot(tab), tab.dataset.tab); return; }
+
+    // Runs after the modal is filled: always start on the first tab.
+    var opener = event.target.closest('[data-modal-open]');
+    if (opener) {
+      var modal = document.getElementById(opener.dataset.modalOpen);
+      var form = modal && modal.querySelector('form');
+      if (form && form.querySelector('.cms-tabs')) {
+        form.querySelectorAll('.cms-tabs .has-error').forEach(function (t) { t.classList.remove('has-error'); });
+        syncTabVisibility(form);
+        activateTab(form, firstVisibleTab(form));
+      }
+    }
+  });
+
+  document.addEventListener('keydown', function (event) {
+    var tab = event.target.closest && event.target.closest('.cms-tabs [role="tab"]');
+    if (!tab || (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft')) return;
+    var tabs = Array.prototype.filter.call(tab.parentNode.querySelectorAll('[role="tab"]'), function (t) { return !t.hidden; });
+    var i = tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1);
+    var next = tabs[(i + tabs.length) % tabs.length];
+    activateTab(tabRoot(tab), next.dataset.tab, true);
+    event.preventDefault();
+  });
+
+  // A required field on a hidden tab: jump to it so the browser can show the message.
+  document.addEventListener('invalid', function (event) {
+    var panel = event.target.closest('.cms-tab-panel');
+    if (!panel || !panel.hidden) return;
+    var root = tabRoot(panel);
+    activateTab(root, panel.dataset.tabPanel);
+    var tab = root.querySelector('.cms-tabs [data-tab="' + panel.dataset.tabPanel + '"]');
+    if (tab) tab.classList.add('has-error');
+  }, true);
+
+  document.addEventListener('change', function (event) {
+    if (event.target.matches('[data-type-select]') && event.target.form) syncTabVisibility(event.target.form);
+  });
+
+  // Colour picker <-> hex text, plus live preview variables.
+  function applyColor(key, value) {
+    document.querySelectorAll('[data-theme-preview]').forEach(function (el) { el.style.setProperty('--tp-' + key, value); });
+  }
+  document.addEventListener('input', function (event) {
+    var el = event.target;
+    if (el.matches('[data-color-picker]')) {
+      var text = document.querySelector('[data-color-text="' + el.dataset.colorPicker + '"]');
+      if (text) text.value = el.value;
+      applyColor(el.dataset.colorPicker, el.value);
+    } else if (el.matches('[data-color-text]')) {
+      var value = el.value.trim();
+      if (/^#[0-9a-f]{6}$/i.test(value)) {
+        var picker = document.querySelector('[data-color-picker="' + el.dataset.colorText + '"]');
+        if (picker) picker.value = value.toLowerCase();
+        applyColor(el.dataset.colorText, value);
+      }
+    } else if (el.matches('input[type="range"][data-unit]')) {
+      var out = document.querySelector('output[for="' + el.id + '"]');
+      if (out) out.textContent = el.value + el.dataset.unit;
+      var sample = document.querySelector('[data-size-sample="' + el.name + '"]');
+      if (sample) sample.style.fontSize = el.dataset.unit === '%' ? (el.value / 100 * parseFloat(sample.dataset.base)) + 'px' : el.value + 'px';
+    }
+  });
+
+  document.querySelectorAll('[data-tabs-root]').forEach(function (root) {
+    var wanted = (location.hash || '').replace('#', '');
+    var exists = wanted && root.querySelector('.cms-tabs [data-tab="' + wanted + '"]');
+    activateTab(root, exists ? wanted : firstVisibleTab(root));
+  });
+})();

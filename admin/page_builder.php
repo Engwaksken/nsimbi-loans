@@ -225,52 +225,63 @@ require __DIR__ . '/nav-head.php';
       </div>
       <div class="modal-body">
         <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="page_id" value="<?= $pageId ?>"><input type="hidden" name="id" value="0">
-        <div class="form-group">
-          <label class="form-label" for="sec-type">Section type</label>
-          <select class="form-select" id="sec-type" name="section_type" data-type-select>
-            <?php foreach ($types as $key => $type): ?>
-              <option value="<?= $e($key) ?>" data-help="<?= $e($type['help']) ?>" data-fields="<?= $e(implode(' ', $type['fields'])) ?>"><?= $e($type['name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <div class="form-help" data-type-help></div>
+        <div class="cms-tabs" role="tablist" aria-label="Section settings">
+          <button type="button" role="tab" data-tab="sec-content" aria-selected="true"><i class="fas fa-heading"></i> Content</button>
+          <button type="button" role="tab" data-tab="sec-items" aria-selected="false"><i class="fas fa-list"></i> Items</button>
+          <button type="button" role="tab" data-tab="sec-media" aria-selected="false"><i class="fas fa-photo-film"></i> Media &amp; button</button>
+          <button type="button" role="tab" data-tab="sec-settings" aria-selected="false"><i class="fas fa-sliders-h"></i> Menu &amp; visibility</button>
         </div>
-        <div class="form-group" data-field="label"><label class="form-label" for="sec-label">Small label</label><input class="form-control" id="sec-label" name="label" maxlength="120" placeholder="OUR VISION"><div class="form-help">Shown above the heading. Sections are numbered automatically.</div></div>
-        <div class="grid-2">
-          <div class="form-group" data-field="heading"><label class="form-label" for="sec-heading">Heading</label><input class="form-control" id="sec-heading" name="heading" maxlength="220"></div>
-          <div class="form-group" data-field="heading_accent"><label class="form-label" for="sec-accent">Heading — highlighted line</label><input class="form-control" id="sec-accent" name="heading_accent" maxlength="220"><div class="form-help">Optional second line in the accent colour.</div></div>
-        </div>
-        <div class="form-group" data-field="body"><label class="form-label" for="sec-body">Text</label><textarea class="form-control" id="sec-body" name="body" rows="4"></textarea><div class="form-help">Plain text. Leave a blank line between paragraphs.</div></div>
-        <div class="form-group" data-field="items">
-          <label class="form-label" for="sec-items">Items</label>
-          <textarea class="form-control" id="sec-items" name="items" rows="7" style="font-family:monospace;font-size:.8rem"></textarea>
-          <div class="form-help" data-for-type="features">One per line. <code>## Card title</code> starts a card; plain lines are its ticked points; <code>&gt; Big line | small line</code> adds a highlight card (it uses the image below if you add one).</div>
-          <div class="form-help" data-for-type="cards">One card per line: <code>fa-chart-line | Card text</code>. The icon is any <a href="https://fontawesome.com/search?o=r&amp;m=free&amp;s=solid" target="_blank" rel="noopener">Font Awesome</a> solid icon name; leave it out for a star.</div>
-        </div>
-        <div class="form-group" data-field="media">
-          <label class="form-label">Image or video</label>
-          <div class="cms-segment mb-2">
-            <label><input type="radio" name="media_type" value="none" checked data-media-kind> None</label>
-            <label><input type="radio" name="media_type" value="image" data-media-kind> <i class="fas fa-image"></i> Image</label>
-            <label><input type="radio" name="media_type" value="video" data-media-kind> <i class="fas fa-film"></i> Video</label>
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="sec-content">
+          <div class="form-group">
+            <label class="form-label" for="sec-type">Section type</label>
+            <select class="form-select" id="sec-type" name="section_type" data-type-select>
+              <?php foreach ($types as $key => $type): ?>
+                <option value="<?= $e($key) ?>" data-help="<?= $e($type['help']) ?>" data-fields="<?= $e(implode(' ', $type['fields'])) ?>"><?= $e($type['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="form-help" data-type-help></div>
           </div>
-          <div data-media-inputs>
-            <div data-media-preview="media_url"></div>
-            <input class="form-control mb-2" type="file" name="media_file" data-accept-image="image/jpeg,image/png,image/webp,image/gif" data-accept-video="video/mp4,video/webm">
-            <input class="form-control" name="media_url" placeholder="…or paste a link (https://…, YouTube or Vimeo for video)">
+          <div class="form-group" data-field="label"><label class="form-label" for="sec-label">Small label</label><input class="form-control" id="sec-label" name="label" maxlength="120" placeholder="OUR VISION"><div class="form-help">Shown above the heading. Sections are numbered automatically.</div></div>
+          <div class="grid-2">
+            <div class="form-group" data-field="heading"><label class="form-label" for="sec-heading">Heading</label><input class="form-control" id="sec-heading" name="heading" maxlength="220"></div>
+            <div class="form-group" data-field="heading_accent"><label class="form-label" for="sec-accent">Heading — highlighted line</label><input class="form-control" id="sec-accent" name="heading_accent" maxlength="220"><div class="form-help">Optional second line in the accent colour.</div></div>
+          </div>
+          <div class="form-group" data-field="body"><label class="form-label" for="sec-body">Text</label><textarea class="form-control" id="sec-body" name="body" rows="4"></textarea><div class="form-help">Plain text. Leave a blank line between paragraphs.</div></div>
+        </div>
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="sec-items" data-auto-hide hidden>
+          <div class="form-group" data-field="items">
+            <label class="form-label" for="sec-items">Items</label>
+            <textarea class="form-control" id="sec-items" name="items" rows="10" style="font-family:monospace;font-size:.8rem"></textarea>
+            <div class="form-help" data-for-type="features">One per line. <code>## Card title</code> starts a card; plain lines are its ticked points; <code>&gt; Big line | small line</code> adds a highlight card (it uses the image from the Media tab if you add one).</div>
+            <div class="form-help" data-for-type="cards">One card per line: <code>fa-chart-line | Card text</code>. The icon is any <a href="https://fontawesome.com/search?o=r&amp;m=free&amp;s=solid" target="_blank" rel="noopener">Font Awesome</a> solid icon name; leave it out for a star.</div>
           </div>
         </div>
-        <div class="grid-2" data-field="button">
-          <div class="form-group"><label class="form-label" for="sec-btn">Button / link label</label><input class="form-control" id="sec-btn" name="button_label" maxlength="80"></div>
-          <div class="form-group"><label class="form-label" for="sec-url">Button link</label><input class="form-control" id="sec-url" name="button_url" placeholder="/apply"></div>
-        </div>
-        <details class="cms-advanced">
-          <summary>Menu &amp; anchor</summary>
-          <div class="grid-2 mt-2">
-            <div class="form-group"><label class="form-label" for="sec-anchor">Anchor ID</label><input class="form-control" id="sec-anchor" name="anchor" maxlength="60" placeholder="vision" pattern="[A-Za-z0-9-]*"><div class="form-help">Links to this section as <code>#vision</code>.</div></div>
-            <div class="form-group"><label class="form-label" for="sec-menu">Header menu label</label><input class="form-control" id="sec-menu" name="menu_label" maxlength="60" placeholder="Our Vision"><div class="form-help">Needs an anchor ID to appear in the menu.</div></div>
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="sec-media" data-auto-hide hidden>
+          <div class="form-group" data-field="media">
+            <label class="form-label">Image or video</label>
+            <div class="cms-segment mb-2">
+              <label><input type="radio" name="media_type" value="none" checked data-media-kind> None</label>
+              <label><input type="radio" name="media_type" value="image" data-media-kind> <i class="fas fa-image"></i> Image</label>
+              <label><input type="radio" name="media_type" value="video" data-media-kind> <i class="fas fa-film"></i> Video</label>
+            </div>
+            <div data-media-inputs>
+              <div data-media-preview="media_url"></div>
+              <input class="form-control mb-2" type="file" name="media_file" data-accept-image="image/jpeg,image/png,image/webp,image/gif" data-accept-video="video/mp4,video/webm">
+              <input class="form-control" name="media_url" placeholder="…or paste a link (https://…, YouTube or Vimeo for video)">
+            </div>
           </div>
-        </details>
-        <label class="cms-check"><input type="checkbox" name="is_active" value="1" checked> Show this section on the website</label>
+          <div class="grid-2" data-field="button">
+            <div class="form-group"><label class="form-label" for="sec-btn">Button / link label</label><input class="form-control" id="sec-btn" name="button_label" maxlength="80"></div>
+            <div class="form-group"><label class="form-label" for="sec-url">Button link</label><input class="form-control" id="sec-url" name="button_url" placeholder="/apply"></div>
+          </div>
+        </div>
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="sec-settings" hidden>
+          <div class="grid-2">
+              <div class="form-group"><label class="form-label" for="sec-anchor">Anchor ID</label><input class="form-control" id="sec-anchor" name="anchor" maxlength="60" placeholder="vision" pattern="[A-Za-z0-9-]*"><div class="form-help">Links to this section as <code>#vision</code>.</div></div>
+              <div class="form-group"><label class="form-label" for="sec-menu">Header menu label</label><input class="form-control" id="sec-menu" name="menu_label" maxlength="60" placeholder="Our Vision"><div class="form-help">Needs an anchor ID to appear in the menu.</div></div>
+          </div>
+          <label class="cms-check"><input type="checkbox" name="is_active" value="1" checked> Show this section on the website</label>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost" data-modal-close>Cancel</button>

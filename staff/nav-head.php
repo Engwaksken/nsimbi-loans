@@ -67,7 +67,7 @@ $page_active = "active";
   <!-- CSS Files -->
   <link id="pagestyle" href="assets/css/loanpro.css" rel="stylesheet" /> 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <?= site_panel_font_tags() ?>
+  <?= site_panel_style_tags() ?>
 
 </head>
 

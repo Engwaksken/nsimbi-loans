@@ -129,6 +129,13 @@ function site_setting_defaults(): array
         'heading_font' => 'Playfair Display',
         'body_font' => 'DM Sans',
         'panel_font' => 'Plus Jakarta Sans',
+        'text_size' => '14',
+        'heading_scale' => '100',
+        'panel_text_size' => '14',
+        'color_primary' => '#0f3399',
+        'color_dark' => '#001284',
+        'color_accent' => '#20d959',
+        'color_accent_text' => '#25a073',
         'home_sections_seeded' => '0',
     ];
 }
@@ -154,6 +161,13 @@ function site_settings(?mysqli $db = null, bool $refresh = false): array
     $fonts = site_font_catalog();
     foreach (['heading_font', 'body_font', 'panel_font'] as $key) {
         if (!isset($fonts[$settings[$key]])) $settings[$key] = site_setting_defaults()[$key];
+    }
+    foreach (site_size_limits() as $key => [$min, $max]) {
+        $value = (int)$settings[$key];
+        $settings[$key] = (string)($value >= $min && $value <= $max ? $value : (int)site_setting_defaults()[$key]);
+    }
+    foreach (array_keys(site_color_keys()) as $key) {
+        $settings[$key] = site_clean_color($settings[$key]) ?? site_setting_defaults()[$key];
     }
     return $cache = $settings;
 }
@@ -201,23 +215,126 @@ function site_favicon_tags(): string
     return '<link rel="icon" href="' . $icon . '"><link rel="apple-touch-icon" href="' . $icon . '">';
 }
 
-/** Fonts for the public website: overrides --display / --sans used by its stylesheets. */
-function site_public_font_tags(): string
+/** Allowed ranges for size settings: key => [min, max]. */
+function site_size_limits(): array
 {
-    $s = site_settings();
-    return '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$s['heading_font'], $s['body_font']])) . '">'
-        . '<style>:root{--display:' . site_font_stack($s['heading_font']) . ';--sans:' . site_font_stack($s['body_font']) . '}'
-        . 'body{font-family:var(--sans)}h1,h2,h3,.hero h1,.editorial-page h1{font-family:var(--display)}</style>';
+    return ['text_size' => [12, 20], 'heading_scale' => [70, 140], 'panel_text_size' => [12, 18]];
 }
 
-/** Font for the admin, client and staff dashboards. Icons keep their own font. */
-function site_panel_font_tags(): string
+/** Theme colour settings: key => [label, help]. */
+function site_color_keys(): array
 {
-    $font = site_settings()['panel_font'];
-    if ($font === site_setting_defaults()['panel_font']) return '';
-    return '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$font])) . '">'
-        . '<style>body,body *:not(i):not([class*="fa"]):not([class^="ni"]):not([class*=" ni-"]):not(.material-icons){font-family:'
-        . site_font_stack($font) . '!important}</style>';
+    return [
+        'color_primary' => ['Primary', 'Top strip, headings, buttons and the dashboard sidebar.'],
+        'color_dark' => ['Dark', 'Deep end of gradients and hero shading.'],
+        'color_accent' => ['Accent', 'Main call-to-action buttons, icons and highlights.'],
+        'color_accent_text' => ['Accent text', 'Highlighted second line of headings. Keep it readable on white.'],
+    ];
+}
+
+/** Normalise "#abc" / "#aabbcc" to lowercase "#aabbcc", or null when invalid. */
+function site_clean_color(string $value): ?string
+{
+    $value = strtolower(trim($value));
+    if (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/', $value, $m)) $value = "#{$m[1]}{$m[1]}{$m[2]}{$m[2]}{$m[3]}{$m[3]}";
+    return preg_match('/^#[0-9a-f]{6}$/', $value) ? $value : null;
+}
+
+function site_rgb(string $hex): string
+{
+    return implode(',', array_map('hexdec', str_split(substr($hex, 1), 2)));
+}
+
+/** Blend a colour toward white (positive amount) or black (negative), amount 0..1. */
+function site_shade(string $hex, float $amount): string
+{
+    $target = $amount >= 0 ? 255 : 0;
+    $amount = abs($amount);
+    $parts = array_map(static fn($c) => (int)round(hexdec($c) + ($target - hexdec($c)) * $amount), str_split(substr($hex, 1), 2));
+    return '#' . implode('', array_map(static fn($c) => str_pad(dechex($c), 2, '0', STR_PAD_LEFT), $parts));
+}
+
+function site_colors_customised(array $s): bool
+{
+    $defaults = site_setting_defaults();
+    foreach (array_keys(site_color_keys()) as $key) {
+        if ($s[$key] !== $defaults[$key]) return true;
+    }
+    return false;
+}
+
+/** Public website fonts, colours and sizes (overrides the stylesheet defaults). */
+function site_public_style_tags(): string
+{
+    $s = site_settings();
+    $css = ':root{--display:' . site_font_stack($s['heading_font']) . ';--sans:' . site_font_stack($s['body_font']) . '}'
+        . 'body{font-family:var(--sans)}h1,h2,h3,.hero h1,.editorial-page h1{font-family:var(--display)}';
+
+    if (site_colors_customised($s)) {
+        [$p, $d, $a, $t] = [$s['color_primary'], $s['color_dark'], $s['color_accent'], $s['color_accent_text']];
+        $prgb = site_rgb($p); $drgb = site_rgb($d); $argb = site_rgb($a);
+        $css .= ":root{--color-2:{$p};--color-4:{$p};--color-9:{$p};--color-5:{$d};--color-3:{$a};--color-8:{$a};--color-7:{$t};"
+            . '--color-6:' . site_shade($p, .35) . ';--muted:' . site_shade($p, .35) . ";--primary-rgb:{$prgb};--dark-rgb:{$drgb};--line:rgba({$prgb},.15)}"
+            . ".hero.wp-hero:before{background:radial-gradient(ellipse at 80% 48%,rgba({$argb},.2),transparent 42%),linear-gradient(100deg,rgba({$prgb},.98),rgba({$prgb},.88) 55%,rgba({$drgb},.74))}"
+            . ".hero.wp-hero.has-image:before{background:linear-gradient(90deg,rgba({$prgb},.97),rgba({$prgb},.85) 52%,rgba({$drgb},.54)),var(--hero-image) center/cover}"
+            . ".public-header{box-shadow:0 3px 15px rgba({$prgb},.07)}.vision-band,.approach-grid article,.media-frame{background:" . site_shade($p, .95) . '}';
+    }
+
+    $text = (int)$s['text_size'] / 14;
+    if ((int)$s['text_size'] !== 14) {
+        $copy = [
+            '.story-copy p,.vision-grid p,.approach-heading>p,.media-caption,.cta-band p' => 14,
+            '.hero-content>p,.hs-content p' => 16,
+            '.editorial-lede' => 18,
+            '.editorial-copy' => 15,
+            '.approach-grid li,.impact li' => 12,
+        ];
+        foreach ($copy as $selector => $px) $css .= $selector . '{font-size:' . round($px * $text, 1) . 'px}';
+    }
+
+    $scale = (int)$s['heading_scale'] / 100;
+    if ((int)$s['heading_scale'] !== 100) {
+        $fluid = [
+            '.hero.wp-hero h1' => [48, 5.5, 76],
+            '.hs-content h1,.hs-content .hs-title' => [40, 5, 70],
+            '.editorial-page h1' => [42, 6, 70],
+            '.wordpress-overview h2' => [38, 4.2, 57],
+            '.approach-heading h2,.impact-section h2' => [38, 4, 54],
+            '.text-media-grid h2,.media-section h2' => [34, 3.6, 50],
+            '.cta-band h2' => [32, 3.5, 46],
+        ];
+        foreach ($fluid as $selector => [$min, $vw, $max]) {
+            $css .= $selector . '{font-size:clamp(' . round($min * $scale) . 'px,' . round($vw * $scale, 2) . 'vw,' . round($max * $scale) . 'px)}';
+        }
+        foreach (['.vision-grid h2' => 34, '.newsletter-section h2' => 37, '.approach-grid h3' => 25, '.impact-cards h3' => 20] as $selector => $px) {
+            $css .= $selector . '{font-size:' . round($px * $scale) . 'px}';
+        }
+    }
+
+    return '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$s['heading_font'], $s['body_font']])) . '"><style>' . $css . '</style>';
+}
+
+/** Dashboard (admin, client, staff, sign-in) font, text size and colours. Icons keep their own font. */
+function site_panel_style_tags(): string
+{
+    $s = site_settings();
+    $defaults = site_setting_defaults();
+    $html = '';
+    $css = '';
+    if ($s['panel_font'] !== $defaults['panel_font']) {
+        $html .= '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$s['panel_font']])) . '">';
+        $css .= 'body,body *:not(i):not([class*="fa"]):not([class^="ni"]):not([class*=" ni-"]):not(.material-icons){font-family:'
+            . site_font_stack($s['panel_font']) . '!important}';
+    }
+    if ($s['panel_text_size'] !== $defaults['panel_text_size']) {
+        $css .= 'html{font-size:' . (int)$s['panel_text_size'] . 'px}';
+    }
+    if (site_colors_customised($s)) {
+        $p = $s['color_primary']; $prgb = site_rgb($p);
+        $css .= ":root{--primary:{$p};--primary-dark:{$s['color_dark']};--primary-mid:" . site_shade($p, .15)
+            . ";--primary-light:rgba({$prgb},.14);--primary-xlight:rgba({$prgb},.06);--secondary:{$s['color_accent']};--sidebar-bg:{$p}}";
+    }
+    return $css === '' ? $html : $html . '<style>' . $css . '</style>';
 }
 
 /** Wordmark HTML: last word of the site name is highlighted. */

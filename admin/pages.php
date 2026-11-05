@@ -133,29 +133,41 @@ require __DIR__ . '/nav-head.php';
       <div class="modal-body">
         <input type="hidden" name="csrf" value="<?= $e(site_csrf_token()) ?>">
         <input type="hidden" name="id" value="0">
-        <div class="grid-2">
-          <div class="form-group"><label class="form-label" for="pg-title">Page name</label><input class="form-control" id="pg-title" name="title" required data-slug-source></div>
-          <div class="form-group"><label class="form-label" for="pg-slug">URL slug</label><input class="form-control" id="pg-slug" name="slug" placeholder="about-us" required pattern="[A-Za-z0-9-]+" data-slug-target><div class="form-help">Page address: /<span data-slug-preview>about-us</span></div></div>
+        <div class="cms-tabs" role="tablist" aria-label="Page settings">
+          <button type="button" role="tab" data-tab="page-basics" aria-selected="true"><i class="fas fa-file-alt"></i> Page</button>
+          <button type="button" role="tab" data-tab="page-hero" aria-selected="false"><i class="fas fa-image"></i> Hero &amp; button</button>
+          <button type="button" role="tab" data-tab="page-publish" aria-selected="false"><i class="fas fa-globe"></i> SEO &amp; status</button>
         </div>
-        <div class="form-group"><label class="form-label" for="pg-hero-title">Hero heading</label><input class="form-control" id="pg-hero-title" name="hero_title"></div>
-        <div class="form-group"><label class="form-label" for="pg-hero-sub">Hero introduction</label><textarea class="form-control" id="pg-hero-sub" name="hero_subtitle" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label" for="pg-body">Intro text</label><textarea class="form-control" id="pg-body" name="body_content" rows="5"></textarea><div class="form-help">Plain text, blank line between paragraphs. On the homepage, content lives in sections instead — use <b>Build</b>.</div></div>
-        <div class="grid-2">
-          <div class="form-group"><label class="form-label" for="pg-cta-label">Button label</label><input class="form-control" id="pg-cta-label" name="cta_label"></div>
-          <div class="form-group"><label class="form-label" for="pg-cta-url">Button link</label><input class="form-control" id="pg-cta-url" name="cta_url" placeholder="/apply"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Hero image (optional)</label>
-          <div data-media-preview="hero_image"></div>
+
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="page-basics">
           <div class="grid-2">
-            <input class="form-control" type="file" name="hero_image_file" accept="image/jpeg,image/png,image/webp,image/gif">
-            <input class="form-control" name="hero_image" placeholder="…or paste https:// link">
+            <div class="form-group"><label class="form-label" for="pg-title">Page name</label><input class="form-control" id="pg-title" name="title" required data-slug-source></div>
+            <div class="form-group"><label class="form-label" for="pg-slug">URL slug</label><input class="form-control" id="pg-slug" name="slug" placeholder="about-us" required pattern="[A-Za-z0-9-]+" data-slug-target><div class="form-help">Page address: /<span data-slug-preview>about-us</span></div></div>
           </div>
-          <div class="form-help">Used when the page has no slides. Clear the link to remove it. Max 8 MB.</div>
+          <div class="form-group"><label class="form-label" for="pg-body">Intro text</label><textarea class="form-control" id="pg-body" name="body_content" rows="7"></textarea><div class="form-help">Plain text, blank line between paragraphs. On the homepage, content lives in sections instead — use <b>Build</b>.</div></div>
         </div>
-        <div class="grid-2">
-          <div class="form-group"><label class="form-label" for="pg-meta">SEO description</label><textarea class="form-control" id="pg-meta" name="meta_description" rows="2" maxlength="320"></textarea></div>
+
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="page-hero" hidden>
+          <div class="form-group"><label class="form-label" for="pg-hero-title">Hero heading</label><input class="form-control" id="pg-hero-title" name="hero_title"></div>
+          <div class="form-group"><label class="form-label" for="pg-hero-sub">Hero introduction</label><textarea class="form-control" id="pg-hero-sub" name="hero_subtitle" rows="2"></textarea></div>
+          <div class="grid-2">
+            <div class="form-group"><label class="form-label" for="pg-cta-label">Button label</label><input class="form-control" id="pg-cta-label" name="cta_label"></div>
+            <div class="form-group"><label class="form-label" for="pg-cta-url">Button link</label><input class="form-control" id="pg-cta-url" name="cta_url" placeholder="/apply"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hero image (optional)</label>
+            <div data-media-preview="hero_image"></div>
+            <div class="grid-2">
+              <input class="form-control" type="file" name="hero_image_file" accept="image/jpeg,image/png,image/webp,image/gif">
+              <input class="form-control" name="hero_image" placeholder="…or paste https:// link">
+            </div>
+            <div class="form-help">Used when the page has no slides. Clear the link to remove it. Max 8 MB.</div>
+          </div>
+        </div>
+
+        <div class="cms-tab-panel" role="tabpanel" data-tab-panel="page-publish" hidden>
           <div class="form-group"><label class="form-label" for="pg-status">Status</label><select class="form-select" id="pg-status" name="status"><option value="published">Published</option><option value="draft">Draft (hidden)</option></select></div>
+          <div class="form-group"><label class="form-label" for="pg-meta">SEO description</label><textarea class="form-control" id="pg-meta" name="meta_description" rows="4" maxlength="320"></textarea><div class="form-help">Shown in search results. Up to 320 characters.</div></div>
         </div>
       </div>
       <div class="modal-footer">
