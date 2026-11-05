@@ -31,6 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $values[$key] = (string)max($min, min($max, (int)($_POST[$key] ?? $defaults[$key])));
     }
 
+    foreach (site_choice_settings() as $key => $options) {
+        $choice = (string)($_POST[$key] ?? '');
+        $values[$key] = isset($options[$choice]) ? $choice : $defaults[$key];
+    }
+
     $resetColors = !empty($_POST['colors_reset']);
     foreach (array_keys($colors) as $key) {
         $color = $resetColors ? null : site_clean_color((string)($_POST[$key] ?? ''));
@@ -72,6 +77,18 @@ $range = static function (string $key, string $label, string $unit, string $help
         . '<output for="st-' . $key . '">' . $e($s[$key]) . $unit . '</output></div>'
         . '<div class="form-help">' . $e($help) . ' Default ' . $e($defaults[$key]) . $unit . '.</div></div>';
 };
+$choices = site_choice_settings();
+$select = static function (string $key, string $label) use ($s, $choices, $e): string {
+    $html = '<div class="form-group"><label class="form-label" for="st-' . $key . '">' . $e($label) . '</label><select class="form-select" id="st-' . $key . '" name="' . $key . '" data-style-preview="' . $key . '">';
+    foreach ($choices[$key] as $value => $text) {
+        $html .= '<option value="' . $e($value) . '"' . ((string)$s[$key] === (string)$value ? ' selected' : '') . '>' . $e($text) . '</option>';
+    }
+    return $html . '</select></div>';
+};
+$previewStyle = static function (string $prefix) use ($s): string {
+    return 'font-size:' . (int)$s[$prefix . '_size'] . 'px;font-weight:' . (int)$s[$prefix . '_weight'] . ';text-transform:' . $s[$prefix . '_case']
+        . ';font-family:' . site_font_stack($s[$s[$prefix . '_font'] === 'heading' ? 'heading_font' : 'body_font']);
+};
 $pageScripts = ['../assets/js/site-admin.js'];
 require __DIR__ . '/nav-head.php';
 ?>
@@ -90,6 +107,7 @@ require __DIR__ . '/nav-head.php';
         <button type="button" role="tab" data-tab="brand" aria-selected="true"><i class="fas fa-id-badge"></i> Brand</button>
         <button type="button" role="tab" data-tab="colors" aria-selected="false"><i class="fas fa-palette"></i> Theme colours</button>
         <button type="button" role="tab" data-tab="typography" aria-selected="false"><i class="fas fa-font"></i> Fonts &amp; sizes</button>
+        <button type="button" role="tab" data-tab="headerfooter" aria-selected="false"><i class="fas fa-window-maximize"></i> Header &amp; footer</button>
       </div>
 
       <!-- Brand -->
@@ -140,6 +158,43 @@ require __DIR__ . '/nav-head.php';
               </div>
             </div>
             <div class="form-help mt-2">Dashboards use Primary for the sidebar and buttons, Dark for hover states and Accent for highlights.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Header & footer -->
+      <div class="cms-tab-panel" role="tabpanel" data-tab-panel="headerfooter" hidden>
+        <div class="form-help mb-3">Text styling for the public website's top strip, menu and buttons, and its footer. Colours come from <b>Theme colours</b>.</div>
+        <div class="grid-2">
+          <div>
+            <div class="card-title mb-3"><span class="card-dot"></span> Header menu</div>
+            <?= $range('header_size', 'Menu text size', 'px', 'Menu links and header buttons; the top strip scales with it.') ?>
+            <div class="grid-2">
+              <?= $select('header_weight', 'Weight') ?>
+              <?= $select('header_case', 'Letter case') ?>
+            </div>
+            <?= $select('header_font', 'Font') ?>
+          </div>
+          <div>
+            <div class="card-title mb-3"><span class="card-dot green"></span> Footer</div>
+            <?= $range('footer_size', 'Footer text size', 'px', 'Footer tagline; the copyright line is 1px smaller.') ?>
+            <div class="grid-2">
+              <?= $select('footer_weight', 'Weight') ?>
+              <?= $select('footer_case', 'Letter case') ?>
+            </div>
+            <?= $select('footer_font', 'Font') ?>
+          </div>
+        </div>
+        <label class="form-label mt-2">Preview</label>
+        <div class="cms-hf-preview" style="--hf-primary:<?= $e($s['color_primary']) ?>;--hf-dark:<?= $e($s['color_dark']) ?>;--hf-accent:<?= $e($s['color_accent']) ?>;--hf-accent-text:<?= $e($s['color_accent_text']) ?>">
+          <div class="hf-header" data-hf-preview="header" data-size-sample="header_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('header')) ?>">
+            <span class="hf-logo"><?= str_replace(['<b>', '</b>'], ['<b style="color:var(--hf-accent-text)">', '</b>'], site_wordmark_html()) ?></span>
+            <span class="hf-links"><span>Overview</span><span>Our Vision</span><span>Impact</span></span>
+            <span class="hf-cta">Apply for a Loan →</span>
+          </div>
+          <div class="hf-footer" data-hf-preview="footer" data-size-sample="footer_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('footer')) ?>">
+            <span>Dignity for women, wrapped in capital.</span>
+            <span>© <?= date('Y') ?> <?= $e($s['site_name']) ?> · Client &amp; staff login →</span>
           </div>
         </div>
       </div>

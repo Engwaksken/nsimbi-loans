@@ -15,6 +15,8 @@ $brand = site_settings($conn);
   <link rel="stylesheet" href="../assets/css/soft-ui-dashboard.css">
   <link rel="stylesheet" href="../assets/css/loanpro.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <?= site_panel_style_tags() ?>
+  <?= site_apply_style_tags() ?>
 
 </head>
 <body class="client-registration-page">

@@ -262,3 +262,15 @@
     activateTab(root, exists ? wanted : firstVisibleTab(root));
   });
 })();
+
+/* Header & footer style preview. */
+document.addEventListener('change', function (event) {
+  var el = event.target;
+  if (!el.matches || !el.matches('[data-style-preview]')) return;
+  var parts = el.dataset.stylePreview.split('_');
+  var target = document.querySelector('[data-hf-preview="' + parts[0] + '"]');
+  if (!target) return;
+  if (parts[1] === 'weight') target.style.fontWeight = el.value;
+  if (parts[1] === 'case') target.style.textTransform = el.value;
+  if (parts[1] === 'font') target.style.fontFamily = el.value === 'heading' ? target.dataset.headingStack : target.dataset.bodyStack;
+});

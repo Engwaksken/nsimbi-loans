@@ -134,6 +134,14 @@ function site_setting_defaults(): array
         'panel_text_size' => '14',
         'sidebar_group_size' => '17',
         'sidebar_link_size' => '12',
+        'header_size' => '12',
+        'header_weight' => '400',
+        'header_case' => 'none',
+        'header_font' => 'body',
+        'footer_size' => '11',
+        'footer_weight' => '400',
+        'footer_case' => 'none',
+        'footer_font' => 'body',
         'color_primary' => '#0f3399',
         'color_dark' => '#001284',
         'color_accent' => '#20d959',
@@ -170,6 +178,9 @@ function site_settings(?mysqli $db = null, bool $refresh = false): array
     }
     foreach (array_keys(site_color_keys()) as $key) {
         $settings[$key] = site_clean_color($settings[$key]) ?? site_setting_defaults()[$key];
+    }
+    foreach (site_choice_settings() as $key => $options) {
+        if (!isset($options[$settings[$key]])) $settings[$key] = site_setting_defaults()[$key];
     }
     return $cache = $settings;
 }
@@ -220,7 +231,7 @@ function site_favicon_tags(): string
 /** Allowed ranges for size settings: key => [min, max]. */
 function site_size_limits(): array
 {
-    return ['text_size' => [12, 20], 'heading_scale' => [70, 140], 'panel_text_size' => [12, 18], 'sidebar_group_size' => [10, 22], 'sidebar_link_size' => [11, 18]];
+    return ['text_size' => [12, 20], 'heading_scale' => [70, 140], 'panel_text_size' => [12, 18], 'sidebar_group_size' => [10, 22], 'sidebar_link_size' => [11, 18], 'header_size' => [10, 20], 'footer_size' => [9, 18]];
 }
 
 /** Theme colour settings: key => [label, help]. */
@@ -265,6 +276,59 @@ function site_colors_customised(array $s): bool
     return false;
 }
 
+/** Settings with a fixed list of options: key => [value => label]. */
+function site_choice_settings(): array
+{
+    $weights = ['400' => 'Regular', '500' => 'Medium', '600' => 'Semibold', '700' => 'Bold'];
+    $cases = ['none' => 'As typed', 'uppercase' => 'UPPERCASE', 'capitalize' => 'Capitalise Each Word'];
+    $fonts = ['body' => 'Body font', 'heading' => 'Heading font'];
+    return [
+        'header_weight' => $weights, 'header_case' => $cases, 'header_font' => $fonts,
+        'footer_weight' => $weights, 'footer_case' => $cases, 'footer_font' => $fonts,
+    ];
+}
+
+/** CSS for the public header (top strip, menu, buttons) and footer. Empty when all defaults. */
+function site_header_footer_css(array $s): string
+{
+    $d = site_setting_defaults();
+    $css = '';
+    $changed = static function (string $prefix) use ($s, $d): bool {
+        foreach (['size', 'weight', 'case', 'font'] as $part) {
+            if ($s[$prefix . '_' . $part] !== $d[$prefix . '_' . $part]) return true;
+        }
+        return false;
+    };
+    $family = static fn(string $font): string => $font === 'heading' ? 'var(--display)' : 'var(--sans)';
+    $spacing = static fn(string $case): string => $case === 'uppercase' ? '.05em' : 'normal';
+
+    if ($changed('header')) {
+        $size = (int)$s['header_size'];
+        $style = 'font-family:' . $family($s['header_font']) . ';text-transform:' . $s['header_case'] . ';letter-spacing:' . $spacing($s['header_case']);
+        $css .= '.public-header nav{' . $style . ';font-weight:' . (int)$s['header_weight'] . '}'
+            . '.header-cta,.top-strip{' . $style . '}'
+            . '@media(min-width:951px){.public-header nav,.header-cta{font-size:' . $size . 'px}.top-strip{font-size:' . round($size * 10 / 12, 1) . 'px}}'
+            . '@media(max-width:950px){.public-header nav{font-size:' . round($size * 10 / 12, 1) . 'px}}'
+            . '@media(max-width:800px){.public-header nav{font-size:' . max(13, $size) . 'px}}';
+    }
+    if ($changed('footer')) {
+        $size = (int)$s['footer_size'];
+        $css .= '.public-footer .footer-top p,.footer-bottom{font-family:' . $family($s['footer_font']) . ';font-weight:' . (int)$s['footer_weight']
+            . ';text-transform:' . $s['footer_case'] . ';letter-spacing:' . $spacing($s['footer_case']) . '}'
+            . '.public-footer .footer-top p{font-size:' . $size . 'px}.footer-bottom{font-size:' . max(9, $size - 1) . 'px}';
+    }
+    return $css;
+}
+
+/** Theme colours for the loan application page (/apply). */
+function site_apply_style_tags(): string
+{
+    $s = site_settings();
+    $p = $s['color_primary'];
+    return '<style>.client-registration-page{--reg-primary:' . $p . ';--reg-dark:' . $s['color_dark'] . ';--reg-accent:' . $s['color_accent']
+        . ';--reg-accent-text:' . $s['color_accent_text'] . ';--reg-primary-rgb:' . site_rgb($p) . ';--reg-tint:' . site_shade($p, .88) . '}</style>';
+}
+
 /** Public website fonts, colours and sizes (overrides the stylesheet defaults). */
 function site_public_style_tags(): string
 {
@@ -279,7 +343,9 @@ function site_public_style_tags(): string
             . '--color-6:' . site_shade($p, .35) . ';--muted:' . site_shade($p, .35) . ";--primary-rgb:{$prgb};--dark-rgb:{$drgb};--line:rgba({$prgb},.15)}"
             . ".hero.wp-hero:before{background:radial-gradient(ellipse at 80% 48%,rgba({$argb},.2),transparent 42%),linear-gradient(100deg,rgba({$prgb},.98),rgba({$prgb},.88) 55%,rgba({$drgb},.74))}"
             . ".hero.wp-hero.has-image:before{background:linear-gradient(90deg,rgba({$prgb},.97),rgba({$prgb},.85) 52%,rgba({$drgb},.54)),var(--hero-image) center/cover}"
-            . ".public-header{box-shadow:0 3px 15px rgba({$prgb},.07)}.vision-band,.approach-grid article,.media-frame{background:" . site_shade($p, .95) . '}';
+            . ".public-header{box-shadow:0 3px 15px rgba({$prgb},.07)}.vision-band,.approach-grid article,.media-frame{background:" . site_shade($p, .95) . '}'
+            . '.socials a{border-color:' . site_shade($d, .45) . '}.footer-bottom{border-color:' . site_shade($d, .3) . '}'
+            . '.public-footer .footer-top p{color:rgba(255,255,255,.78)}.footer-bottom{color:rgba(255,255,255,.7)}';
     }
 
     $text = (int)$s['text_size'] / 14;
@@ -312,6 +378,8 @@ function site_public_style_tags(): string
             $css .= $selector . '{font-size:' . round($px * $scale) . 'px}';
         }
     }
+
+    $css .= site_header_footer_css($s);
 
     return '<link rel="stylesheet" href="' . site_e(site_google_fonts_url([$s['heading_font'], $s['body_font']])) . '"><style>' . $css . '</style>';
 }

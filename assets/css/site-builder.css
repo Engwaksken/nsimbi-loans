@@ -64,3 +64,9 @@
   .cta-band{padding:55px 0}
 }
 @media(prefers-reduced-motion:reduce){.hs-slide{transition:none}}
+
+/* Keep the wordmark, menu and buttons apart when the menu text is enlarged. */
+.public-header{gap:24px}
+.public-header .wordmark{flex-shrink:0}
+.public-header nav{flex-wrap:wrap;justify-content:center;row-gap:6px}
+.header-actions{flex-shrink:0}

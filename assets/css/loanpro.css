@@ -5,14 +5,31 @@
 .client-registration-page .form-step.active { display: block; }
 .client-registration-page .is-invalid { border: 2px solid #dc3545 !important; background-color: #fff0f0; }
 .client-registration-page .card { border: 0; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
-.client-registration-page .card-header { background: linear-gradient(45deg,#17a2b8,#007bff); border-radius: 15px 15px 0 0; padding: 20px; }
+.client-registration-page .card-header { background: linear-gradient(110deg,var(--reg-primary,#0f3399),var(--reg-dark,#001284)); border-radius: 15px 15px 0 0; padding: 20px; }
+.client-registration-page .card-header { display: block; text-align: center; }
+.client-registration-page .card-header h3 { color: #fff; font-size: 1.6rem; font-weight: 800; margin-bottom: .2rem !important; }
+.client-registration-page .card-header p { color: rgba(255,255,255,.85); font-size: .95rem; }
+.client-registration-page h5 { font-size: 1.05rem; }
+.client-registration-page label, .client-registration-page .step { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.client-registration-page label { font-size: .74rem; font-weight: 700; letter-spacing: .03em; color: var(--text-body); }
 .client-registration-page .form-control { border-radius: 8px; margin-bottom: 15px; padding: 12px; }
 .client-registration-page .btn { border-radius: 8px; padding: 10px 20px; font-weight: 600; }
-.client-registration-page .main-content { background: linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%); min-height: 100vh; }
+.client-registration-page .main-content { background: linear-gradient(135deg,#f7f9fd 0%,var(--reg-tint,#e2e7f4) 100%); min-height: 100vh; }
 .client-registration-page .step-indicator { display: flex; justify-content: center; margin-bottom: 30px; }
 .client-registration-page .step { width: 30px; height: 30px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; margin: 0 10px; font-weight: 700; transition: all .3s ease; }
-.client-registration-page .step.active { background: #17a2b8; color: #fff; }
-.client-registration-page .step.completed { background: #28a745; color: #fff; }
+.client-registration-page .step.active { background: var(--reg-primary,#0f3399); color: #fff; box-shadow: 0 0 0 4px rgba(var(--reg-primary-rgb,15,51,153),.15); }
+.client-registration-page .step.completed { background: var(--reg-accent-text,#25a073); color: #fff; }
+/* Theme colours replace the Bootstrap teal/green on the application form. */
+.client-registration-page .text-info { color: var(--reg-primary,#0f3399) !important; }
+.client-registration-page a.text-info:hover { color: var(--reg-dark,#001284) !important; }
+.client-registration-page .btn-info { background: var(--reg-primary,#0f3399) !important; border-color: var(--reg-primary,#0f3399) !important; color: #fff !important; box-shadow: 0 4px 12px rgba(var(--reg-primary-rgb,15,51,153),.25); }
+.client-registration-page .btn-info:hover, .client-registration-page .btn-info:focus { background: var(--reg-dark,#001284) !important; border-color: var(--reg-dark,#001284) !important; }
+.client-registration-page .btn-success { background: var(--reg-accent,#20d959) !important; border-color: var(--reg-accent,#20d959) !important; color: var(--reg-dark,#001284) !important; }
+.client-registration-page .btn-success:hover, .client-registration-page .btn-success:focus { filter: brightness(.94); }
+.client-registration-page .btn-secondary { background: #fff !important; border: 1.5px solid var(--reg-primary,#0f3399) !important; color: var(--reg-primary,#0f3399) !important; }
+.client-registration-page .btn-secondary:hover { background: var(--reg-tint,#e2e7f4) !important; }
+.client-registration-page .form-control:focus, .client-registration-page .form-select:focus { border-color: var(--reg-primary,#0f3399) !important; box-shadow: 0 0 0 3px rgba(var(--reg-primary-rgb,15,51,153),.15) !important; }
+.client-registration-page .form-check-input:checked { background-color: var(--reg-primary,#0f3399); border-color: var(--reg-primary,#0f3399); }
 .client-registration-page .signature-wrapper { width: 100%; height: 150px; position: relative; overflow: hidden; background: #fff; border: 2px solid #dee2e6; border-radius: 8px; }
 .client-registration-page #signature-pad { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .client-registration-page .signature-status { margin-top: .4rem; font-size: .875rem; }
@@ -2924,3 +2941,9 @@ a.profile-tab-btn{text-decoration:none;}
 .cms-range output{min-width:52px;text-align:right;font-weight:700;color:var(--text-dark);font-size:.85rem}
 .cms-sidebar-sample{background:var(--sidebar-bg);border-radius:var(--r);padding:.4rem .72rem .8rem;align-self:start}
 .cms-sidebar-sample .nav-link{cursor:default}
+.cms-hf-preview{border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.cms-hf-preview .hf-header{display:flex;align-items:center;gap:1.2rem;padding:.9rem 1.1rem;background:#fff;color:var(--hf-dark);border-bottom:1px solid var(--border-light);flex-wrap:wrap}
+.cms-hf-preview .hf-logo{font-weight:700;font-size:15px;text-transform:none;font-family:inherit;color:var(--hf-primary)}
+.cms-hf-preview .hf-links{display:flex;gap:1.1rem;flex:1}
+.cms-hf-preview .hf-cta{background:var(--hf-primary);color:#fff;padding:.45rem .8rem;border-radius:3px;font-weight:700}
+.cms-hf-preview .hf-footer{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem 1.1rem;background:var(--hf-dark);color:rgba(255,255,255,.78)}
