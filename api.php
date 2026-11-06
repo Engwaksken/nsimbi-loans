@@ -1252,6 +1252,9 @@ function payLoan(mysqli $conn, array $user, array $input): void
     }
 }
 
+// Bookkeeping (ledger) actions — soft-loaded from books_api.php.
+require_once __DIR__ . '/books_api.php';
+
 /**
  * Route request.
  */
@@ -1288,6 +1291,34 @@ switch ($action) {
 
     case "pay_loan":
         payLoan($conn, requireAuth(), $input);
+        break;
+
+    case "parse_book_input":
+        parse_book_input($conn, requireAuth(), $input);
+        break;
+
+    case "confirm_book_entries":
+        confirm_book_entries($conn, requireAuth(), $input);
+        break;
+
+    case "get_book_entries":
+        get_book_entries($conn, requireAuth(), $input);
+        break;
+
+    case "get_book_summary":
+        get_book_summary($conn, requireAuth(), $input);
+        break;
+
+    case "get_book_report":
+        get_book_report($conn, requireAuth(), $input);
+        break;
+
+    case "delete_book_entry":
+        delete_book_entry($conn, requireAuth(), $input);
+        break;
+
+    case "reject_book_input":
+        reject_book_input($conn, requireAuth(), $input);
         break;
 
     default:
