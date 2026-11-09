@@ -63,6 +63,15 @@ if (isset($_SESSION['message'])):
                 </form>
             </div>
         </div>
+        <div class="card shadow-sm border-danger mt-4">
+            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <h6 class="text-danger mb-1">Delete account</h6>
+                    <p class="mb-0 text-muted">Permanently close your account and remove personal profile details.</p>
+                </div>
+                <a href="delete-account.php" class="btn btn-outline-danger">Delete my account</a>
+            </div>
+        </div>
     </div>
 </div>
 <br>
