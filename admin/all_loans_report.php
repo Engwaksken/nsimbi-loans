@@ -1,13 +1,30 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/vendor/autoload.php';
 require 'db.php';
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
 date_default_timezone_set('Africa/Nairobi');
+
+/*
+ * Different installations use either startups.id or startups.startup_id.
+ * Detect the available primary key so the report cannot fail with
+ * "Unknown column 'st.id'" and return HTTP 500.
+ */
+$startupIdColumn = 'startup_id';
+try {
+    $startupIdCheck = $conn->query("SHOW COLUMNS FROM startups LIKE 'startup_id'");
+    if ($startupIdCheck instanceof mysqli_result) {
+        if ($startupIdCheck->num_rows === 0) {
+            $startupIdColumn = 'id';
+        }
+        $startupIdCheck->free();
+    }
+} catch (Throwable $e) {
+    $startupIdColumn = 'startup_id';
+}
 
 /* ============================================================
    SAFE HELPERS
@@ -96,7 +113,7 @@ function typeBadge(string $t): string
 {
     return match ($t) {
         'customer' => 'badge-primary',
-        'staff' => 'badge-purple',
+        'member', 'staff' => 'badge-purple',
         'startup' => 'badge-warning',
         default => 'badge-muted',
     };
@@ -124,7 +141,14 @@ $allowedStatuses = [
     'OUTSTANDING'
 ];
 
-$allowedTypes = ['all', 'customer', 'staff', 'startup'];
+/*
+ * Staff members are represented by the `members` table elsewhere in the
+ * application, so the report uses the same "member" type. Keep accepting the
+ * old "staff" query value for bookmarked links.
+ */
+if ($type === 'staff') $type = 'member';
+
+$allowedTypes = ['all', 'customer', 'member', 'startup'];
 
 if (!in_array($status, $allowedStatuses, true)) $status = 'all';
 if (!in_array($type, $allowedTypes, true)) $type = 'all';
@@ -228,14 +252,15 @@ $cw = buildWhere('customer', $status, $from, $to, $q);
 $mw = buildWhere('staff', $status, $from, $to, $q);
 $sw = buildWhere('startup', $status, $from, $to, $q);
 
+
 /* ============================================================
    SELECTS
 ============================================================ */
 $paymentSubquery = "
     SELECT 
         loan_id, 
-        COALESCE(SUM(amount), 0) AS total_paid, 
-        COUNT(*) AS payment_count
+        COALESCE(SUM(amount), 0) AS report_total_paid,
+        COUNT(*) AS report_payment_count
     FROM payments
     GROUP BY loan_id
 ";
@@ -243,7 +268,7 @@ $paymentSubquery = "
 $selCustomer = "
     SELECT 
         l.*,
-        'customer' AS client_type,
+        'customer' AS report_client_type,
         u.fname,
         u.lname,
         u.email AS user_email,
@@ -254,8 +279,8 @@ $selCustomer = "
         c.district,
         COALESCE(c.credit_score, 0) AS credit_score,
         COALESCE(c.loan_limit, 0) AS client_loan_limit,
-        COALESCE(p.total_paid, 0) AS total_paid,
-        COALESCE(p.payment_count, 0) AS payment_count
+        COALESCE(p.report_total_paid, 0) AS report_total_paid,
+        COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
     INNER JOIN customers c ON l.client_id = c.user_id
     INNER JOIN user u ON c.user_id = u.id
@@ -266,7 +291,7 @@ $selCustomer = "
 $selStaff = "
     SELECT 
         l.*,
-        'staff' AS client_type,
+        'member' AS report_client_type,
         u.fname,
         u.lname,
         u.email AS user_email,
@@ -277,8 +302,8 @@ $selStaff = "
         m.home_address AS district,
         0 AS credit_score,
         COALESCE(m.loan_limit, 0) AS client_loan_limit,
-        COALESCE(p.total_paid, 0) AS total_paid,
-        COALESCE(p.payment_count, 0) AS payment_count
+        COALESCE(p.report_total_paid, 0) AS report_total_paid,
+        COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
     INNER JOIN members m ON l.client_id = m.user_id
     INNER JOIN user u ON m.user_id = u.id
@@ -289,7 +314,7 @@ $selStaff = "
 $selStartup = "
     SELECT 
         l.*,
-        'startup' AS client_type,
+        'startup' AS report_client_type,
         st.ceo_name AS fname,
         '' AS lname,
         st.email AS user_email,
@@ -300,10 +325,10 @@ $selStartup = "
         '' AS district,
         0 AS credit_score,
         0 AS client_loan_limit,
-        COALESCE(p.total_paid, 0) AS total_paid,
-        COALESCE(p.payment_count, 0) AS payment_count
+        COALESCE(p.report_total_paid, 0) AS report_total_paid,
+        COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
-    INNER JOIN startups st ON l.client_id = st.id
+    INNER JOIN startups st ON l.client_id = st.{$startupIdColumn}
     LEFT JOIN ($paymentSubquery) p ON p.loan_id = l.id
     {$sw['sql']}
 ";
@@ -318,7 +343,7 @@ switch ($type) {
         $bindT = $cw['types'];
         break;
 
-    case 'staff':
+    case 'member':
         $baseSql = $selStaff;
         $bindP = $mw['params'];
         $bindT = $mw['types'];
@@ -346,7 +371,7 @@ try {
             COUNT(*) AS total_loans,
             COALESCE(SUM(amount), 0) AS total_disbursed,
             COALESCE(SUM(interest), 0) AS total_interest,
-            COALESCE(SUM(total_paid), 0) AS total_collected,
+            COALESCE(SUM(report_total_paid), 0) AS total_collected,
             COALESCE(SUM(loan_balance), 0) AS total_outstanding
         FROM ($baseSql) t
     ", $bindT, $bindP);
@@ -362,24 +387,24 @@ try {
 
     $typeStatsRes = runQuery($conn, "
         SELECT
-            client_type,
+            report_client_type,
             COUNT(*) AS loan_count,
             COALESCE(SUM(amount), 0) AS disbursed,
-            COALESCE(SUM(total_paid), 0) AS collected,
+            COALESCE(SUM(report_total_paid), 0) AS collected,
             COALESCE(SUM(loan_balance), 0) AS outstanding,
             COALESCE(SUM(interest), 0) AS interest_earned
         FROM ($baseSql) t
-        GROUP BY client_type
+        GROUP BY report_client_type
     ", $bindT, $bindP);
 
     $byType = [
         'customer' => [],
-        'staff' => [],
+        'member' => [],
         'startup' => []
     ];
 
     while ($row = $typeStatsRes->fetch_assoc()) {
-        $byType[$row['client_type']] = $row;
+        $byType[$row['report_client_type']] = $row;
     }
 
     $statusRes = runQuery($conn, "
@@ -432,6 +457,10 @@ try {
    PDF EXPORT
 ============================================================ */
 if ($export === 'pdf') {
+    // Only the PDF export needs Composer, so a missing/misconfigured vendor
+    // directory can no longer break the report page itself.
+    require_once __DIR__ . '/vendor/autoload.php';
+
     $generatedAt = date('F d, Y H:i:s');
 
     ob_start();
@@ -547,11 +576,11 @@ if ($export === 'pdf') {
                 <tr>
                     <td><?= e($loan['id'] ?? '') ?></td>
                     <td><?= e($loan['full_name'] ?: ($loan['business_name'] ?? '-')) ?></td>
-                    <td><?= e(ucfirst((string)($loan['client_type'] ?? ''))) ?></td>
+                    <td><?= e(ucfirst((string)($loan['report_client_type'] ?? ''))) ?></td>
                     <td><?= e($loan['client_phone'] ?? '-') ?></td>
                     <td><?= mfmt($loan['amount'] ?? 0) ?></td>
                     <td><?= mfmt($loan['interest'] ?? 0) ?></td>
-                    <td><?= mfmt($loan['total_paid'] ?? 0) ?></td>
+                    <td><?= mfmt($loan['report_total_paid'] ?? 0) ?></td>
                     <td><?= mfmt($loan['loan_balance'] ?? 0) ?></td>
                     <td><?= e($loan['status'] ?? '-') ?></td>
                     <td><?= e($dt ? date('d/m/Y', strtotime($dt)) : '-') ?></td>
@@ -951,7 +980,7 @@ require 'nav-head.php';
                         <select name="type" class="form-select">
                             <option value="all" <?= $type === 'all' ? 'selected' : '' ?>>All Types</option>
                             <option value="customer" <?= $type === 'customer' ? 'selected' : '' ?>>Customers</option>
-                            <option value="staff" <?= $type === 'staff' ? 'selected' : '' ?>>Staff Members</option>
+                            <option value="member" <?= $type === 'member' ? 'selected' : '' ?>>Members / Staff</option>
                             <option value="startup" <?= $type === 'startup' ? 'selected' : '' ?>>Startups</option>
                         </select>
                     </div>
@@ -1030,8 +1059,8 @@ require 'nav-head.php';
                                 </td>
 
                                 <td>
-                                    <span class="badge <?= typeBadge((string)$loan['client_type']) ?>">
-                                        <?= e(ucfirst((string)$loan['client_type'])) ?>
+                                    <span class="badge <?= typeBadge((string)$loan['report_client_type']) ?>">
+                                        <?= e(ucfirst((string)$loan['report_client_type'])) ?>
                                     </span>
                                 </td>
 
@@ -1042,12 +1071,12 @@ require 'nav-head.php';
 
                                 <td class="td-dark"><?= mfmt($loan['amount'] ?? 0) ?></td>
                                 <td><?= mfmt($loan['interest'] ?? 0) ?></td>
-                                <td class="text-success fw-700"><?= mfmt($loan['total_paid'] ?? 0) ?></td>
+                                <td class="text-success fw-700"><?= mfmt($loan['report_total_paid'] ?? 0) ?></td>
                                 <td class="text-danger fw-700"><?= mfmt($loan['loan_balance'] ?? 0) ?></td>
 
                                 <td>
                                     <span class="badge badge-muted">
-                                        <?= number_format((int)($loan['payment_count'] ?? 0)) ?>
+                                        <?= number_format((int)($loan['report_payment_count'] ?? 0)) ?>
                                     </span>
                                 </td>
 

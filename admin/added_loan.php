@@ -2,6 +2,7 @@
 
 require "db.php";
 require "services_check.php";
+require_once __DIR__ . '/../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -55,6 +56,8 @@ if ($amount > $fetch_client['loan_limit']) {
 $add_loan = mysqli_query($conn, "INSERT INTO loan (amount, interest_rate, client_id, status, interest, due_date, loan_balance, loan_period) VALUES ('$amount', '$interestRate', '$client', '$status', '$interest', '$due_date', '$eff_bal', '$loanPeriod')");
 
 if ($add_loan) {
+    loan_finalize_new_request($conn, (int)mysqli_insert_id($conn), 'customer');
+
     echo '<script>
             alert("LOAN SUCCESSFULLY ADDED");
             window.location.replace("loans.php");

@@ -72,7 +72,8 @@ if (!$client) {
     exit;
 }
 
-$customer_id = (int)($client['id'] ?? 0);
+// loans.client_id stores the user id (customers.user_id).
+$loan_client_id = (int)($client['user_id'] ?? $user_id);
 $full_name = trim(($client['fname'] ?? '') . ' ' . ($client['lname'] ?? ''));
 if ($full_name === '') {
     $full_name = $client['username'] ?? 'Client';
@@ -102,7 +103,7 @@ if (!$loan_stmt) {
     exit("Failed to prepare loan query.");
 }
 
-$loan_stmt->bind_param("i", $customer_id);
+$loan_stmt->bind_param("i", $loan_client_id);
 $loan_stmt->execute();
 $loan_result = $loan_stmt->get_result();
 

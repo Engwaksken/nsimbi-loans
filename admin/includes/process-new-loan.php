@@ -21,6 +21,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../services_check.php';
+require_once __DIR__ . '/../../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Kampala');
 
@@ -688,6 +689,10 @@ try {
             'The loan was not assigned a valid record number.'
         );
     }
+
+    // Automatically assign the least-busy loan officer so the new request does
+    // not sit unassigned in the reviewer queue.
+    $assignedOfficerId = loan_finalize_new_request($conn, $loanId, $clientType);
 
     $conn->commit();
 

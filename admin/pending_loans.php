@@ -5,6 +5,7 @@ $phead = 'Pending Loans';
 require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
+require_once __DIR__ . "/../includes/loan_workflow.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -25,6 +26,12 @@ $roleLabel = match ($currentRole) {
     2 => 'Loan Officer',
     default => 'Viewer (read-only)',
 };
+
+// Older pending requests may not have an officer yet. Backfill them so every
+// loan in this queue is owned by a loan officer.
+if ($isReviewer) {
+    loan_backfill_pending_assignments($conn);
+}
 
 function h($value): string
 {

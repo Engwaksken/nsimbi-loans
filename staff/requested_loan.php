@@ -2,6 +2,7 @@
 session_start();
 require 'db.php';
 require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -42,14 +43,17 @@ if ($amount > $client['loan_limit']) {
 $get_loan = $conn->query("SELECT * FROM loan WHERE client_id='$client_id' ORDER BY id DESC LIMIT 1");
 if ($get_loan->num_rows > 0) {
     $latest_loan = $get_loan->fetch_assoc();
-    if ($latest_loan['status'] !== "CLEARED") {
+    $latestStatus = strtoupper(trim((string)($latest_loan['status'] ?? '')));
+
+    // Rejected and cancelled requests must not block a new application.
+    if (!in_array($latestStatus, ['CLEARED', 'REJECTED', 'CANCELLED', 'DELETED'], true)) {
         redirect_with_message("FAILED. You have an uncleared loan.");
     }
 }
 
-// Calculate interest and due date
-$interest_rate = 10;
-$interest = $amount * ($interest_rate / 100);
+// Calculate interest and due date (matches reviewer approval rates).
+$interest_rate = $loan_period === 1 ? 10.0 : 6.6;
+$interest = round($amount * ($interest_rate / 100), 2);
 $loan_balance = $amount + $interest;
 $status = "PENDING";
 
@@ -61,11 +65,19 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 $stmt->bind_param("dddsssdsssss", $amount, $interest_rate, $client_id, $status, $interest, $due_date, $loan_balance, $loan_period, $loan_method, $phone, $bank_name, $bank_account);
 
 if ($stmt->execute()) {
+    $loan_id = (int)$stmt->insert_id;
+
+    // Tag this as a staff/member loan and auto-assign a loan officer.
+    loan_finalize_new_request($conn, $loan_id, 'member');
+
     // Log message
-    $msg_stmt = $conn->prepare("INSERT INTO loan_messages (user_id, sender_name, message_type, is_read, created_at)
-    VALUES (?, ?, 'loan_request', 0, NOW())");
-    $msg_stmt->bind_param("is", $client_id, $userName);
-    $msg_stmt->execute();
+    $msg_stmt = $conn->prepare("INSERT INTO loan_messages (user_id, loan_id, sender_name, message_type, is_read, created_at)
+    VALUES (?, ?, ?, 'loan_request', 0, NOW())");
+    if ($msg_stmt) {
+        $msg_stmt->bind_param("iis", $client_id, $loan_id, $userName);
+        $msg_stmt->execute();
+        $msg_stmt->close();
+    }
 
     // Send notification email
     sendAdminLoanRequest($userName, $userEmail, $conn);

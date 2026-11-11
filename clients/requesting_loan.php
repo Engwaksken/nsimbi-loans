@@ -68,7 +68,8 @@ if (!$customer) {
     exit;
 }
 
-$customer_id   = (int)($customer['id'] ?? 0);
+// Loan rows use the user id (customers.user_id), not customers.id.
+$client_id     = (int)($customer['user_id'] ?? $user_id);
 $phone         = trim((string)($customer['phone'] ?? ''));
 $bank_name     = trim((string)($customer['bank_name'] ?? ''));
 $bank_account  = trim((string)($customer['bank_account'] ?? ''));
@@ -95,7 +96,7 @@ $stmt = $conn->prepare("
 ");
 
 if ($stmt) {
-    $stmt->bind_param("i", $customer_id);
+    $stmt->bind_param("i", $client_id);
     $stmt->execute();
     $res = $stmt->get_result();
     $row = $res ? $res->fetch_assoc() : null;
@@ -114,7 +115,7 @@ $stmt = $conn->prepare("
 ");
 
 if ($stmt) {
-    $stmt->bind_param("i", $customer_id);
+    $stmt->bind_param("i", $client_id);
     $stmt->execute();
     $res = $stmt->get_result();
     $active_loan = $res ? $res->fetch_assoc() : null;

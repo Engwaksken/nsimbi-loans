@@ -2,6 +2,7 @@
 
 require "db.php";
 require "services_check.php";
+require_once __DIR__ . '/../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -47,6 +48,8 @@ $add_loan = mysqli_query($conn,
 );
 
 if ($add_loan) {
+    loan_finalize_new_request($conn, (int)mysqli_insert_id($conn), 'member');
+
     echo '<script>
             alert("LOAN SUCCESSFULLY ADDED");
             window.location.replace("staff_loans.php");

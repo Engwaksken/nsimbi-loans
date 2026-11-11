@@ -51,6 +51,7 @@ $dbPort = (int)(getenv('DB_PORT') ?: 3306);
 
 require "config.php";
 require "jwt.php";
+require_once __DIR__ . '/includes/loan_workflow.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -679,6 +680,7 @@ function getClient(mysqli $conn, array $user): void
 
             CASE
                 WHEN l.id IS NULL THEN 'NONE'
+                WHEN UPPER(COALESCE(l.status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED') THEN UPPER(l.status)
                 WHEN UPPER(COALESCE(l.status, '')) = 'CLEARED' THEN 'CLEARED'
                 WHEN COALESCE(l.loan_balance, 0) <= 0 THEN 'CLEARED'
                 WHEN l.due_date IS NOT NULL AND COALESCE(l.loan_balance, 0) > 0 AND l.due_date < NOW() THEN 'OVERDUE'
@@ -759,6 +761,7 @@ function getLoans(mysqli $conn, array $user): void
             COALESCE(phone, '') AS loan_phone,
             COALESCE(status, '') AS db_loan_status,
             CASE
+                WHEN UPPER(COALESCE(status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED') THEN UPPER(status)
                 WHEN UPPER(COALESCE(status, '')) = 'CLEARED' THEN 'CLEARED'
                 WHEN COALESCE(loan_balance, 0) <= 0 THEN 'CLEARED'
                 WHEN due_date IS NOT NULL AND COALESCE(loan_balance, 0) > 0 AND due_date < NOW() THEN 'OVERDUE'
@@ -1028,11 +1031,13 @@ function requestLoan(mysqli $conn, array $user, array $input): void
 
     $stmt->close();
 
-    $interest_rate = 6.0;
-    $interest = round($amount * ($interest_rate / 100), 0);
+    // Match the web application: 10% for one month, 6.6% for longer periods.
+    $interest_rate = $loan_period === 1 ? 10.0 : 6.6;
+    $interest = round($amount * ($interest_rate / 100), 2);
     $sur_charge = 0.0;
     $balance = $amount + $interest + $sur_charge;
     $due_date = date("Y-m-d H:i:s", strtotime("+{$loan_period} month"));
+    $status = "PENDING";
 
     $stmt = $conn->prepare("
         INSERT INTO loan
@@ -1057,7 +1062,7 @@ function requestLoan(mysqli $conn, array $user, array $input): void
                 phone
             )
         VALUES
-            (?, ?, ?, ?, ?, ?, 'OUTSTANDING', NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     if (!$stmt) {
@@ -1066,13 +1071,14 @@ function requestLoan(mysqli $conn, array $user, array $input): void
 
 
     $stmt->bind_param(
-    "dddddisdddissss",
+        "dddddisssdddissss",
         $amount,
         $amount,
         $interest,
         $balance,
         $interest_rate,
         $client_id,
+        $status,
         $due_date,
         $balance,
         $sur_charge,
@@ -1091,9 +1097,48 @@ function requestLoan(mysqli $conn, array $user, array $input): void
     $loan_id = (int)$stmt->insert_id;
     $stmt->close();
 
+    // Tag the request correctly and auto-assign it to a loan officer so it
+    // appears in the reviewer's Pending Loans queue immediately.
+    $assignedOfficerId = loan_finalize_new_request($conn, $loan_id, "customer");
+
+    // Give the applicant a visible request message and alert admins through
+    // the same message stream used by the web portal.
+    try {
+        $nameStmt = $conn->prepare("SELECT fname, lname, username FROM user WHERE id = ? LIMIT 1");
+        $senderName = "Client";
+
+        if ($nameStmt) {
+            $nameStmt->bind_param("i", $client_id);
+            $nameStmt->execute();
+            $clientRow = $nameStmt->get_result()->fetch_assoc();
+            $nameStmt->close();
+
+            if ($clientRow) {
+                $senderName = trim(($clientRow["fname"] ?? "") . " " . ($clientRow["lname"] ?? ""));
+                if ($senderName === "") {
+                    $senderName = (string)($clientRow["username"] ?? "Client");
+                }
+            }
+        }
+
+        $msgStmt = $conn->prepare("
+            INSERT INTO loan_messages
+                (user_id, loan_id, sender_name, message_type, is_read, created_at)
+            VALUES (?, ?, ?, 'loan_request', 0, NOW())
+        ");
+
+        if ($msgStmt) {
+            $msgStmt->bind_param("iis", $client_id, $loan_id, $senderName);
+            $msgStmt->execute();
+            $msgStmt->close();
+        }
+    } catch (Throwable $e) {
+        error_log("Loan request message failed: " . $e->getMessage());
+    }
+
     respond([
         "status" => "success",
-        "message" => "Loan created successfully",
+        "message" => "Loan request submitted for approval",
         "data" => [
             "loan_id" => $loan_id,
             "amount" => $amount,
@@ -1106,7 +1151,8 @@ function requestLoan(mysqli $conn, array $user, array $input): void
             "loan_period" => $loan_period,
             "due_date" => $due_date,
             "due_date_formatted" => formatDateOnly($due_date),
-            "loan_status" => "OUTSTANDING",
+            "loan_status" => "PENDING",
+            "assigned_officer_id" => $assignedOfficerId,
         ],
     ]);
 }

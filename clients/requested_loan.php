@@ -3,6 +3,7 @@ session_start();
 
 require "db.php";
 require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -115,7 +116,13 @@ if (!$client) {
     redirect_with_message("Client profile not found. Please contact administrator.");
 }
 
-$client_id = (int)$client['id'];
+/*
+ * loans.client_id stores the user id (customers.user_id), not the customers
+ * table's auto-increment id. Keeping the two identifiers separate prevents
+ * new client requests from disappearing from the admin pending queue.
+ */
+$client_id     = (int)$client['user_id'];
+$customer_id   = (int)$client['id'];
 $is_new_onboarded = ($client['client_category'] ?? 'business') === 'new_onboarded';
 $collateral_description = clean_text($_POST['collateral_description'] ?? '');
 $collateral_document = '';
@@ -205,7 +212,7 @@ try {
             throw new Exception("Failed to prepare customer phone update.");
         }
 
-        $upd->bind_param("si", $phone, $client_id);
+        $upd->bind_param("si", $phone, $customer_id);
         $upd->execute();
         $upd->close();
     }
@@ -221,7 +228,7 @@ try {
             throw new Exception("Failed to prepare customer bank update.");
         }
 
-        $upd->bind_param("ssi", $bank_name, $bank_account, $client_id);
+        $upd->bind_param("ssi", $bank_name, $bank_account, $customer_id);
         $upd->execute();
         $upd->close();
     }
@@ -277,6 +284,10 @@ try {
     $loan_id = (int)$stmt->insert_id;
     $stmt->close();
 
+    // Classify the request and assign the least-busy loan officer so it lands
+    // in the reviewer's queue with an owner instead of sitting unassigned.
+    loan_finalize_new_request($conn, $loan_id, 'customer');
+
 
     $message_type = "loan_request";
     $is_read = 0;
@@ -285,17 +296,19 @@ try {
     $msg_stmt = $conn->prepare("
         INSERT INTO loan_messages (
             user_id,
+            loan_id,
             sender_name,
             message_type,
             is_read,
             created_at
-        ) VALUES (?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?)
     ");
 
     if ($msg_stmt) {
         $msg_stmt->bind_param(
-            "issis",
+            "iissis",
             $user_id,
+            $loan_id,
             $sender_name,
             $message_type,
             $is_read,

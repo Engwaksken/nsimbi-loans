@@ -6,6 +6,7 @@ session_start();
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../php/db.php';
+require_once __DIR__ . '/../../includes/loan_workflow.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     json_response(false, 'Database connection error.');
@@ -198,7 +199,12 @@ if ($action === '') {
 
 $client = get_client($conn, $user_id);
 
+/*
+ * customers.id is used only for customer-table updates. Every loan row stores
+ * the user id in client_id, matching the admin and mobile API queries.
+ */
 $customer_id = (int)$client['id'];
+$client_id   = (int)($client['user_id'] ?? $user_id);
 $loan_limit = (float)($client['loan_limit'] ?? 0);
 $active = (int)($client['active'] ?? 0);
 
@@ -242,7 +248,7 @@ if ($action === 'get_loan') {
         json_response(false, 'Failed to prepare loan query.');
     }
 
-    $stmt->bind_param('ii', $loan_id, $customer_id);
+    $stmt->bind_param('ii', $loan_id, $client_id);
     $stmt->execute();
 
     $res = $stmt->get_result();
@@ -308,7 +314,7 @@ if ($action === 'create_loan') {
         json_response(false, 'Database error while checking existing loans.');
     }
 
-    $check->bind_param('i', $customer_id);
+    $check->bind_param('i', $client_id);
     $check->execute();
 
     $res = $check->get_result();
@@ -363,7 +369,7 @@ if ($action === 'create_loan') {
             'ddisdsdissss',
             $amount,
             $interest_rate,
-            $customer_id,
+            $client_id,
             $status,
             $interest,
             $due_date,
@@ -379,7 +385,10 @@ if ($action === 'create_loan') {
             throw new Exception($stmt->error);
         }
 
+        $loan_id = (int)$stmt->insert_id;
         $stmt->close();
+
+        loan_finalize_new_request($conn, $loan_id, 'customer');
 
         if (table_has_column($conn, 'loan_messages', 'user_id')) {
             $sender_name = trim((string)($client['fname'] ?? '') . ' ' . (string)($client['lname'] ?? ''));
@@ -467,7 +476,7 @@ if ($action === 'update_pending_loan') {
         json_response(false, 'Failed to check selected loan.');
     }
 
-    $check->bind_param('ii', $loan_id, $customer_id);
+    $check->bind_param('ii', $loan_id, $client_id);
     $check->execute();
 
     $res = $check->get_result();
@@ -535,7 +544,7 @@ if ($action === 'update_pending_loan') {
             $bank_account,
             $due_date,
             $loan_id,
-            $customer_id
+            $client_id
         );
 
         if (!$stmt->execute()) {
@@ -597,7 +606,7 @@ if ($action === 'pay_loan') {
         json_response(false, 'Failed to check loan.');
     }
 
-    $stmt->bind_param('ii', $loan_id, $customer_id);
+    $stmt->bind_param('ii', $loan_id, $client_id);
     $stmt->execute();
 
     $res = $stmt->get_result();
@@ -660,7 +669,7 @@ if ($action === 'pay_loan') {
             $columns[] = 'client_id';
             $values[] = '?';
             $types .= 'i';
-            $params[] = $customer_id;
+            $params[] = $client_id;
         }
 
         if (table_has_column($conn, 'payments', 'amount')) {
@@ -749,7 +758,7 @@ if ($action === 'pay_loan') {
             throw new Exception('Failed to prepare loan balance update.');
         }
 
-        $update->bind_param('dsii', $new_balance, $new_status, $loan_id, $customer_id);
+        $update->bind_param('dsii', $new_balance, $new_status, $loan_id, $client_id);
 
         if (!$update->execute()) {
             throw new Exception($update->error);

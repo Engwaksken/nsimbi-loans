@@ -105,7 +105,8 @@ if (!$customer) {
     exit;
 }
 
-$customer_id = (int)$customer['id'];
+// loans.client_id stores the user id (customers.user_id), not customers.id.
+$client_id = (int)($customer['user_id'] ?? $user_id);
 $loan_limit = (float)($customer['loan_limit'] ?? 0);
 $customer_active = (int)($customer['active'] ?? 0);
 
@@ -122,7 +123,7 @@ if ($full_name === '') {
 $totalLoans = fetch_one(
     $conn,
     "SELECT COALESCE(SUM(amount),0) FROM loan WHERE client_id = ?",
-    $customer_id
+    $client_id
 );
 
 $totalBalance = fetch_one(
@@ -131,7 +132,7 @@ $totalBalance = fetch_one(
      FROM loan
      WHERE client_id = ?
        AND UPPER(status) IN ('OUTSTANDING','OVERDUE')",
-    $customer_id
+    $client_id
 );
 
 $totalPaid = fetch_one(
@@ -149,7 +150,7 @@ $pendingCount = (int)fetch_one(
      FROM loan
      WHERE client_id = ?
        AND UPPER(status) = 'PENDING'",
-    $customer_id
+    $client_id
 );
 
 $activeLoan = (int)fetch_one(
@@ -158,7 +159,7 @@ $activeLoan = (int)fetch_one(
      FROM loan
      WHERE client_id = ?
        AND UPPER(status) NOT IN ('CLEARED','REJECTED','CANCELLED')",
-    $customer_id
+    $client_id
 );
 
 $can_request_new = ($customer_active === 1 && $activeLoan < 1);
@@ -193,7 +194,7 @@ if (!$loanStmt) {
     die('Failed to prepare loan query.');
 }
 
-$loanStmt->bind_param('i', $customer_id);
+$loanStmt->bind_param('i', $client_id);
 $loanStmt->execute();
 $loans = $loanStmt->get_result();
 

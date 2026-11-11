@@ -65,6 +65,20 @@ if ($action === 'request_info') {
     if (!$officer) finishReview('The selected officer is not valid.');
 }
 
+// loan.client_id stores startups.startup_id (the startup's user id).
+$startupIdColumn = 'startup_id';
+try {
+    $startupIdCheck = $conn->query("SHOW COLUMNS FROM startups LIKE 'startup_id'");
+    if ($startupIdCheck instanceof mysqli_result) {
+        if ($startupIdCheck->num_rows === 0) {
+            $startupIdColumn = 'id';
+        }
+        $startupIdCheck->free();
+    }
+} catch (Throwable $e) {
+    $startupIdColumn = 'startup_id';
+}
+
 $success = 0;
 $skipped = 0;
 $failed = 0;
@@ -90,7 +104,7 @@ foreach ($ids as $id) {
             $s->bind_param('i', $clientId); $s->execute();
             $client = $s->get_result()->fetch_assoc(); $s->close();
         } elseif ($clientType === 'startup') {
-            $s = $conn->prepare('SELECT ceo_name AS fname, company_name AS lname, email FROM startups WHERE id = ? LIMIT 1');
+            $s = $conn->prepare("SELECT ceo_name AS fname, company_name AS lname, email FROM startups WHERE `{$startupIdColumn}` = ? LIMIT 1");
             $s->bind_param('i', $clientId); $s->execute();
             $client = $s->get_result()->fetch_assoc(); $s->close();
         }
