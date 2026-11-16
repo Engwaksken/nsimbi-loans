@@ -739,7 +739,18 @@ if ($action === 'pay_loan') {
             throw new Exception('Failed to prepare payment insert. ' . $conn->error);
         }
 
-        $payStmt->bind_param($types, ...$params);
+        // mysqli_stmt::bind_param() requires every value to be passed by
+        // reference. Unpacking a normal value array can fail on newer PHP
+        // versions (the later arguments are not referenceable).
+        $bindParams = [$types];
+        foreach ($params as $index => &$param) {
+            $bindParams[] = &$param;
+        }
+        unset($param);
+
+        if (!call_user_func_array([$payStmt, 'bind_param'], $bindParams)) {
+            throw new Exception('Failed to bind payment values.');
+        }
 
         if (!$payStmt->execute()) {
             throw new Exception($payStmt->error);
