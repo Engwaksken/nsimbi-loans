@@ -140,10 +140,19 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 .pf-actions{display:flex;gap:.5rem;flex-wrap:wrap}
 .pf-actions .btn{background:#fff;color:var(--primary);border-color:#fff}
 .pf-actions .btn.btn-ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)}
-.pf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.1rem}
-.pf-grid .card{margin:0}
 .pf-card-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
-.pf-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.pf-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.7rem}
+.pf-tabs .profile-tab-btn{font-weight:600;font-size:.84rem;cursor:pointer}
+.pf-tabs .profile-tab-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.pf-tabs .profile-tab-btn.active{background:var(--primary);border-color:var(--primary)}
+.pf-pane-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}
+.pf-pane-head h3{margin:0 0 .2rem;font-family:'Outfit',sans-serif;font-size:1.02rem;font-weight:800;color:var(--text-dark)}
+.pf-pane-head p{margin:0;font-size:.8rem;color:var(--text-muted)}
+.pf-row{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem;padding:1rem;border:1px solid var(--border);border-radius:12px}
+.pf-row-ico{width:42px;height:42px;border-radius:10px;background:var(--primary-xlight);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pf-row-main{flex:1;min-width:200px}
+.pf-row-main h4{margin:0 0 .15rem;font-size:.9rem;color:var(--text-dark)}
+.pf-row-main p{margin:0;font-size:.78rem;color:var(--text-muted)}
 .pf-item{background:var(--body-bg);border:1px solid var(--border);border-radius:10px;padding:.65rem .85rem;min-width:0}
 .pf-item.full{grid-column:1/-1}
 .pf-item .lbl{font-size:.64rem;text-transform:uppercase;letter-spacing:.065em;color:var(--text-muted);margin-bottom:.2rem}
@@ -153,14 +162,13 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 .pf-section{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin:0 0 .75rem;display:flex;align-items:center;gap:.4rem}
 .pf-section{margin-top:1.1rem;padding-top:1.1rem;border-top:1px dashed var(--border)}
 .pf-section.first{margin-top:0;padding-top:0;border-top:0}
-.pf-note{font-size:.76rem;color:var(--text-muted);background:var(--body-bg);border:1px solid var(--border);border-radius:10px;padding:.65rem .8rem;margin-top:.4rem}
+.pf-note{font-size:.76rem;color:var(--text-muted);background:var(--body-bg);border:1px solid var(--border);border-radius:10px;padding:.65rem .8rem;margin-top:1rem}
 .form-control.is-invalid{border-color:var(--danger)}
 .pf-pass{position:relative}
 .pf-pass .form-control{padding-right:2.6rem}
 .pf-pass button{position:absolute;right:.4rem;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--text-muted);cursor:pointer;padding:.3rem .45rem}
 #editProfileModal .modal-box{max-width:720px}
-@media(max-width:900px){.pf-grid{grid-template-columns:1fr}}
-@media(max-width:520px){.pf-list{grid-template-columns:1fr}.pf-hero{padding:1.15rem}.pf-actions{width:100%}.pf-actions .btn{flex:1}}
+@media(max-width:520px){.pf-pane-head{flex-direction:column}.pf-list{grid-template-columns:1fr}.pf-hero{padding:1.15rem}.pf-actions{width:100%}.pf-actions .btn{flex:1}}
 </style>
 
 <?php if ($flash_message !== '' && $reopen === ''): ?>
@@ -215,13 +223,39 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
     </div>
 </div>
 
-<div class="pf-grid">
-    <div class="card">
-        <div class="card-header pf-card-head">
-            <div class="card-title"><span class="card-dot"></span> Personal details</div>
-            <span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff</span>
-        </div>
-        <div class="card-body">
+<?php
+$has_business = array_key_exists('business_name', $profile);
+$tabs = [
+    'personal' => ['Personal', 'fa-id-card'],
+    'contact'  => ['Contact & Address', 'fa-map-marker-alt'],
+    'payout'   => ['Payout', 'fa-wallet'],
+    'kin'      => ['Next of Kin', 'fa-user-friends'],
+];
+if ($has_business) {
+    $tabs['business'] = ['Business', 'fa-briefcase'];
+}
+$tabs['security'] = ['Security', 'fa-lock'];
+
+$edit_btn = '<button type="button" class="btn btn-sm btn-outline" data-open="editProfileModal"><i class="fas fa-pen"></i> Edit</button>';
+$locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff</span>';
+?>
+<div class="profile-tab-card pf-tabs">
+    <div class="profile-tabs-horizontal" role="tablist" aria-label="Profile sections">
+        <?php $first = true; foreach ($tabs as $key => [$label, $icon]): ?>
+            <button type="button" class="profile-tab-btn<?= $first ? ' active' : ''; ?>" role="tab"
+                    id="tab-<?= $key; ?>" data-tab="<?= $key; ?>" aria-controls="pane-<?= $key; ?>"
+                    aria-selected="<?= $first ? 'true' : 'false'; ?>" tabindex="<?= $first ? '0' : '-1'; ?>">
+                <i class="fas <?= $icon; ?>"></i> <?= esc($label); ?>
+            </button>
+        <?php $first = false; endforeach; ?>
+    </div>
+
+    <div class="profile-tab-content">
+        <section class="profile-tab-pane active" id="pane-personal" role="tabpanel" aria-labelledby="tab-personal">
+            <div class="pf-pane-head">
+                <div><h3>Personal details</h3><p>Your identity as registered with us.</p></div>
+                <?= $locked; ?>
+            </div>
             <div class="pf-list">
                 <div class="pf-item"><div class="lbl">First name</div><div class="val"><?= show($profile['fname'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Last name</div><div class="val"><?= show($profile['lname'] ?? ''); ?></div></div>
@@ -230,71 +264,85 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
                 <div class="pf-item"><div class="lbl">National ID (NIN)</div><div class="val"><?= show($profile['nin'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Email</div><div class="val"><?= show($email); ?></div></div>
             </div>
-        </div>
-    </div>
+            <div class="pf-note"><i class="fas fa-info-circle"></i> To correct your name, NIN or date of birth, please contact our office with your ID.</div>
+        </section>
 
-    <div class="card">
-        <div class="card-header pf-card-head">
-            <div class="card-title"><span class="card-dot"></span> Contact &amp; address</div>
-            <button type="button" class="btn btn-sm btn-outline" data-open="editProfileModal"><i class="fas fa-pen"></i> Edit</button>
-        </div>
-        <div class="card-body">
+        <section class="profile-tab-pane" id="pane-contact" role="tabpanel" aria-labelledby="tab-contact" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Contact &amp; address</h3><p>How we reach you and where you are based.</p></div>
+                <?= $edit_btn; ?>
+            </div>
             <div class="pf-list">
                 <div class="pf-item"><div class="lbl">Phone / Mobile Money</div><div class="val"><?= show($profile['phone'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">District</div><div class="val"><?= show($profile['district'] ?? ''); ?></div></div>
                 <div class="pf-item full"><div class="lbl">Location / address</div><div class="val"><?= show($profile['location'] ?? ''); ?></div></div>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <div class="card">
-        <div class="card-header pf-card-head">
-            <div class="card-title"><span class="card-dot"></span> Payout details</div>
-            <button type="button" class="btn btn-sm btn-outline" data-open="editProfileModal"><i class="fas fa-pen"></i> Edit</button>
-        </div>
-        <div class="card-body">
+        <section class="profile-tab-pane" id="pane-payout" role="tabpanel" aria-labelledby="tab-payout" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Payout details</h3><p>Where approved loans are sent. Used to pre-fill your loan requests.</p></div>
+                <?= $edit_btn; ?>
+            </div>
             <div class="pf-list">
+                <div class="pf-item"><div class="lbl">Mobile Money number</div><div class="val"><?= show($profile['phone'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Bank name</div><div class="val"><?= show($profile['bank_name'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Account number</div><div class="val"><?= show($profile['bank_account'] ?? ''); ?></div></div>
-                <div class="pf-item full"><div class="lbl">Mobile Money number</div><div class="val"><?= show($profile['phone'] ?? ''); ?></div></div>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <div class="card">
-        <div class="card-header pf-card-head">
-            <div class="card-title"><span class="card-dot"></span> Next of kin</div>
-            <button type="button" class="btn btn-sm btn-outline" data-open="editProfileModal"><i class="fas fa-pen"></i> Edit</button>
-        </div>
-        <div class="card-body">
+        <section class="profile-tab-pane" id="pane-kin" role="tabpanel" aria-labelledby="tab-kin" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Next of kin</h3><p>Someone we can contact if we cannot reach you.</p></div>
+                <?= $edit_btn; ?>
+            </div>
             <div class="pf-list">
                 <div class="pf-item"><div class="lbl">Name</div><div class="val"><?= show($profile['nok_name'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Phone</div><div class="val"><?= show($profile['nok_tel'] ?? ''); ?></div></div>
                 <?php if ($has_nok_rel): ?>
-                    <div class="pf-item full"><div class="lbl">Relationship</div><div class="val"><?= show($profile['nok_rel'] ?? ''); ?></div></div>
+                    <div class="pf-item"><div class="lbl">Relationship</div><div class="val"><?= show($profile['nok_rel'] ?? ''); ?></div></div>
                 <?php endif; ?>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <?php if (array_key_exists('business_name', $profile)): ?>
-    <div class="card" style="grid-column:1/-1">
-        <div class="card-header pf-card-head">
-            <div class="card-title"><span class="card-dot"></span> Business</div>
-            <span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff</span>
-        </div>
-        <div class="card-body">
-            <div class="pf-list" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+        <?php if ($has_business): ?>
+        <section class="profile-tab-pane" id="pane-business" role="tabpanel" aria-labelledby="tab-business" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Business</h3><p>Used by our loan officers when assessing requests.</p></div>
+                <?= $locked; ?>
+            </div>
+            <div class="pf-list">
                 <div class="pf-item"><div class="lbl">Business name</div><div class="val"><?= show($profile['business_name'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Business type</div><div class="val"><?= show($profile['business_type'] ?? ''); ?></div></div>
                 <div class="pf-item"><div class="lbl">Years in business</div><div class="val"><?= show($profile['business_period'] ?? ''); ?></div></div>
                 <?php if (array_key_exists('credit_score', $profile)): ?>
                     <div class="pf-item"><div class="lbl">Credit score</div><div class="val"><?= show($profile['credit_score'] ?? ''); ?></div></div>
                 <?php endif; ?>
+                <div class="pf-item"><div class="lbl">Client type</div><div class="val"><?= $is_new_onb ? 'New onboarded' : 'Business'; ?></div></div>
+                <div class="pf-item"><div class="lbl">Loan limit</div><div class="val"><?= (float)($profile['loan_limit'] ?? 0) > 0 ? money($profile['loan_limit']) : '<span class="pf-empty">Not set</span>'; ?></div></div>
             </div>
-        </div>
+        </section>
+        <?php endif; ?>
+
+        <section class="profile-tab-pane" id="pane-security" role="tabpanel" aria-labelledby="tab-security" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Login &amp; security</h3><p>Keep your account safe.</p></div>
+            </div>
+            <div class="pf-list">
+                <div class="pf-item"><div class="lbl">Username</div><div class="val"><?= show($profile['username'] ?? ''); ?></div></div>
+                <div class="pf-item"><div class="lbl">Login email</div><div class="val"><?= show($email); ?></div></div>
+                <div class="pf-item"><div class="lbl">Profile status</div><div class="val"><?= $is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-warning">Inactive</span>'; ?></div></div>
+            </div>
+            <div class="pf-row">
+                <div class="pf-row-ico"><i class="fas fa-key"></i></div>
+                <div class="pf-row-main">
+                    <h4>Password</h4>
+                    <p>Use at least 8 characters and don't reuse a password from another site.</p>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" data-open="passwordModal"><i class="fas fa-key"></i> Change Password</button>
+            </div>
+        </section>
     </div>
-    <?php endif; ?>
 </div>
 
 <!-- Edit Profile Modal -->
@@ -426,6 +474,51 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 
 <script>
 (function () {
+    /* ---------- Tabs ---------- */
+    const tabButtons = Array.from(document.querySelectorAll('.pf-tabs [role=tab]'));
+    const TAB_KEY = 'clientProfileTab';
+
+    function showTab(key, focus) {
+        const btn = tabButtons.find(function (b) { return b.dataset.tab === key; });
+        if (!btn) return false;
+        tabButtons.forEach(function (b) {
+            const on = b === btn;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+            b.tabIndex = on ? 0 : -1;
+            const pane = document.getElementById(b.getAttribute('aria-controls'));
+            pane.classList.toggle('active', on);
+            pane.hidden = !on;
+        });
+        if (focus) btn.focus();
+        btn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        try { sessionStorage.setItem(TAB_KEY, key); } catch (e) {}
+        return true;
+    }
+
+    tabButtons.forEach(function (btn, i) {
+        btn.addEventListener('click', function () {
+            showTab(btn.dataset.tab);
+            if (window.history && history.replaceState) history.replaceState(null, '', '#' + btn.dataset.tab);
+        });
+        btn.addEventListener('keydown', function (e) {
+            let next = null;
+            if (e.key === 'ArrowRight') next = tabButtons[(i + 1) % tabButtons.length];
+            else if (e.key === 'ArrowLeft') next = tabButtons[(i - 1 + tabButtons.length) % tabButtons.length];
+            else if (e.key === 'Home') next = tabButtons[0];
+            else if (e.key === 'End') next = tabButtons[tabButtons.length - 1];
+            if (next) { e.preventDefault(); showTab(next.dataset.tab, true); }
+        });
+    });
+
+    (function initialTab() {
+        const fromHash = location.hash.replace('#', '');
+        if (fromHash && showTab(fromHash)) return;
+        let saved = null;
+        try { saved = sessionStorage.getItem(TAB_KEY); } catch (e) {}
+        if (saved) showTab(saved);
+    })();
+
     /* Self-contained modal handling (does not depend on loanpro.js load order). */
     function openModal(id) {
         const modal = document.getElementById(id);
@@ -509,7 +602,7 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 
     <?php if ($reopen !== ''): ?>
     openModal(<?= json_encode($reopen === 'edit' ? 'editProfileModal' : 'passwordModal'); ?>);
-    if (window.history && history.replaceState && location.search) history.replaceState(null, '', location.pathname);
+    if (window.history && history.replaceState && location.search) history.replaceState(null, '', location.pathname + location.hash);
     <?php endif; ?>
 })();
 </script>
