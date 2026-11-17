@@ -107,7 +107,7 @@ unset($_SESSION['old_login']);
             <!-- Email / Username -->
             <div class="form-group" style="text-align:left;">
                 <label class="form-label">
-                    Email or Username
+                    Email, Phone Number or Username
                 </label>
 
                 <div class="input-group">
@@ -115,7 +115,10 @@ unset($_SESSION['old_login']);
                         type="text"
                         name="login"
                         class="form-control"
-                        placeholder="Enter email or username"
+                        placeholder="e.g. you@example.com or 0772 123456"
+                        autocomplete="username"
+                        autocapitalize="none"
+                        spellcheck="false"
                         value="<?= htmlspecialchars($oldLogin, ENT_QUOTES, 'UTF-8') ?>"
                         required
                         autofocus
