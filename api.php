@@ -52,6 +52,7 @@ $dbPort = (int)(getenv('DB_PORT') ?: 3306);
 require "config.php";
 require "jwt.php";
 require_once __DIR__ . '/includes/loan_workflow.php';
+require_once __DIR__ . '/includes/auth_lookup.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -332,39 +333,39 @@ function requireAuth(): array
 
 function login(mysqli $conn, array $input): void
 {
-    $username = clean($input["username"] ?? "");
-    $password = clean($input["password"] ?? "");
+    // Accepts email, username or (clients) phone number, same as the website.
+    // The field is still called "username" for older app versions.
+    $identifier = clean($input["username"] ?? $input["login"] ?? "");
+    $password = (string)($input["password"] ?? "");
 
-    if ($username === "" || $password === "") {
-        respond(["status" => "error", "message" => "Username and password are required"], 422);
+    if ($identifier === "" || trim($password) === "") {
+        respond(["status" => "error", "message" => "Enter your email, phone number or username, and your password"], 422);
     }
 
-    $stmt = $conn->prepare("SELECT id, password, role FROM user WHERE username = ? LIMIT 1");
-
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Login prepare failed: " . $conn->error], 500);
+    try {
+        $attempt = auth_attempt($conn, $identifier, $password);
+    } catch (Throwable $e) {
+        error_log("API login lookup failed: " . $e->getMessage());
+        respond(["status" => "error", "message" => "Login is temporarily unavailable. Please try again."], 500);
     }
 
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $stmt->store_result();
-
-    if ($stmt->num_rows !== 1) {
-        $stmt->close();
-        respond(["status" => "error", "message" => "User not found"], 404);
+    if ($attempt["result"] === "inactive") {
+        respond(["status" => "error", "message" => "Your account is not active. Please contact the office."], 403);
+    }
+    if ($attempt["result"] === "ambiguous") {
+        respond(["status" => "error", "message" => "More than one account uses these details. Please sign in with your email or username."], 409);
+    }
+    if ($attempt["result"] !== "ok") {
+        respond(["status" => "error", "message" => "Invalid login details or password"], 401);
     }
 
-    $stmt->bind_result($id, $hash, $role);
-    $stmt->fetch();
-    $stmt->close();
-
-    if (!password_verify($password, (string)$hash)) {
-        respond(["status" => "error", "message" => "Invalid credentials"], 401);
-    }
+    $user = $attempt["user"];
+    $id = (int)$user["id"];
+    $role = (int)$user["role"];
 
     $payload = [
-        "sub"  => (int)$id,
-        "role" => (int)$role,
+        "sub"  => $id,
+        "role" => $role,
         "iat"  => time(),
         "exp"  => time() + JWT_EXPIRE,
     ];
@@ -374,9 +375,12 @@ function login(mysqli $conn, array $input): void
         "message" => "Login successful",
         "token"  => createJWT($payload),
         "user"   => [
-            "id" => (int)$id,
-            "role" => (int)$role,
-            "username" => $username,
+            "id" => $id,
+            "role" => $role,
+            "username" => (string)($user["username"] ?? ""),
+            "email" => (string)($user["email"] ?? ""),
+            "fname" => (string)($user["fname"] ?? ""),
+            "lname" => (string)($user["lname"] ?? ""),
         ],
     ]);
 }
@@ -414,33 +418,21 @@ function addClient(mysqli $conn, array $input): void
         respond(["status" => "error", "message" => "Invalid email address"], 422);
     }
 
-    $stmt = $conn->prepare("SELECT id FROM user WHERE username = ? LIMIT 1");
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Username check failed: " . $conn->error], 500);
-    }
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-
-    if ($stmt->get_result()->num_rows > 0) {
-        $stmt->close();
-        respond(["status" => "error", "message" => "Username already exists"], 409);
+    if (auth_phone_key($phone) === "") {
+        respond(["status" => "error", "message" => "Please enter a valid phone number"], 422);
     }
 
-    $stmt->close();
-
-    $stmt = $conn->prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1");
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Phone check failed: " . $conn->error], 500);
+    // Same rule as website sign-up: username, email and phone must not already
+    // belong to another account, so every identifier signs in to one account.
+    try {
+        $conflict = auth_identity_conflict($conn, $username, $email, $phone);
+    } catch (Throwable $e) {
+        error_log("API sign-up duplicate check failed: " . $e->getMessage());
+        respond(["status" => "error", "message" => "Registration is temporarily unavailable. Please try again."], 500);
     }
-    $stmt->bind_param("s", $phone);
-    $stmt->execute();
-
-    if ($stmt->get_result()->num_rows > 0) {
-        $stmt->close();
-        respond(["status" => "error", "message" => "Phone already exists"], 409);
+    if ($conflict !== "") {
+        respond(["status" => "error", "message" => $conflict], 409);
     }
-
-    $stmt->close();
 
     $stmt = $conn->prepare("SELECT id FROM customers WHERE nin = ? LIMIT 1");
     if (!$stmt) {

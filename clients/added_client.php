@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require "db.php";
+require_once __DIR__ . '/../includes/auth_lookup.php';
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -219,17 +220,15 @@ try {
 
     $stmt->close();
 
-    if ($email !== '') {
-        $stmt = $conn->prepare("SELECT id FROM customers WHERE email = ? LIMIT 1");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $stmt->store_result();
-
-        if ($stmt->num_rows > 0) {
-            jsonResponse("error", "This email already exists.", 409);
-        }
-
-        $stmt->close();
+    // Same rule as the Android app (api.php): username, email and phone must
+    // not already belong to another account, so each one signs in to exactly
+    // one account on the website and in the app.
+    if (auth_phone_key($phone) === '') {
+        jsonResponse("error", "Please enter a valid phone number.", 400);
+    }
+    $conflict = auth_identity_conflict($conn, $username, $email, $phone);
+    if ($conflict !== '') {
+        jsonResponse("error", $conflict, 409);
     }
 
     $applicant_signature = saveSignature($_POST["applicant_signature"] ?? "");
