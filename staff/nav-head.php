@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require "db.php";
 require_once dirname(__DIR__) . '/includes/site_cms.php';
 $brand = site_settings($conn);
@@ -141,6 +141,15 @@ $page_active = "active";
       <i class="ni ni-credit-card text-lg text-white" aria-hidden="true"></i>
     </div>
     <span class="nav-link-text ms-1">My Loan Payments</span>
+  </a>
+</li>
+<?php require_once dirname(__DIR__) . '/includes/portal_mail.php'; $mail_unread = pm_unread_count($conn, (int)$user_id); ?>
+<li class="nav-item">
+   <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'messages.php' ? 'active' : ''; ?>" href="messages">
+    <div class="icon icon-shape icon-sm shadow border-radius-md bg-success text-center me-2 d-flex align-items-center justify-content-center">
+      <i class="ni ni-email-83 text-lg text-white" aria-hidden="true"></i>
+    </div>
+    <span class="nav-link-text ms-1">Messages<?php if ($mail_unread > 0): ?> <span class="badge bg-danger ms-1"><?= $mail_unread ?></span><?php endif; ?></span>
   </a>
 </li>
         

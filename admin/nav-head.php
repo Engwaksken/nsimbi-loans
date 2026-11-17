@@ -25,6 +25,11 @@ if ($admin_id) {
 }
 $mr = $conn->query("SELECT COUNT(*) AS c FROM loan_messages WHERE is_read=0");
 if ($mr) $new_messages = $mr->fetch_assoc()['c'] ?? 0;
+$mail_unread = 0;
+if ($admin_id) {
+    require_once dirname(__DIR__) . '/includes/portal_mail.php';
+    $mail_unread = pm_unread_count($conn, (int)$admin_id);
+}
 $pr = $conn->query("SELECT COUNT(*) AS c FROM loan WHERE status='PENDING'");
 if ($pr) $count_pending = $pr->fetch_assoc()['c'] ?? 0;
 
@@ -113,7 +118,8 @@ $navSections = [
     ['site_settings.php', 'fa-palette', 'Branding & Fonts'],
   ]],
   'system' => ['System', [
-    ['loan_messages.php', 'fa-envelope', 'Messages', (int)$new_messages, ''],
+    ['mailbox.php', 'fa-envelope-open-text', 'Mailbox', (int)$mail_unread, 'red'],
+    ['loan_messages.php', 'fa-envelope', 'Notifications', (int)$new_messages, ''],
     ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
     ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
     ['profile.php', 'fa-user-circle', 'My Profile'],

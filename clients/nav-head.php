@@ -49,7 +49,8 @@ function cn($p,$c){ return $p===$c?' active':''; }
      <a href="books" class="nav-link<?= cn('books.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>My Books</a>
     <a href="repayment_schedule" class="nav-link<?= cn('repayment_schedule.php',$cp) ?>"><span class="ni"><i class="fas fa-calendar-alt"></i></span>Schedules</a>
     <div class="nav-group">Support</div>
-    <a href="messages" class="nav-link<?= cn('messages.php',$cp) ?>"><span class="ni"><i class="fas fa-envelope"></i></span>Messages</a>
+    <?php require_once dirname(__DIR__) . '/includes/portal_mail.php'; $mail_unread = pm_unread_count($conn, $user_id); ?>
+    <a href="messages" class="nav-link<?= cn('messages.php',$cp) ?>"><span class="ni"><i class="fas fa-envelope"></i></span>Messages<?php if ($mail_unread > 0): ?><span class="nav-pill red" style="margin-left:auto"><?= $mail_unread ?></span><?php endif; ?></a>
     <a href="profile"  class="nav-link<?= cn('profile.php',$cp) ?>"><span class="ni"><i class="fas fa-user-circle"></i></span>My Profile</a>
   </nav>
   <div class="sidebar-footer">

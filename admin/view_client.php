@@ -96,6 +96,7 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
 
 require "nav-head.php";
 require_once __DIR__ . '/includes/books-tab.php';
+require_once dirname(__DIR__) . '/includes/client_documents.php';
 
 function h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -282,6 +283,28 @@ if (!in_array($activeTab, $allowedTabs, true)) {
 // Only the books tab depends on the query string, so it is the one pane that is
 // fetched on demand rather than rendered into every page load.
 $books = $activeTab === 'books' ? books_tab_view_model($conn, $user_id) : null;
+
+// Client-uploaded documents and loan-limit review requests.
+$submissions = [];
+$limitRequests = [];
+$submissionsError = false;
+try {
+    $submissions = client_docs_for_user($conn, $user_id);
+    $limitRequests = client_limit_requests($conn, $user_id);
+} catch (Throwable $e) {
+    error_log('view_client submissions load failed: ' . $e->getMessage());
+    $submissionsError = true;
+}
+$pendingLimit = client_limit_pending($limitRequests);
+$pendingDocs = count(array_filter($submissions, static fn($d) => $d['status'] === 'pending'));
+if (empty($_SESSION['review_csrf'])) {
+    $_SESSION['review_csrf'] = bin2hex(random_bytes(16));
+}
+$reviewCsrf = $_SESSION['review_csrf'];
+$reviewMessage = $_SESSION['review_message'] ?? '';
+$reviewType = $_SESSION['review_message_type'] ?? 'success';
+unset($_SESSION['review_message'], $_SESSION['review_message_type']);
+$docTypes = client_doc_types();
 ?>
 
 <div class="page-header">
@@ -370,6 +393,9 @@ $books = $activeTab === 'books' ? books_tab_view_model($conn, $user_id) : null;
 
                 <button type="button" class="profile-tab-btn <?= $activeTab === 'documents' ? 'active' : '' ?>" data-tab="documents">
                     <i class="fas fa-folder-open"></i> Documents
+                    <?php if ($pendingDocs + ($pendingLimit ? 1 : 0) > 0): ?>
+                        <span class="badge badge-danger" style="margin-left:.3rem"><?= $pendingDocs + ($pendingLimit ? 1 : 0) ?></span>
+                    <?php endif; ?>
                 </button>
 
                 <button type="button" class="profile-tab-btn <?= $activeTab === 'loans' ? 'active' : '' ?>" data-tab="loans">
@@ -443,6 +469,149 @@ $books = $activeTab === 'books' ? books_tab_view_model($conn, $user_id) : null;
                         <?= client_doc_card('Business Photo / Stock', $client['stock'] ?? '') ?>
                         <?= client_doc_card('Applicant Signature', $client['applicant_signature'] ?? '') ?>
                     </div>
+
+                    <?php if ($reviewMessage !== ''): ?>
+                        <div class="alert <?= $reviewType === 'error' ? 'alert-danger' : 'alert-success' ?>" style="margin-top:1.2rem">
+                            <i class="fas <?= $reviewType === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle' ?>"></i>
+                            <span><?= h($reviewMessage) ?></span>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($pendingLimit): ?>
+                        <div class="rv-limit">
+                            <div class="rv-limit-head">
+                                <div>
+                                    <h4><i class="fas fa-chart-line"></i> Loan limit review requested</h4>
+                                    <p>
+                                        <?= h(date('d M Y, H:i', strtotime((string)$pendingLimit['created_at']))) ?> &middot;
+                                        from <strong><?= money($pendingLimit['current_limit']) ?></strong>
+                                        to <strong><?= money($pendingLimit['requested_limit']) ?></strong>
+                                    </p>
+                                </div>
+                                <span class="badge badge-warning">Pending</span>
+                            </div>
+                            <?php if (trim((string)$pendingLimit['reason']) !== ''): ?>
+                                <blockquote class="rv-quote"><?= nl2br(h($pendingLimit['reason'])) ?></blockquote>
+                            <?php endif; ?>
+                            <div class="rv-limit-forms">
+                                <form method="post" action="client_review_action.php" class="rv-inline">
+                                    <input type="hidden" name="csrf" value="<?= h($reviewCsrf) ?>">
+                                    <input type="hidden" name="user_id" value="<?= (int)$user_id ?>">
+                                    <input type="hidden" name="request_id" value="<?= (int)$pendingLimit['id'] ?>">
+                                    <input type="hidden" name="action" value="limit_approve">
+                                    <label class="form-label" for="rv_limit">New loan limit (UGX)</label>
+                                    <input type="text" class="form-control" id="rv_limit" name="approved_limit" inputmode="numeric"
+                                           value="<?= h(number_format((float)$pendingLimit['requested_limit'], 0, '.', '')) ?>" required>
+                                    <input type="text" class="form-control" name="note" maxlength="255" placeholder="Note to client (optional)">
+                                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> Approve &amp; set limit</button>
+                                </form>
+                                <form method="post" action="client_review_action.php" class="rv-inline">
+                                    <input type="hidden" name="csrf" value="<?= h($reviewCsrf) ?>">
+                                    <input type="hidden" name="user_id" value="<?= (int)$user_id ?>">
+                                    <input type="hidden" name="request_id" value="<?= (int)$pendingLimit['id'] ?>">
+                                    <input type="hidden" name="action" value="limit_decline">
+                                    <label class="form-label" for="rv_decline">Decline</label>
+                                    <input type="text" class="form-control" id="rv_decline" name="note" maxlength="255" placeholder="Reason (sent to the client)" required>
+                                    <button type="submit" class="btn btn-outline"><i class="fas fa-times"></i> Decline</button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="profile-section-title" style="margin-top:1.6rem">
+                        <h4>Submitted by the client</h4>
+                        <p>Documents the client uploaded from their portal. Approve or reject each one; the client is emailed your decision.</p>
+                    </div>
+
+                    <?php if ($submissionsError): ?>
+                        <div class="alert alert-warning">Client submissions could not be loaded.</div>
+                    <?php elseif (!$submissions): ?>
+                        <div class="empty-state" style="padding:1.5rem 1rem"><i class="fas fa-inbox"></i><p>The client has not uploaded any documents yet.</p></div>
+                    <?php else: ?>
+                        <div class="rv-list">
+                            <?php foreach ($submissions as $doc): ?>
+                                <?php
+                                $statusBadge = ['approved' => 'badge-success', 'pending' => 'badge-warning', 'rejected' => 'badge-danger'][$doc['status']] ?? 'badge-muted';
+                                $typeLabel = $docTypes[$doc['doc_type']]['label'] ?? ucfirst(str_replace('_', ' ', (string)$doc['doc_type']));
+                                ?>
+                                <div class="rv-item">
+                                    <i class="fas <?= $doc['mime_type'] === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image' ?> rv-ico"></i>
+                                    <div class="rv-main">
+                                        <div class="rv-title"><?= h($doc['title']) ?> <span class="badge <?= $statusBadge ?>"><?= h(ucfirst($doc['status'])) ?></span></div>
+                                        <div class="rv-meta">
+                                            <?= h($typeLabel) ?> &middot; <?= h(date('d M Y, H:i', strtotime((string)$doc['created_at']))) ?>
+                                            &middot; <?= number_format(max(1, (int)$doc['file_size'] / 1024)) ?> KB
+                                            <?php if (!empty($doc['review_note'])): ?>&middot; <em><?= h($doc['review_note']) ?></em><?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <a href="client_document.php?id=<?= (int)$doc['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline"><i class="fas fa-eye"></i> View</a>
+                                    <?php if ($doc['status'] !== 'approved'): ?>
+                                        <form method="post" action="client_review_action.php">
+                                            <input type="hidden" name="csrf" value="<?= h($reviewCsrf) ?>">
+                                            <input type="hidden" name="user_id" value="<?= (int)$user_id ?>">
+                                            <input type="hidden" name="doc_id" value="<?= (int)$doc['id'] ?>">
+                                            <input type="hidden" name="action" value="doc_approve">
+                                            <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check"></i> Approve</button>
+                                        </form>
+                                    <?php endif; ?>
+                                    <?php if ($doc['status'] !== 'rejected'): ?>
+                                        <form method="post" action="client_review_action.php" class="rv-reject">
+                                            <input type="hidden" name="csrf" value="<?= h($reviewCsrf) ?>">
+                                            <input type="hidden" name="user_id" value="<?= (int)$user_id ?>">
+                                            <input type="hidden" name="doc_id" value="<?= (int)$doc['id'] ?>">
+                                            <input type="hidden" name="action" value="doc_reject">
+                                            <input type="text" name="note" class="form-control" maxlength="255" placeholder="Reason for rejecting" required>
+                                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i> Reject</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php $pastLimits = array_values(array_filter($limitRequests, static fn($r) => $r['status'] !== 'pending')); ?>
+                    <?php if ($pastLimits): ?>
+                        <div class="profile-section-title" style="margin-top:1.6rem">
+                            <h4>Past limit reviews</h4>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table clients-table">
+                                <thead><tr><th>Requested on</th><th>From</th><th>Requested</th><th>Decision</th><th>New limit</th><th>Note</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($pastLimits as $r): ?>
+                                        <tr>
+                                            <td><?= h(date('d M Y', strtotime((string)$r['created_at']))) ?></td>
+                                            <td><?= money($r['current_limit']) ?></td>
+                                            <td><?= money($r['requested_limit']) ?></td>
+                                            <td><span class="badge <?= $r['status'] === 'approved' ? 'badge-success' : 'badge-danger' ?>"><?= h(ucfirst($r['status'])) ?></span></td>
+                                            <td><?= $r['approved_limit'] !== null ? money($r['approved_limit']) : '&mdash;' ?></td>
+                                            <td><?= h($r['staff_note'] ?? '') ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+
+                    <style>
+                        .rv-limit{margin-top:1.2rem;padding:1.1rem;border:1.5px solid var(--warning,#d97706);border-radius:14px;background:var(--warning-bg,#fffbeb)}
+                        .rv-limit-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}
+                        .rv-limit-head h4{margin:0 0 .2rem;font-size:.95rem}
+                        .rv-limit-head p{margin:0;font-size:.82rem;color:var(--text-muted)}
+                        .rv-quote{margin:.8rem 0;padding:.65rem .85rem;border-left:3px solid var(--warning,#d97706);background:#fff;border-radius:8px;font-size:.84rem}
+                        .rv-limit-forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-top:.8rem}
+                        .rv-inline{display:grid;gap:.45rem;background:#fff;border:1px solid var(--border);border-radius:12px;padding:.85rem}
+                        .rv-inline .form-label{margin:0}
+                        .rv-list{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+                        .rv-item{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;padding:.75rem .9rem;border-top:1px solid var(--border)}
+                        .rv-item:first-child{border-top:0}
+                        .rv-item form{margin:0;display:flex;gap:.4rem;align-items:center}
+                        .rv-ico{font-size:1.3rem;color:var(--primary);width:24px;text-align:center}
+                        .rv-main{flex:1;min-width:220px}
+                        .rv-title{font-weight:700;font-size:.88rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+                        .rv-meta{font-size:.74rem;color:var(--text-muted)}
+                        .rv-reject .form-control{width:200px;padding:.35rem .6rem;font-size:.8rem}
+                    </style>
                 </section>
 
                 <section class="profile-tab-pane <?= $activeTab === 'loans' ? 'active' : '' ?>" id="tab-loans">

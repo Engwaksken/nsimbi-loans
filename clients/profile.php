@@ -3,6 +3,7 @@ $phead = "My Profile";
 
 require "nav-head.php";
 require_once __DIR__ . '/../includes/loan_workflow.php';
+require_once __DIR__ . '/../includes/client_documents.php';
 
 /*
  * Client profile. Edits go through modals:
@@ -103,6 +104,28 @@ $is_new_onb  = ($profile['client_category'] ?? '') === 'new_onboarded';
 $has_nok_rel = array_key_exists('nok_rel', $profile);
 $member_since = fmt_date($profile['created_at'] ?? null, 'F Y');
 
+// Supporting documents and loan-limit review.
+$docs_ready = true;
+$documents = [];
+$limit_requests = [];
+try {
+    $documents = client_docs_for_user($conn, $user_id);
+    $limit_requests = client_limit_requests($conn, $user_id);
+} catch (Throwable $e) {
+    error_log('profile documents load failed: ' . $e->getMessage());
+    $docs_ready = false;
+}
+$doc_summary    = client_docs_summary($documents, $profile);
+$other_docs     = array_values(array_filter($documents, static fn($d) => $d['doc_type'] === 'other'));
+$docs_missing   = client_docs_missing_required($doc_summary);
+$limit_pending  = client_limit_pending($limit_requests);
+$limit_last     = $limit_requests[0] ?? null;
+$docs_attention = count($docs_missing) + count(array_filter($documents, static fn($d) => $d['status'] === 'rejected'));
+if (empty($_SESSION['docs_csrf'])) {
+    $_SESSION['docs_csrf'] = bin2hex(random_bytes(16));
+}
+$docs_csrf = $_SESSION['docs_csrf'];
+
 // Values for the edit form: what was typed last time if saving failed.
 $old = $_SESSION['profile_old'] ?? [];
 unset($_SESSION['profile_old']);
@@ -168,6 +191,53 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 .pf-pass .form-control{padding-right:2.6rem}
 .pf-pass button{position:absolute;right:.4rem;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--text-muted);cursor:pointer;padding:.3rem .45rem}
 #editProfileModal .modal-box{max-width:720px}
+.pf-tab-dot{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger,#dc2626);color:#fff;font-size:.65rem;font-weight:800;margin-left:.15rem}
+.pf-docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem}
+.pf-doc{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:start;gap:.85rem;padding:.95rem;border:1px solid var(--border);border-radius:12px;background:#fff}
+.pf-doc-ico{width:42px;height:42px;border-radius:10px;background:var(--body-bg);color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.05rem}
+.pf-doc-approved .pf-doc-ico,.pf-doc-on_file .pf-doc-ico{background:var(--secondary-xlight,#dcfce7);color:var(--success,#16a34a)}
+.pf-doc-pending .pf-doc-ico{background:var(--warning-bg,#fef3c7);color:var(--warning,#d97706)}
+.pf-doc-rejected{border-color:var(--danger,#dc2626)}
+.pf-doc-rejected .pf-doc-ico{background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626)}
+.pf-doc-missing{border-style:dashed}
+.pf-doc-main{flex:1;min-width:0}
+.pf-doc-title{font-weight:700;font-size:.88rem;color:var(--text-dark);display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.pf-doc-sub{font-size:.75rem;color:var(--text-muted);margin-top:.15rem}
+.pf-doc-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.4rem;padding-top:.7rem;border-top:1px dashed var(--border)}
+#uploadDocModal .modal-body{min-height:0}
+.pf-subhead{margin:1.4rem 0 .6rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);display:flex;align-items:center;gap:.4rem}
+.pf-subhead span{background:var(--body-bg);border:1px solid var(--border);border-radius:9px;padding:0 .45rem;font-size:.68rem}
+.pf-empty-box{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem;border:1px dashed var(--border);border-radius:12px;font-size:.8rem;color:var(--text-muted)}
+.pf-empty-box > i{font-size:1.4rem;opacity:.5}
+.pf-empty-box > div{flex:1;min-width:200px}
+.pf-files{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.pf-file{display:flex;align-items:center;gap:.7rem;padding:.65rem .85rem;border-top:1px solid var(--border)}
+.pf-file:first-child{border-top:0}
+.pf-file form{margin:0}
+.pf-file-ico{font-size:1.25rem;color:var(--primary);width:22px;text-align:center}
+.pf-file-main{flex:1;min-width:0}
+.pf-file-name{font-weight:600;font-size:.86rem;color:var(--text-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-file-meta{font-size:.72rem;color:var(--text-muted)}
+.pf-limit{margin-top:1.4rem;padding:1.1rem;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,var(--body-bg),#fff)}
+.pf-limit-head{display:flex;align-items:center;gap:.85rem;margin-bottom:1rem}
+.pf-limit-head h4{margin:0 0 .1rem;font-size:.95rem;color:var(--text-dark)}
+.pf-limit-head p{margin:0;font-size:.8rem;color:var(--text-muted)}
+.pf-checklist{display:grid;gap:.4rem;font-size:.84rem}
+.pf-checklist-title{font-weight:600;color:var(--text-dark);margin-bottom:.15rem}
+.pf-check{color:var(--text-muted)}
+.pf-check i{color:var(--border);margin-right:.35rem}
+.pf-check.done{color:var(--text-dark)}
+.pf-check.done i{color:var(--success,#16a34a)}
+.pf-ready{font-size:.84rem;color:var(--success,#16a34a);font-weight:600;padding:.62rem 0}
+.pf-drop{position:relative;display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:1.4rem 1rem;border:2px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin:0}
+.pf-drop:hover,.pf-drop.drag{border-color:var(--primary);background:var(--primary-xlight)}
+.pf-drop.has-file{border-style:solid;border-color:var(--success,#16a34a)}
+.pf-drop.is-invalid{border-color:var(--danger)}
+.pf-drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pf-drop > i{font-size:1.8rem;color:var(--primary)}
+.pf-drop-text{font-size:.86rem;color:var(--text-dark);word-break:break-all}
+.pf-drop-sub{font-size:.72rem;color:var(--text-muted)}
+@media(max-width:520px){.pf-docs{grid-template-columns:1fr}.pf-doc-actions .btn{flex:1}}
 @media(max-width:520px){.pf-pane-head{flex-direction:column}.pf-list{grid-template-columns:1fr}.pf-hero{padding:1.15rem}.pf-actions{width:100%}.pf-actions .btn{flex:1}}
 </style>
 
@@ -234,6 +304,7 @@ $tabs = [
 if ($has_business) {
     $tabs['business'] = ['Business', 'fa-briefcase'];
 }
+$tabs['documents'] = ['Documents', 'fa-folder-open'];
 $tabs['security'] = ['Security', 'fa-lock'];
 
 $edit_btn = '<button type="button" class="btn btn-sm btn-outline" data-open="editProfileModal"><i class="fas fa-pen"></i> Edit</button>';
@@ -246,6 +317,7 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                     id="tab-<?= $key; ?>" data-tab="<?= $key; ?>" aria-controls="pane-<?= $key; ?>"
                     aria-selected="<?= $first ? 'true' : 'false'; ?>" tabindex="<?= $first ? '0' : '-1'; ?>">
                 <i class="fas <?= $icon; ?>"></i> <?= esc($label); ?>
+                <?php if ($key === 'documents' && $docs_attention > 0): ?><span class="pf-tab-dot" title="Needs attention"><?= $docs_attention; ?></span><?php endif; ?>
             </button>
         <?php $first = false; endforeach; ?>
     </div>
@@ -323,6 +395,157 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
             </div>
         </section>
         <?php endif; ?>
+
+        <section class="profile-tab-pane" id="pane-documents" role="tabpanel" aria-labelledby="tab-documents" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Documents</h3><p>Upload supporting documents. Complete documents help us review a higher loan limit.</p></div>
+                <button type="button" class="btn btn-sm btn-primary" data-upload="other"><i class="fas fa-upload"></i> Upload file</button>
+            </div>
+
+            <?php if (!$docs_ready): ?>
+                <div class="alert alert-warning">Document uploads are not available right now. Please try again later.</div>
+            <?php else: ?>
+                <div class="pf-docs">
+                    <?php foreach ($doc_summary as $type => $item): ?>
+                        <?php
+                        $state = $item['state'];
+                        $latest = $item['latest'];
+                        [$badge_class, $badge_text] = [
+                            'approved' => ['badge-success', 'Approved'],
+                            'pending'  => ['badge-warning', 'Pending review'],
+                            'on_file'  => ['badge-info', 'On file'],
+                            'rejected' => ['badge-danger', 'Rejected'],
+                            'missing'  => ['badge-muted', $item['required'] ? 'Required' : 'Optional'],
+                        ][$state];
+                        ?>
+                        <div class="pf-doc pf-doc-<?= esc($state); ?>">
+                            <div class="pf-doc-ico"><i class="fas <?= esc($item['icon']); ?>"></i></div>
+                            <div class="pf-doc-main">
+                                <div class="pf-doc-title"><?= esc($item['label']); ?> <span class="badge <?= $badge_class; ?>"><?= esc($badge_text); ?></span></div>
+                                <div class="pf-doc-sub">
+                                    <?php if ($state === 'on_file'): ?>
+                                        Provided at registration.
+                                    <?php elseif ($latest && $state !== 'missing'): ?>
+                                        Uploaded <?= esc(fmt_date($latest['created_at'], 'd M Y')); ?>
+                                        <?php if ($state === 'rejected' && !empty($latest['review_note'])): ?>
+                                            &middot; <span class="text-danger"><?= esc($latest['review_note']); ?></span>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <?= esc($item['hint']); ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="pf-doc-actions">
+                                <?php if ($latest && $state !== 'missing' && $state !== 'on_file'): ?>
+                                    <a class="btn btn-sm btn-ghost" href="document.php?id=<?= (int)$latest['id']; ?>" target="_blank" rel="noopener"><i class="fas fa-eye"></i> View</a>
+                                <?php endif; ?>
+                                <?php if ($state !== 'pending'): ?>
+                                    <button type="button" class="btn btn-sm btn-outline" data-upload="<?= esc($type); ?>">
+                                        <i class="fas fa-upload"></i> <?= in_array($state, ['missing'], true) ? 'Upload' : 'Replace'; ?>
+                                    </button>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="pf-subhead">Other files <span><?= count($other_docs); ?></span></div>
+                <?php if (!$other_docs): ?>
+                    <div class="pf-empty-box">
+                        <i class="fas fa-folder-open"></i>
+                        <div>Bank or Mobile Money statements, receipts, land titles or anything else that supports your application.</div>
+                        <button type="button" class="btn btn-sm btn-outline" data-upload="other"><i class="fas fa-plus"></i> Add a file</button>
+                    </div>
+                <?php else: ?>
+                    <div class="pf-files">
+                        <?php foreach ($other_docs as $doc): ?>
+                            <?php $b = ['approved' => 'badge-success', 'pending' => 'badge-warning', 'rejected' => 'badge-danger'][$doc['status']] ?? 'badge-muted'; ?>
+                            <div class="pf-file">
+                                <i class="fas <?= $doc['mime_type'] === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image'; ?> pf-file-ico"></i>
+                                <div class="pf-file-main">
+                                    <div class="pf-file-name"><?= esc($doc['title']); ?></div>
+                                    <div class="pf-file-meta">
+                                        <?= esc(fmt_date($doc['created_at'], 'd M Y')); ?> &middot; <?= number_format(max(1, (int)$doc['file_size'] / 1024)); ?> KB
+                                        <?php if ($doc['status'] === 'rejected' && !empty($doc['review_note'])): ?>&middot; <span class="text-danger"><?= esc($doc['review_note']); ?></span><?php endif; ?>
+                                    </div>
+                                </div>
+                                <span class="badge <?= $b; ?>"><?= esc(ucfirst($doc['status'])); ?></span>
+                                <a class="btn btn-sm btn-ghost btn-icon" href="document.php?id=<?= (int)$doc['id']; ?>" target="_blank" rel="noopener" title="View"><i class="fas fa-eye"></i></a>
+                                <?php if ($doc['status'] === 'pending'): ?>
+                                    <form method="post" action="document_action.php" class="js-remove-doc">
+                                        <input type="hidden" name="csrf" value="<?= esc($docs_csrf); ?>">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="doc_id" value="<?= (int)$doc['id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-ghost btn-icon" title="Remove"><i class="fas fa-trash-alt"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="pf-limit">
+                    <div class="pf-limit-head">
+                        <div class="pf-row-ico"><i class="fas fa-chart-line"></i></div>
+                        <div>
+                            <h4>Loan limit review</h4>
+                            <p>Current limit: <strong><?= (float)($profile['loan_limit'] ?? 0) > 0 ? money($profile['loan_limit']) : 'Not set'; ?></strong></p>
+                        </div>
+                    </div>
+
+                    <?php if ($limit_pending): ?>
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-hourglass-half"></i>
+                            <span>Your request for <strong><?= money($limit_pending['requested_limit']); ?></strong>, sent <?= esc(fmt_date($limit_pending['created_at'], 'd M Y')); ?>, is being reviewed. We'll email you once it's decided.</span>
+                        </div>
+                    <?php else: ?>
+                        <?php if ($limit_last): ?>
+                            <div class="alert <?= $limit_last['status'] === 'approved' ? 'alert-success' : 'alert-warning'; ?>">
+                                <i class="fas <?= $limit_last['status'] === 'approved' ? 'fa-check-circle' : 'fa-info-circle'; ?>"></i>
+                                <span>
+                                    Last request (<?= esc(fmt_date($limit_last['created_at'], 'd M Y')); ?>):
+                                    <strong><?= esc(ucfirst($limit_last['status'])); ?></strong><?= $limit_last['status'] === 'approved' && $limit_last['approved_limit'] !== null ? ' at ' . money($limit_last['approved_limit']) : ''; ?>.
+                                    <?php if (!empty($limit_last['staff_note'])): ?><em><?= esc($limit_last['staff_note']); ?></em><?php endif; ?>
+                                </span>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($docs_missing): ?>
+                            <div class="pf-checklist">
+                                <div class="pf-checklist-title">Before you can request a review, upload:</div>
+                                <?php foreach ($doc_summary as $type => $item): ?>
+                                    <?php if (!$item['required']) continue; $done = !isset($docs_missing[$type]); ?>
+                                    <div class="pf-check <?= $done ? 'done' : ''; ?>"><i class="fas <?= $done ? 'fa-check-circle' : 'fa-circle'; ?>"></i> <?= esc($item['label']); ?></div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php elseif (!$is_active): ?>
+                            <div class="alert alert-warning mb-0">Your profile is inactive. Please contact the office.</div>
+                        <?php else: ?>
+                            <form method="post" action="document_action.php" id="limitForm" novalidate>
+                                <input type="hidden" name="csrf" value="<?= esc($docs_csrf); ?>">
+                                <input type="hidden" name="action" value="limit_request">
+                                <div class="alert alert-danger js-error" style="display:none"><i class="fas fa-exclamation-circle"></i><span></span></div>
+                                <div class="grid-2">
+                                    <div class="form-group">
+                                        <label class="form-label" for="lim_amount">Requested limit (UGX)</label>
+                                        <input type="text" class="form-control" id="lim_amount" name="requested_limit" inputmode="numeric" placeholder="e.g. 3,000,000" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Documents</label>
+                                        <div class="pf-ready"><i class="fas fa-check-circle"></i> Required documents provided</div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="lim_reason">Why do you need a higher limit?</label>
+                                    <textarea class="form-control" id="lim_reason" name="reason" rows="3" maxlength="2000" placeholder="e.g. My sales have grown and I want to buy more stock for the festive season." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary js-submit"><i class="fas fa-paper-plane"></i> Submit for review</button>
+                            </form>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </section>
 
         <section class="profile-tab-pane" id="pane-security" role="tabpanel" aria-labelledby="tab-security" hidden>
             <div class="pf-pane-head">
@@ -417,6 +640,54 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" data-close>Cancel</button>
                 <button type="submit" class="btn btn-primary js-submit"><i class="fas fa-save"></i> Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div class="modal-overlay" id="uploadDocModal">
+    <div class="modal-box sm">
+        <form method="post" action="document_action.php" enctype="multipart/form-data" id="uploadDocForm" novalidate>
+            <input type="hidden" name="csrf" value="<?= esc($docs_csrf); ?>">
+            <input type="hidden" name="action" value="upload">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span class="modal-ico"><i class="fas fa-upload"></i></span>
+                    Upload Document
+                </div>
+                <button type="button" class="modal-close" data-close aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="alert alert-danger js-error" style="display:none"><i class="fas fa-exclamation-circle"></i><span></span></div>
+
+                <div class="form-group">
+                    <label class="form-label" for="up_type">Document type</label>
+                    <select class="form-select" id="up_type" name="doc_type" required>
+                        <?php foreach (client_doc_types() as $type => $meta): ?>
+                            <option value="<?= esc($type); ?>" data-hint="<?= esc($meta['hint']); ?>"><?= esc($meta['label']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-help" id="up_hint"></div>
+                </div>
+
+                <div class="form-group" id="up_title_group">
+                    <label class="form-label" for="up_title">Title</label>
+                    <input type="text" class="form-control" id="up_title" name="title" maxlength="150" placeholder="e.g. MTN statement Jan–Mar">
+                </div>
+
+                <label class="pf-drop" for="up_file" id="up_drop">
+                    <input type="file" id="up_file" name="document" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" required>
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span class="pf-drop-text" id="up_file_text"><strong>Choose a file</strong> or drag it here</span>
+                    <span class="pf-drop-sub">JPG, PNG, WebP or PDF &middot; up to 5 MB</span>
+                </label>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" class="btn btn-primary js-submit"><i class="fas fa-upload"></i> Upload</button>
             </div>
         </form>
     </div>
@@ -518,6 +789,106 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
         try { saved = sessionStorage.getItem(TAB_KEY); } catch (e) {}
         if (saved) showTab(saved);
     })();
+
+    /* ---------- Documents ---------- */
+    const MAX_DOC_BYTES = 5 * 1024 * 1024;
+    const DOC_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    const upForm = document.getElementById('uploadDocForm');
+
+    if (upForm) {
+        const typeSel = document.getElementById('up_type');
+        const hint = document.getElementById('up_hint');
+        const titleGroup = document.getElementById('up_title_group');
+        const titleInput = document.getElementById('up_title');
+        const fileInput = document.getElementById('up_file');
+        const drop = document.getElementById('up_drop');
+        const fileText = document.getElementById('up_file_text');
+
+        const syncType = function () {
+            const opt = typeSel.options[typeSel.selectedIndex];
+            hint.textContent = opt ? opt.dataset.hint : '';
+            titleGroup.style.display = typeSel.value === 'other' ? '' : 'none';
+        };
+        const syncFile = function () {
+            const f = fileInput.files[0];
+            drop.classList.toggle('has-file', !!f);
+            drop.classList.remove('is-invalid');
+            if (f) {
+                fileText.innerHTML = '<strong></strong> (' + Math.max(1, Math.round(f.size / 1024)).toLocaleString() + ' KB)';
+                fileText.querySelector('strong').textContent = f.name;
+            } else {
+                fileText.innerHTML = '<strong>Choose a file</strong> or drag it here';
+            }
+        };
+
+        typeSel.addEventListener('change', syncType);
+        fileInput.addEventListener('change', syncFile);
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('drag'); });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('drag'); });
+        });
+        drop.addEventListener('drop', function (e) {
+            if (e.dataTransfer && e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                syncFile();
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-upload]');
+            if (!btn) return;
+            e.preventDefault();
+            upForm.reset();
+            typeSel.value = btn.dataset.upload;
+            syncType();
+            syncFile();
+            upForm.querySelector('.js-error').style.display = 'none';
+            openModal('uploadDocModal');
+        });
+
+        upForm.addEventListener('submit', function (e) {
+            const f = fileInput.files[0];
+            if (typeSel.value === 'other' && !titleInput.value.trim()) {
+                e.preventDefault(); return fail(upForm, 'Please give this document a short title.', titleInput);
+            }
+            if (!f) { e.preventDefault(); drop.classList.add('is-invalid'); return fail(upForm, 'Please choose a file to upload.'); }
+            if (DOC_MIME.indexOf(f.type) === -1) { e.preventDefault(); drop.classList.add('is-invalid'); return fail(upForm, 'Only JPG, PNG, WebP images or PDF files are accepted.'); }
+            if (f.size > MAX_DOC_BYTES) { e.preventDefault(); drop.classList.add('is-invalid'); return fail(upForm, 'The file is too large. The maximum size is 5 MB.'); }
+            const btn = upForm.querySelector('.js-submit');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+        });
+
+        syncType();
+    }
+
+    document.querySelectorAll('.js-remove-doc').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm('Remove this document?')) e.preventDefault();
+        });
+    });
+
+    const limitForm = document.getElementById('limitForm');
+    if (limitForm) {
+        const amount = document.getElementById('lim_amount');
+        const reason = document.getElementById('lim_reason');
+        const currentLimit = <?= json_encode((float)($profile['loan_limit'] ?? 0)); ?>;
+        amount.addEventListener('input', function () {
+            const digits = this.value.replace(/[^\d]/g, '');
+            this.value = digits ? Number(digits).toLocaleString('en-US') : '';
+        });
+        limitForm.addEventListener('submit', function (e) {
+            const value = Number(amount.value.replace(/[^\d]/g, ''));
+            if (!value || value <= currentLimit) { e.preventDefault(); return fail(limitForm, 'The requested limit must be higher than your current limit.', amount); }
+            if (reason.value.trim().length < 10) { e.preventDefault(); return fail(limitForm, 'Please tell us briefly why you need a higher limit.', reason); }
+            amount.value = String(value);
+            const btn = limitForm.querySelector('.js-submit');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+        });
+    }
 
     /* Self-contained modal handling (does not depend on loanpro.js load order). */
     function openModal(id) {
