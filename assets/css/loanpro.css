@@ -2957,3 +2957,7 @@ a.profile-tab-btn{text-decoration:none;}
 .cms-hf-preview .hf-footer .hf-logo{color:#fff;font-weight:700;text-transform:none}
 .cms-hf-preview [data-mode="logo"]>span,.cms-hf-preview [data-mode="name"]>img{display:none}
 .cms-brand-preview.is-dark{background:var(--preview-bg,#001284)}
+
+/* Modals whose content is wrapped in a <form>: let the form take the box's
+   flex layout so .modal-body scrolls instead of being clipped. */
+.modal-box > form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;max-height:inherit}

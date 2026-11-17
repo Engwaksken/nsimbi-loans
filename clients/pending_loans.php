@@ -109,7 +109,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
         <div class="title">Pending Loan Requests</div>
         <div class="sub">Requests waiting for approval. You can edit or cancel them until they are reviewed.</div>
     </div>
-    <a href="requesting_loan" class="btn btn-primary btn-sm">
+    <a href="my_loans?request=1" class="btn btn-primary btn-sm">
         <i class="fas fa-plus"></i> Request a Loan
     </a>
 </div>

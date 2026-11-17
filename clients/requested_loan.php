@@ -1,6 +1,6 @@
 <?php
 /**
- * Handles the client "Request a Loan" form (requesting_loan.php).
+ * Handles the "Request New Loan" modal on my_loans.php.
  *
  * Notes:
  *  - loan.client_id stores the user id (customers.user_id), not customers.id.
@@ -22,7 +22,7 @@ require_once __DIR__ . '/../includes/loan_workflow.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
-function redirect_with_message(string $message, string $type = 'error', string $location = 'requesting_loan.php'): void
+function redirect_with_message(string $message, string $type = 'error', string $location = 'my_loans.php?request=1'): void
 {
     $_SESSION['message'] = $message;
     $_SESSION['message_type'] = $type;

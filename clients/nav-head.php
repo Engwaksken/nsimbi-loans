@@ -42,7 +42,7 @@ function cn($p,$c){ return $p===$c?' active':''; }
   <nav class="sidebar-nav">
     <div class="nav-group">My Account</div>
     <a href="dashboard" class="nav-link<?= cn('dashboard.php',$cp) ?>"><span class="ni"><i class="fas fa-th-large"></i></span>Dashboard</a>
-     <a href="requesting_loan"  class="nav-link<?= cn('requesting_loan.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>Request a Loan</a> 
+     <a href="my_loans?request=1" class="nav-link"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>Request a Loan</a> 
     <a href="my_loans"  class="nav-link<?= cn('my_loans.php',$cp)  ?>"><span class="ni"><i class="fas fa-file-invoice-dollar"></i></span>My Loans</a>
     <a href="loan_payments" class="nav-link<?= cn('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payment History</a>
     

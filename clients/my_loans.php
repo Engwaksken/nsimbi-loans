@@ -4,6 +4,7 @@ declare(strict_types=1);
 session_start();
 
 require_once __DIR__ . '/../php/db.php';
+require_once __DIR__ . '/../includes/loan_workflow.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection error.');
@@ -71,6 +72,7 @@ $customerStmt = $conn->prepare("
         c.business_name,
         c.district,
         c.location,
+        " . (loan_table_has_column($conn, 'customers', 'client_category') ? 'c.client_category' : "'business' AS client_category") . ",
         u.fname,
         u.lname,
         u.email,
@@ -137,11 +139,12 @@ $totalBalance = fetch_one(
 
 $totalPaid = fetch_one(
     $conn,
-    "SELECT COALESCE(SUM(amount),0)
-     FROM payments
-     WHERE user_id = ?
-       AND UPPER(status) = 'SUCCESSFUL'",
-    $user_id
+    "SELECT COALESCE(SUM(p.amount),0)
+     FROM payments p
+     INNER JOIN loan l ON l.id = p.loan_id
+     WHERE l.client_id = ?
+       AND UPPER(COALESCE(p.status, '')) NOT IN ('PENDING','FAILED','REJECTED','CANCELLED','REVERSED','DECLINED')",
+    $client_id
 );
 
 $pendingCount = (int)fetch_one(
@@ -163,6 +166,52 @@ $activeLoan = (int)fetch_one(
 );
 
 $can_request_new = ($customer_active === 1 && $activeLoan < 1);
+
+/*
+|--------------------------------------------------------------------------
+| Loan request modal state
+|--------------------------------------------------------------------------
+*/
+$active_loan = null;
+if (!$can_request_new && $customer_active === 1) {
+    $stmt = $conn->prepare("
+        SELECT id, amount, loan_balance, status
+        FROM loan
+        WHERE client_id = ?
+          AND UPPER(status) NOT IN ('CLEARED','REJECTED','CANCELLED')
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->bind_param('i', $client_id);
+    $stmt->execute();
+    $active_loan = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+$can_request      = $can_request_new;
+$is_active        = $customer_active === 1;
+$is_new_onboarded = ($customer['client_category'] ?? 'business') === 'new_onboarded';
+$phone            = trim((string)($customer['phone'] ?? ''));
+$bank_name        = trim((string)($customer['bank_name'] ?? ''));
+$bank_account     = trim((string)($customer['bank_account'] ?? ''));
+
+if ($is_new_onboarded) {
+    $period_options = [];
+    foreach ([8, 9, 10, 11, 12] as $m) {
+        $period_options[$m] = "{$m} months · 3% per month";
+    }
+} else {
+    $period_options = [1 => '1 month · 10% interest', 2 => '2 months · 6.6% interest', 3 => '3 months · 6.6% interest', 6 => '6 months · 6.6% interest'];
+}
+
+// requested_loan.php redirects back here with a message.
+$flash_message = (string)($_SESSION['message'] ?? '');
+$flash_type    = (string)($_SESSION['message_type'] ?? 'info');
+unset($_SESSION['message'], $_SESSION['message_type']);
+
+// A failed submission reopens the form with the error inside it.
+$reopen_with_error = $flash_message !== '' && $flash_type !== 'success' && $can_request;
+$open_request = $reopen_with_error || isset($_GET['request']);
 
 /*
 |--------------------------------------------------------------------------
@@ -416,7 +465,50 @@ if (file_exists(__DIR__ . '/services_check.php')) {
         transform:translateY(0) scale(1);
     }
 }
+
+/* ---------- Loan request modal ---------- */
+.lr-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.lr-step{display:flex;gap:.75rem;align-items:flex-start}
+.lr-step-no{width:30px;height:30px;border-radius:50%;background:var(--primary-xlight);color:var(--primary);font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem}
+.lr-step h4{font-size:.86rem;margin:0 0 .15rem;color:var(--text-dark)}
+.lr-step p{font-size:.78rem;margin:0;color:var(--text-muted)}
+.lr-rates{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.25rem}
+.lr-rate{border:1px solid var(--border);border-radius:var(--r);padding:.5rem .8rem;background:var(--body-bg);font-size:.8rem}
+.lr-rate b{display:block;color:var(--text-dark);font-size:.92rem}
+.lr-form{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:1.4rem}
+.lr-section{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin:0 0 .75rem;display:flex;align-items:center;gap:.4rem}
+.lr-section:not(:first-child){margin-top:1.1rem;padding-top:1.1rem;border-top:1px dashed var(--border)}
+.lr-methods{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem}
+.lr-method{position:relative;border:1.5px solid var(--border);border-radius:var(--r);padding:.7rem .8rem;cursor:pointer;display:flex;align-items:center;gap:.6rem;font-size:.85rem;font-weight:600;color:var(--text-dark);transition:border-color .15s,background .15s}
+.lr-method input{position:absolute;opacity:0;pointer-events:none}
+.lr-method i{color:var(--primary);width:18px;text-align:center}
+.lr-method:has(input:checked){border-color:var(--primary);background:var(--primary-xlight)}
+.lr-method:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:2px}
+.lr-input-prefix{position:relative}
+.lr-input-prefix span{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);font-size:.78rem;font-weight:700;color:var(--text-muted);pointer-events:none}
+.lr-input-prefix .form-control{padding-left:3.1rem;font-weight:700;font-size:1rem}
+.lr-summary{position:sticky;top:0;background:var(--body-bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem}
+.lr-summary h5{margin:0 0 .8rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+.lr-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.84rem;padding:.42rem 0;color:var(--text-body)}
+.lr-row b{color:var(--text-dark);text-align:right}
+.lr-row.total{border-top:1px solid var(--border);margin-top:.35rem;padding-top:.75rem;font-size:.95rem}
+.lr-row.total b{color:var(--primary);font-size:1.1rem}
+.lr-note{font-size:.75rem;color:var(--text-muted);margin-top:.9rem;line-height:1.5}
+.lr-limit{height:6px;background:var(--border);border-radius:6px;overflow:hidden;margin-top:.45rem}
+.lr-limit div{height:100%;width:0;background:var(--primary);transition:width .2s}
+.lr-limit.over div{background:var(--danger)}
+.form-control.is-invalid,.form-select.is-invalid{border-color:var(--danger)}
+#loanRequestModal .modal-box{max-width:900px}
+.lr-blocked{text-align:center;padding:1rem .5rem}
+.lr-blocked i.lr-blocked-ico{font-size:2.2rem;color:var(--warning);display:block;margin-bottom:.8rem}
+.lr-blocked h4{font-size:1rem;margin:0 0 .4rem;color:var(--text-dark)}
+.lr-blocked p{font-size:.85rem;color:var(--text-muted);margin:0}
+@media(max-width:860px){.lr-form,.lr-steps{grid-template-columns:1fr}.lr-summary{position:static}}
 </style>
+
+<?php if ($flash_message !== '' && !$reopen_with_error): ?>
+    <div id="_flash" data-type="<?= esc($flash_type); ?>" style="display:none"><?= esc($flash_message); ?></div>
+<?php endif; ?>
 
 <div class="my-loans-page">
 
@@ -639,146 +731,283 @@ if (file_exists(__DIR__ . '/services_check.php')) {
         </div>
     </div>
 </div>
-<!-- Request Loan Modal -->
+<?php if (!$can_request): ?>
+<!-- Not eligible: explain why instead of a dead button -->
+<div class="modal-overlay" id="loanRequestModal">
+    <div class="modal-box sm">
+        <div class="modal-header">
+            <div class="modal-title">
+                <span class="modal-ico"><i class="fas fa-info-circle"></i></span>
+                New Loan Request
+            </div>
+            <button type="button" class="modal-close" data-close-modal aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="lr-blocked">
+                <i class="fas fa-pause-circle lr-blocked-ico"></i>
+                <?php if (!$is_active): ?>
+                    <h4>Your profile is inactive</h4>
+                    <p>Please contact the administrator to activate your profile before requesting a loan.</p>
+                <?php else: ?>
+                    <h4>You have a loan in progress</h4>
+                    <p>
+                        Loan #<?= (int)$active_loan['id']; ?> (<?= money($active_loan['amount']); ?>) is
+                        <strong><?= esc(strtolower((string)$active_loan['status'])); ?></strong>.
+                        You can request a new loan once it is cleared<?= strtoupper((string)$active_loan['status']) === 'PENDING' ? ', or cancel the pending request' : ''; ?>.
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" data-close-modal>Close</button>
+            <?php if ($active_loan): ?>
+                <a href="<?= strtoupper((string)$active_loan['status']) === 'PENDING' ? 'pending_loans' : 'view_loan.php?id=' . (int)$active_loan['id']; ?>" class="btn btn-primary">View loan</a>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<?php else: ?>
+<!-- Loan Request Modal -->
 <div class="modal-overlay" id="loanRequestModal">
     <div class="modal-box md">
-        <form id="loanRequestForm" class="ajax-loan-form">
-            <input type="hidden" name="action" value="create_loan">
-
+        <form method="post" enctype="multipart/form-data" action="requested_loan.php" id="loanRequestForm" novalidate>
             <div class="modal-header">
-                <h5 class="modal-title">
-                    <span class="modal-ico"><i class="fa fa-plus"></i></span>
-                    Request New Loan
-                </h5>
-
-                <button type="button" class="modal-close" data-close-modal>
-                    <i class="fa fa-times"></i>
+                <div class="modal-title">
+                    <span class="modal-ico"><i class="fas fa-file-invoice-dollar"></i></span>
+                    New Loan Request
+                </div>
+                <button type="button" class="modal-close" data-close-modal aria-label="Close">
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
 
             <div class="modal-body">
-                <div class="alert modal-alert" role="alert"></div>
+                <div class="alert alert-danger" id="lrError" <?= $reopen_with_error ? '' : 'style="display:none"'; ?>>
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span><?= $reopen_with_error ? esc($flash_message) : ''; ?></span>
+                </div>
 
-                <?php if (!$can_request_new): ?>
-                    <div class="alert alert-info">
-                        <i class="fa fa-info-circle"></i>
-                        <span>
-                            You cannot submit a new loan request now because you already have an active, pending, outstanding, or overdue loan.
-                        </span>
-                    </div>
-                <?php endif; ?>
-
-                <div class="loan-form-grid">
+                <div class="lr-form">
                     <div>
+                        <div class="lr-section"><i class="fas fa-calculator"></i> Loan details</div>
+
                         <div class="form-group">
-                            <label class="form-label">Loan Amount</label>
-                            <input
-                                type="text"
-                                class="form-control amount-input"
-                                name="amount"
-                                required
-                                inputmode="decimal"
-                                placeholder="e.g. 100,000"
-                            >
-                            <div class="form-help">Maximum allowed: <?= money($loan_limit); ?></div>
+                            <label for="amount" class="form-label">Amount</label>
+                            <div class="lr-input-prefix">
+                                <span>UGX</span>
+                                <input type="text" class="form-control" id="amount" name="amount" placeholder="0" inputmode="decimal" autocomplete="off" required>
+                            </div>
+                            <?php if ($loan_limit > 0): ?>
+                                <div class="lr-limit" id="lrLimitBar"><div></div></div>
+                                <div class="form-help" id="lrLimitText">Up to <?= money($loan_limit); ?></div>
+                            <?php endif; ?>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Loan Period</label>
-                            <select class="form-select period-input" name="loan_period" required>
-                                <option value="">Select period</option>
-                                <option value="1">1 Month - 10% Interest</option>
-                                <option value="2">2 Months - 6.6% Interest</option>
-                                <option value="3">3 Months - 6.6% Interest</option>
-                                <option value="6">6 Months - 6.6% Interest</option>
+                            <label for="loan_period" class="form-label">Repayment period</label>
+                            <select class="form-select" id="loan_period" name="loan_period" required>
+                                <option value="">Select a period</option>
+                                <?php foreach ($period_options as $months => $label): ?>
+                                    <option value="<?= $months; ?>"><?= esc($label); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label">Disbursement Method</label>
-                            <select class="form-select method-input" name="loan_method" required>
-                                <option value="">Select method</option>
-                                <option value="Mobile Money">Mobile Money</option>
-                                <option value="Bank Transfer">Bank Transfer</option>
-                            </select>
+                        <div class="lr-section"><i class="fas fa-wallet"></i> Receive money via</div>
+
+                        <div class="lr-methods">
+                            <label class="lr-method">
+                                <input type="radio" name="loan_method" value="Mobile Money" <?= $phone !== '' || $bank_account === '' ? 'checked' : ''; ?>>
+                                <i class="fas fa-mobile-alt"></i> Mobile Money
+                            </label>
+                            <label class="lr-method">
+                                <input type="radio" name="loan_method" value="Bank Transfer" <?= $phone === '' && $bank_account !== '' ? 'checked' : ''; ?>>
+                                <i class="fas fa-university"></i> Bank Transfer
+                            </label>
                         </div>
 
-                        <div class="method-mobile" style="display:none;">
+                        <div class="form-group" data-method="Mobile Money">
+                            <label for="phone" class="form-label">Mobile Money number</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" value="<?= esc($phone); ?>" placeholder="e.g. 0772 123456">
+                        </div>
+
+                        <div class="grid-2" data-method="Bank Transfer">
                             <div class="form-group">
-                                <label class="form-label">Mobile Money Number</label>
-                                <input
-                                    type="text"
-                                    class="form-control phone-input"
-                                    name="phone"
-                                    value="<?= esc($customer['phone'] ?? ''); ?>"
-                                    placeholder="Enter mobile money number"
-                                >
+                                <label for="bank_name" class="form-label">Bank name</label>
+                                <input type="text" class="form-control" id="bank_name" name="bank_name" value="<?= esc($bank_name); ?>" placeholder="e.g. Stanbic Bank">
+                            </div>
+                            <div class="form-group">
+                                <label for="bank_account" class="form-label">Account number</label>
+                                <input type="text" class="form-control" id="bank_account" name="bank_account" value="<?= esc($bank_account); ?>" placeholder="e.g. 9030012345678">
                             </div>
                         </div>
 
-                        <div class="method-bank" style="display:none;">
-                            <div class="loan-form-row">
-                                <div class="form-group">
-                                    <label class="form-label">Bank Name</label>
-                                    <input
-                                        type="text"
-                                        class="form-control bank-name-input"
-                                        name="bank_name"
-                                        value="<?= esc($customer['bank_name'] ?? ''); ?>"
-                                    >
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Bank Account</label>
-                                    <input
-                                        type="text"
-                                        class="form-control bank-account-input"
-                                        name="bank_account"
-                                        value="<?= esc($customer['bank_account'] ?? ''); ?>"
-                                    >
-                                </div>
+                        <?php if ($is_new_onboarded): ?>
+                            <div class="lr-section"><i class="fas fa-shield-alt"></i> Collateral</div>
+                            <div class="form-group">
+                                <label for="collateral_description" class="form-label">Description</label>
+                                <textarea class="form-control" id="collateral_description" name="collateral_description" rows="3" required placeholder="e.g. Motorcycle UBF 123K, logbook in my name"></textarea>
                             </div>
-                        </div>
+                            <div class="form-group">
+                                <label for="collateral_document" class="form-label">Evidence</label>
+                                <input class="form-control" type="file" id="collateral_document" name="collateral_document" accept=".jpg,.jpeg,.png,.pdf" required>
+                                <div class="form-help">JPG, PNG or PDF, up to 5 MB.</div>
+                            </div>
+                        <?php endif; ?>
                     </div>
 
-                    <div>
-                        <div class="loan-summary-box">
-                            <h6 class="mb-3">Loan Summary</h6>
-                            <div class="summary-line">
-                                <span>Amount</span>
-                                <span class="summary-amount">UGX 0</span>
-                            </div>
-                            <div class="summary-line">
-                                <span>Rate</span>
-                                <span class="summary-rate">0%</span>
-                            </div>
-                            <div class="summary-line">
-                                <span>Interest</span>
-                                <span class="summary-interest">UGX 0</span>
-                            </div>
-                            <div class="summary-line">
-                                <span>Total Repayable</span>
-                                <span class="summary-total">UGX 0</span>
+                    <aside>
+                        <div class="lr-summary">
+                            <h5>Loan summary</h5>
+                            <div class="lr-row"><span>Amount</span><b id="sumAmount">UGX 0.00</b></div>
+                            <div class="lr-row"><span>Period</span><b id="sumPeriod">-</b></div>
+                            <div class="lr-row"><span>Interest rate</span><b id="sumRate">-</b></div>
+                            <div class="lr-row"><span>Interest</span><b id="sumInterest">UGX 0.00</b></div>
+                            <div class="lr-row total"><span>Total repayable</span><b id="sumTotal">UGX 0.00</b></div>
+                            <div class="lr-note">
+                                <i class="fas fa-info-circle"></i>
+                                Your request is submitted as <strong>PENDING</strong> and reviewed by a loan officer.
+                                You can edit or cancel it from Pending Loans until then.
                             </div>
                         </div>
-                    </div>
+                    </aside>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" data-close-modal>Close</button>
-
-                <button
-                    type="submit"
-                    class="btn btn-primary btn-submit"
-                    <?= !$can_request_new ? 'disabled' : ''; ?>
-                >
-                    Submit Request
+                <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="lrSubmit">
+                    <i class="fas fa-paper-plane"></i> Submit Request
                 </button>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    const LOAN_LIMIT = <?= json_encode($loan_limit); ?>;
+    const IS_NEW_ONBOARDED = <?= json_encode($is_new_onboarded); ?>;
+    const MODAL_ID = 'loanRequestModal';
+
+    const form = document.getElementById('loanRequestForm');
+    const amountInput = document.getElementById('amount');
+    const periodInput = document.getElementById('loan_period');
+    const errorBox = document.getElementById('lrError');
+    const submitBtn = document.getElementById('lrSubmit');
+    const limitBar = document.getElementById('lrLimitBar');
+    const limitText = document.getElementById('lrLimitText');
+    const $id = (id) => document.getElementById(id);
+
+    const toNumber = (v) => parseFloat(String(v || '').replace(/[^\d.]/g, '')) || 0;
+    const money = (v) => 'UGX ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Same rules as requested_loan.php. Returns the total % for the period.
+    function totalRate(period) {
+        if (IS_NEW_ONBOARDED) return period >= 8 && period <= 12 ? 3 * period : 0;
+        if (period === 1) return 10;
+        if ([2, 3, 6].includes(period)) return 6.6;
+        return 0;
+    }
+
+    function method() {
+        const checked = form.querySelector('input[name="loan_method"]:checked');
+        return checked ? checked.value : '';
+    }
+
+    function showError(message, field) {
+        form.querySelectorAll('.is-invalid').forEach((el) => el.classList.remove('is-invalid'));
+        errorBox.querySelector('span').textContent = message || '';
+        errorBox.style.display = message ? '' : 'none';
+        if (field) {
+            field.classList.add('is-invalid');
+            field.focus();
+        }
+        return false;
+    }
+
+    function toggleMethod() {
+        const current = method();
+        form.querySelectorAll('[data-method]').forEach((el) => {
+            el.style.display = el.dataset.method === current ? '' : 'none';
+        });
+    }
+
+    function update() {
+        const amount = toNumber(amountInput.value);
+        const period = parseInt(periodInput.value, 10) || 0;
+        const rate = totalRate(period);
+        const interest = amount * rate / 100;
+
+        $id('sumAmount').textContent = money(amount);
+        $id('sumPeriod').textContent = period ? period + (period === 1 ? ' month' : ' months') : '-';
+        $id('sumRate').textContent = !rate ? '-' : (IS_NEW_ONBOARDED ? '3% × ' + period + ' = ' + rate + '%' : rate + '%');
+        $id('sumInterest').textContent = money(interest);
+        $id('sumTotal').textContent = money(amount + interest);
+
+        if (limitBar && LOAN_LIMIT > 0) {
+            const pct = Math.min(100, amount / LOAN_LIMIT * 100);
+            limitBar.firstElementChild.style.width = pct + '%';
+            limitBar.classList.toggle('over', amount > LOAN_LIMIT);
+            limitText.textContent = amount > LOAN_LIMIT
+                ? 'Above your limit of ' + money(LOAN_LIMIT)
+                : money(Math.max(0, LOAN_LIMIT - amount)) + ' of ' + money(LOAN_LIMIT) + ' still available';
+        }
+    }
+
+    amountInput.addEventListener('input', function () {
+        // Thousands separators while typing.
+        const raw = this.value.replace(/[^\d.]/g, '');
+        if (raw !== '') {
+            const parts = raw.split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            this.value = parts.slice(0, 2).join('.');
+        }
+        this.classList.remove('is-invalid');
+        update();
+    });
+    periodInput.addEventListener('change', update);
+    form.querySelectorAll('input[name="loan_method"]').forEach((r) => r.addEventListener('change', toggleMethod));
+
+    form.addEventListener('submit', function (e) {
+        const amount = toNumber(amountInput.value);
+        const m = method();
+
+        if (amount <= 0) { e.preventDefault(); return showError('Please enter the amount you want to borrow.', amountInput); }
+        if (LOAN_LIMIT > 0 && amount > LOAN_LIMIT) { e.preventDefault(); return showError('The amount cannot exceed your loan limit of ' + money(LOAN_LIMIT) + '.', amountInput); }
+        if (!periodInput.value) { e.preventDefault(); return showError('Please choose a repayment period.', periodInput); }
+        if (m === 'Mobile Money' && !$id('phone').value.trim()) { e.preventDefault(); return showError('Please enter your Mobile Money number.', $id('phone')); }
+        if (m === 'Bank Transfer') {
+            if (!$id('bank_name').value.trim()) { e.preventDefault(); return showError('Please enter your bank name.', $id('bank_name')); }
+            if (!$id('bank_account').value.trim()) { e.preventDefault(); return showError('Please enter your account number.', $id('bank_account')); }
+        }
+        if (IS_NEW_ONBOARDED) {
+            const desc = $id('collateral_description');
+            const file = $id('collateral_document');
+            if (!desc.value.trim()) { e.preventDefault(); return showError('Please describe your collateral.', desc); }
+            if (!file.files.length) { e.preventDefault(); return showError('Please upload collateral evidence.', file); }
+            if (file.files[0].size > 5 * 1024 * 1024) { e.preventDefault(); return showError('Collateral evidence must be 5 MB or smaller.', file); }
+        }
+
+        showError('');
+        amountInput.value = String(amount);
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    });
+
+    // Browser back-button restores the page from cache with the button disabled.
+    window.addEventListener('pageshow', function () {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+    });
+
+    toggleMethod();
+    update();
+})();
+</script>
+<?php endif; ?>
 <!-- Edit Loan Modal -->
 <div class="modal-overlay" id="editLoanModal">
     <div class="modal-box md">
@@ -811,10 +1040,9 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                             <label class="form-label">Loan Period</label>
                             <select class="form-select period-input" name="loan_period" id="edit_loan_period" required>
                                 <option value="">Select period</option>
-                                <option value="1">1 Month - 10% Interest</option>
-                                <option value="2">2 Months - 6.6% Interest</option>
-                                <option value="3">3 Months - 6.6% Interest</option>
-                                <option value="6">6 Months - 6.6% Interest</option>
+                                <?php foreach ($period_options as $months => $label): ?>
+                                    <option value="<?= $months; ?>"><?= esc($label); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
 
@@ -958,9 +1186,13 @@ if (file_exists(__DIR__ . '/services_check.php')) {
         input.value = parts.join('.');
     }
 
+    const IS_NEW_ONBOARDED_CLIENT = <?= json_encode($is_new_onboarded); ?>;
+
+    // Total interest % for the period (matches requested_loan.php / process-loans.php).
     function interestRate(period) {
         period = parseInt(period || 0, 10);
 
+        if (IS_NEW_ONBOARDED_CLIENT) return period >= 8 && period <= 12 ? 3 * period : 0;
         if (period === 1) return 10;
         if (period === 2 || period === 3 || period === 6) return 6.6;
 
@@ -1322,6 +1554,21 @@ if (file_exists(__DIR__ . '/services_check.php')) {
     };
 })();
 </script>
+<?php if ($open_request): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('loanRequestModal');
+    if (modal) {
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+    // Drop ?request=1 so a refresh does not reopen the form.
+    if (window.history && history.replaceState && location.search.indexOf('request=') !== -1) {
+        history.replaceState(null, '', location.pathname);
+    }
+});
+</script>
+<?php endif; ?>
 <?php
 $loanStmt->close();
 require_once __DIR__ . '/footer.php';
