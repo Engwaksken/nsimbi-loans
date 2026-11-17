@@ -1,5 +1,6 @@
 <?php
 require "nav-head.php";
+require_once __DIR__ . "/../includes/loan_workflow.php";
 
 if (!isset($_SESSION['user_id']) && !isset($_SESSION['logged_in'])) {
     $_SESSION['message'] = "Please login first.";
@@ -34,28 +35,27 @@ function money($amount): string
     return 'UGX ' . number_format((float)$amount, 2);
 }
 
-$stmt = $conn->prepare("
-    SELECT
-        id, user_id, gender, dob, phone, bank_name, bank_account, email, client_category,
-        business_name, business_type, business_period, amount_last, amount_this,
-        district, location, nok_name, nok_tel, nok_rel, nin, loan_limit,
-        credit_score, active, created_at
-    FROM customers
-    WHERE user_id = ?
-    LIMIT 1
-");
-
-if (!$stmt) {
-    echo '<div class="page-content"><div class="alert alert-danger">Failed to prepare customer query.</div></div>';
+$customer = null;
+try {
+    $has_client_category = loan_table_has_column($conn, 'customers', 'client_category');
+    $stmt = $conn->prepare("
+        SELECT id, user_id, phone, bank_name, bank_account, business_name,
+               district, location, loan_limit, active,
+               " . ($has_client_category ? "client_category" : "'business' AS client_category") . "
+        FROM customers
+        WHERE user_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $customer = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+} catch (mysqli_sql_exception $e) {
+    error_log('requesting_loan customer lookup failed: ' . $e->getMessage());
+    echo '<div class="alert alert-danger">We could not load your profile right now. Please try again later.</div>';
     require "footer.php";
     exit;
 }
-
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$customer = $result ? $result->fetch_assoc() : null;
-$stmt->close();
 
 if (!$customer) {
     echo '<div class="page-content">
@@ -311,19 +311,19 @@ $can_request = ($active_flag === 1 && !$active_loan);
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <?php if ($is_new_onboarded): ?>
-                        <div class="form-group mt-3">
-                            <label for="collateral_description" class="form-label">Collateral Details (required)</label>
-                            <textarea class="form-control" id="collateral_description" name="collateral_description" rows="3" required <?= !$can_request ? 'disabled' : ''; ?> placeholder="Describe the collateral offered"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="collateral_document" class="form-label">Collateral Evidence (required)</label>
-                            <input class="form-control" type="file" id="collateral_document" name="collateral_document" accept=".jpg,.jpeg,.png,.pdf" required <?= !$can_request ? 'disabled' : ''; ?>>
-                            <small class="form-help">Upload a JPG, PNG, or PDF (maximum 5 MB).</small>
-                        </div>
-                    <?php endif; ?>
+                        <?php if ($is_new_onboarded): ?>
+                            <div class="form-group">
+                                <label for="collateral_description" class="form-label">Collateral Details (required)</label>
+                                <textarea class="form-control" id="collateral_description" name="collateral_description" rows="3" required <?= !$can_request ? 'disabled' : ''; ?> placeholder="Describe the collateral offered"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="collateral_document" class="form-label">Collateral Evidence (required)</label>
+                                <input class="form-control" type="file" id="collateral_document" name="collateral_document" accept=".jpg,.jpeg,.png,.pdf" required <?= !$can_request ? 'disabled' : ''; ?>>
+                                <div class="form-help">Upload a JPG, PNG, or PDF (maximum 5 MB).</div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
 
                     <div>
                         <div class="loan-summary-box">
@@ -408,9 +408,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    const isNewOnboarded = <?= json_encode($is_new_onboarded); ?>;
+
+    // Total interest % for the whole period (matches requested_loan.php).
     function getInterestRate(period) {
         period = parseInt(period || 0, 10);
 
+        if (isNewOnboarded) return period >= 8 && period <= 12 ? 3 * period : 0;
         if (period === 1) return 10;
         if (period === 2 || period === 3 || period === 6) return 6.6;
 
@@ -465,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const total = amount + interest;
 
         summaryAmount.textContent = formatMoney(amount);
-        summaryRate.textContent = rate ? rate + '%' : '0%';
+        summaryRate.textContent = !rate ? '0%' : (isNewOnboarded ? '3% x ' + period + ' months = ' + rate + '%' : rate + '%');
         summaryInterest.textContent = formatMoney(interest);
         summaryTotal.textContent = formatMoney(total);
         summaryPeriod.textContent = period ? period + (period === 1 ? ' Month' : ' Months') : '-';
