@@ -3,7 +3,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script src="../datatables2/datatables.min.js"></script>
-<script src="../assets/js/loanpro.js"></script>
+<script src="<?= htmlspecialchars(function_exists('asset_url') ? asset_url('assets/js/loanpro.js') : '../assets/js/loanpro.js', ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php foreach (($pageScripts ?? []) as $pageScript): ?>
 <script src="<?= htmlspecialchars($pageScript, ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php endforeach; ?>

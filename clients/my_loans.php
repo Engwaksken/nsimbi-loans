@@ -395,6 +395,43 @@ if (file_exists(__DIR__ . '/services_check.php')) {
     max-width: 920px;
 }
 
+/* Keep the header and footer (Submit/Save buttons) on screen and scroll the
+   body instead. dvh = the visible height on phones (excludes browser bars). */
+.modal-overlay .modal-box{
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+}
+.modal-overlay .modal-box > form{
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.modal-overlay .modal-header,
+.modal-overlay .modal-footer{
+    flex-shrink: 0;
+}
+.modal-overlay .modal-body{
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+@media (max-width: 640px){
+    .modal-overlay{ padding: .5rem; }
+    .modal-overlay .modal-box{
+        max-height: calc(100vh - 1rem);
+        max-height: calc(100dvh - 1rem);
+        border-radius: 16px;
+    }
+    .modal-overlay .modal-footer{ padding: .75rem 1rem; }
+    .modal-overlay .modal-footer .btn{ flex: 1; justify-content: center; }
+}
+
 .modal-header{
     display:flex;
     align-items:center;

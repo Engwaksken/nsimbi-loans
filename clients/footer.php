@@ -5,7 +5,7 @@
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="../datatables2/datatables.min.js"></script>
-<script src="../assets/js/loanpro.js"></script>
+<script src="<?= htmlspecialchars(client_asset('assets/js/loanpro.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
 
 <script>
 $(function(){
