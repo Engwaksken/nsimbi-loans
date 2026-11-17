@@ -60,17 +60,37 @@ function table_has_column(mysqli $conn, string $table, string $column): bool
     return (int)($row['total'] ?? 0) > 0;
 }
 
-function get_interest_rate(int $period): float
+/** Allowed repayment periods (months) for a client category. */
+function allowed_loan_periods(bool $is_new_onboarded): array
 {
+    return $is_new_onboarded ? [8, 9, 10, 11, 12] : [1, 2, 3, 6];
+}
+
+/**
+ * Interest rate stored on the loan: per month (3%) for new onboarded clients,
+ * flat for the whole period otherwise. Matches clients/requested_loan.php.
+ */
+function get_interest_rate(int $period, bool $is_new_onboarded = false): float
+{
+    if ($is_new_onboarded) {
+        return 3.0;
+    }
+
     if ($period === 1) {
         return 10.0;
     }
 
-    if ($period === 2 || $period === 3) {
+    if (in_array($period, [2, 3, 6], true)) {
         return 6.6;
     }
 
     return 0.0;
+}
+
+function get_interest_amount(float $amount, int $period, bool $is_new_onboarded = false): float
+{
+    $rate = get_interest_rate($period, $is_new_onboarded);
+    return round($amount * ($rate / 100) * ($is_new_onboarded ? $period : 1), 2);
 }
 
 function get_client(mysqli $conn, int $user_id): array
@@ -84,7 +104,7 @@ function get_client(mysqli $conn, int $user_id): array
             c.bank_account,
             c.loan_limit,
             c.active,
-            c.client_category,
+            " . (loan_table_has_column($conn, 'customers', 'client_category') ? 'c.client_category' : "'business' AS client_category") . ",
             u.fname,
             u.lname,
             u.username,
@@ -114,13 +134,13 @@ function get_client(mysqli $conn, int $user_id): array
     return $client;
 }
 
-function validate_loan_inputs(float $amount, int $loan_period, string $loan_method, string $phone, string $bank_name, string $bank_account, float $loan_limit): void
+function validate_loan_inputs(float $amount, int $loan_period, string $loan_method, string $phone, string $bank_name, string $bank_account, float $loan_limit, bool $is_new_onboarded = false): void
 {
     if ($amount <= 0) {
         json_response(false, 'Please enter a valid loan amount.');
     }
 
-    if (!in_array($loan_period, [1, 2, 3], true)) {
+    if (!in_array($loan_period, allowed_loan_periods($is_new_onboarded), true)) {
         json_response(false, 'Please select a valid loan period.');
     }
 
@@ -207,6 +227,7 @@ $customer_id = (int)$client['id'];
 $client_id   = (int)($client['user_id'] ?? $user_id);
 $loan_limit = (float)($client['loan_limit'] ?? 0);
 $active = (int)($client['active'] ?? 0);
+$is_new_onboarded = ($client['client_category'] ?? 'business') === 'new_onboarded';
 
 if ($active !== 1 && in_array($action, ['create_loan', 'update_pending_loan'], true)) {
     json_response(false, 'Your customer profile is inactive. Please contact administrator.');
@@ -298,7 +319,8 @@ if ($action === 'create_loan') {
         $phone,
         $bank_name,
         $bank_account,
-        $loan_limit
+        $loan_limit,
+        $is_new_onboarded
     );
 
     $check = $conn->prepare("
@@ -326,8 +348,8 @@ if ($action === 'create_loan') {
         json_response(false, 'You already have a pending, outstanding, or overdue loan. Please clear it first.');
     }
 
-    $interest_rate = get_interest_rate($loan_period);
-    $interest = round($amount * ($interest_rate / 100), 2);
+    $interest_rate = get_interest_rate($loan_period, $is_new_onboarded);
+    $interest = get_interest_amount($amount, $loan_period, $is_new_onboarded);
     $loan_balance = round($amount + $interest, 2);
     $status = 'PENDING';
     $due_date = (new DateTime())->modify("+{$loan_period} months")->format('Y-m-d H:i:s');
@@ -461,7 +483,8 @@ if ($action === 'update_pending_loan') {
         $phone,
         $bank_name,
         $bank_account,
-        $loan_limit
+        $loan_limit,
+        $is_new_onboarded
     );
 
     $check = $conn->prepare("
@@ -492,8 +515,8 @@ if ($action === 'update_pending_loan') {
         json_response(false, 'Only pending loans can be edited.');
     }
 
-    $interest_rate = get_interest_rate($loan_period);
-    $interest = round($amount * ($interest_rate / 100), 2);
+    $interest_rate = get_interest_rate($loan_period, $is_new_onboarded);
+    $interest = get_interest_amount($amount, $loan_period, $is_new_onboarded);
     $loan_balance = round($amount + $interest, 2);
     $due_date = (new DateTime())->modify("+{$loan_period} months")->format('Y-m-d H:i:s');
 
@@ -565,6 +588,87 @@ if ($action === 'update_pending_loan') {
         $conn->rollback();
         json_response(false, 'Loan update failed. ' . $e->getMessage());
     }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Cancel (withdraw) a pending loan request
+|--------------------------------------------------------------------------
+*/
+if ($action === 'cancel_pending_loan') {
+    $loan_id = (int)($_POST['loan_id'] ?? 0);
+
+    if ($loan_id <= 0) {
+        json_response(false, 'Invalid loan selected.');
+    }
+
+    $has_document = loan_table_has_column($conn, 'loan', 'collateral_document');
+
+    $conn->begin_transaction();
+
+    try {
+        $stmt = $conn->prepare("
+            SELECT id, status" . ($has_document ? ", collateral_document" : "") . "
+            FROM loan
+            WHERE id = ?
+              AND client_id = ?
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $stmt->bind_param('ii', $loan_id, $client_id);
+        $stmt->execute();
+        $loan = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$loan) {
+            throw new DomainException('Loan not found.');
+        }
+
+        if (strtoupper((string)$loan['status']) !== 'PENDING') {
+            throw new DomainException('Only pending loan requests can be cancelled.');
+        }
+
+        // Remove the staff notification for this request (non-critical).
+        try {
+            $msg = $conn->prepare("DELETE FROM loan_messages WHERE loan_id = ?");
+            $msg->bind_param('i', $loan_id);
+            $msg->execute();
+            $msg->close();
+        } catch (mysqli_sql_exception $e) {
+            error_log('Pending loan cancel: loan_messages cleanup skipped: ' . $e->getMessage());
+        }
+
+        $stmt = $conn->prepare("
+            DELETE FROM loan
+            WHERE id = ?
+              AND client_id = ?
+              AND UPPER(status) = 'PENDING'
+        ");
+        $stmt->bind_param('ii', $loan_id, $client_id);
+        $stmt->execute();
+        $deleted = $stmt->affected_rows;
+        $stmt->close();
+
+        if ($deleted < 1) {
+            throw new DomainException('Loan request could not be cancelled.');
+        }
+
+        $conn->commit();
+    } catch (DomainException $e) {
+        $conn->rollback();
+        json_response(false, $e->getMessage());
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('Pending loan cancel failed: ' . $e->getMessage());
+        json_response(false, 'Loan request could not be cancelled. Please try again.');
+    }
+
+    $document = (string)($loan['collateral_document'] ?? '');
+    if ($document !== '' && preg_match('#^uploads/collateral/[a-f0-9]+\.(jpg|png|pdf)$#', $document)) {
+        @unlink(dirname(__DIR__) . '/' . $document);
+    }
+
+    json_response(true, 'Loan request cancelled.');
 }
 
 /*
