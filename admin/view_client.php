@@ -304,6 +304,10 @@ $reviewCsrf = $_SESSION['review_csrf'];
 $reviewMessage = $_SESSION['review_message'] ?? '';
 $reviewType = $_SESSION['review_message_type'] ?? 'success';
 unset($_SESSION['review_message'], $_SESSION['review_message_type']);
+// Result of edit-client / password-reset submissions (set by includes/view_client_process.php).
+$flashMessage = is_string($_SESSION['message'] ?? null) ? $_SESSION['message'] : '';
+$flashType = $_SESSION['message_type'] ?? 'success';
+unset($_SESSION['message'], $_SESSION['message_type']);
 $docTypes = client_doc_types();
 ?>
 
@@ -319,6 +323,13 @@ $docTypes = client_doc_types();
         </a>
     </div>
 </div>
+
+<?php if ($flashMessage !== ''): ?>
+    <div class="alert <?= $flashType === 'error' ? 'alert-danger' : 'alert-success' ?>" style="margin-bottom:1rem">
+        <i class="fas <?= $flashType === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle' ?>"></i>
+        <span><?= h($flashMessage) ?></span>
+    </div>
+<?php endif; ?>
 
 <?php if (!empty($_GET['success'])): ?>
     <div class="alert alert-success">

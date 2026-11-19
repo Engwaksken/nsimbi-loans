@@ -20,9 +20,9 @@ if (!in_array($sessionRole, [1, 2], true)) {
 /* ============================================================
    HELPERS
 ============================================================ */
-function redirectToClient(int $userId): void
+function redirectToClient(int $userId, string $tab = 'edit'): void
 {
-    header("Location: ../view_client.php?user_id=" . urlencode((string)$userId));
+    header("Location: ../view_client.php?user_id=" . urlencode((string)$userId) . "&tab=" . urlencode($tab));
     exit;
 }
 
@@ -111,83 +111,128 @@ if (!$exists) {
    UPDATE CLIENT
 ============================================================ */
 if ($action === 'update_client') {
-    $fname         = trim((string)($_POST['fname'] ?? ''));
-    $lname         = trim((string)($_POST['lname'] ?? ''));
-    $username      = trim((string)($_POST['username'] ?? ''));
-    $email         = trim((string)($_POST['email'] ?? ''));
-    $phone         = trim((string)($_POST['phone'] ?? ''));
-    $nin           = trim((string)($_POST['nin'] ?? ''));
-    $gender        = trim((string)($_POST['gender'] ?? ''));
-    $dob           = trim((string)($_POST['dob'] ?? ''));
-    $bank_name     = trim((string)($_POST['bank_name'] ?? ''));
-    $bank_account  = trim((string)($_POST['bank_account'] ?? ''));
-    $business_name = trim((string)($_POST['business_name'] ?? ''));
-    $business_type = trim((string)($_POST['business_type'] ?? ''));
-    $business_period = trim((string)($_POST['business_period'] ?? ''));
-    $amount_last   = trim((string)($_POST['amount_last'] ?? ''));
-    $amount_this   = trim((string)($_POST['amount_this'] ?? ''));
-    $district      = trim((string)($_POST['district'] ?? ''));
-    $location      = trim((string)($_POST['location'] ?? ''));
-    $nok_name      = trim((string)($_POST['nok_name'] ?? ''));
-    $nok_tel       = trim((string)($_POST['nok_tel'] ?? ''));
-    $nok_rel       = trim((string)($_POST['nok_rel'] ?? ''));
-    $stock         = trim((string)($_POST['stock'] ?? ''));
-    $license       = trim((string)($_POST['license'] ?? ''));
-    $loanLimitRaw  = trim((string)($_POST['loan_limit'] ?? ''));
-    $creditScoreRaw = trim((string)($_POST['credit_score'] ?? ''));
-    $active        = isset($_POST['active']) ? (int)$_POST['active'] : 0;
+    /*
+     * Only fields actually present in the submitted form are written.
+     * The edit form does not carry every column (gender, dob, bank details,
+     * uploaded stock/license files, credit score, ...). Blanking those on
+     * every save wiped client data and made the whole update fail (and roll
+     * back) on strict columns, so edits never appeared to save.
+     */
+    $posted = static function (string $key): ?string {
+        return array_key_exists($key, $_POST) ? trim((string)$_POST[$key]) : null;
+    };
 
-    if ($fname === '' || $lname === '' || $username === '') {
+    $fname    = $posted('fname');
+    $lname    = $posted('lname');
+    $username = $posted('username');
+    $email    = $posted('email');
+
+    if ((string)$fname === '' || (string)$lname === '' || (string)$username === '') {
         failAndRedirect($user_id, "First name, last name, and username are required.");
     }
 
-    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if ($email !== null && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         failAndRedirect($user_id, "Invalid email address.");
     }
 
-    if ($dob !== '') {
+    // column => [bind type, value]
+    $userSets = [
+        'fname'    => ['s', $fname],
+        'lname'    => ['s', $lname],
+        'username' => ['s', $username],
+    ];
+    $customerSets = [];
+
+    if ($email !== null) {
+        $userSets['email']     = ['s', $email];
+        $customerSets['email'] = ['s', $email];
+    }
+
+    $textColumns = [
+        'gender', 'phone', 'bank_name', 'bank_account', 'business_name', 'business_type',
+        'business_period', 'district', 'location', 'nok_name', 'nok_tel', 'nok_rel', 'nin',
+    ];
+    foreach ($textColumns as $col) {
+        $val = $posted($col);
+        if ($val !== null) {
+            $customerSets[$col] = ['s', $val];
+        }
+    }
+
+    $dob = $posted('dob');
+    if ($dob !== null && $dob !== '') {
         $dobCheck = DateTime::createFromFormat('Y-m-d', $dob);
         if (!$dobCheck || $dobCheck->format('Y-m-d') !== $dob) {
             failAndRedirect($user_id, "Invalid date of birth.");
         }
-    } else {
-        $dob = null;
+        $customerSets['dob'] = ['s', $dob];
     }
 
     try {
-        $loan_limit = cleanMoney($loanLimitRaw);
-        $amount_last_value = cleanMoney($amount_last);
-        $amount_this_value = cleanMoney($amount_this);
+        foreach (['loan_limit', 'amount_last', 'amount_this'] as $col) {
+            $val = $posted($col);
+            if ($val !== null) {
+                $customerSets[$col] = ['d', cleanMoney($val)];
+            }
+        }
     } catch (Throwable $e) {
         failAndRedirect($user_id, $e->getMessage());
     }
 
-    $credit_score = 0;
-    if ($creditScoreRaw !== '') {
+    $creditScoreRaw = $posted('credit_score');
+    if ($creditScoreRaw !== null && $creditScoreRaw !== '') {
         if (!is_numeric($creditScoreRaw)) {
             failAndRedirect($user_id, "Invalid credit score.");
         }
-
-        $credit_score = max(0, min(100, (int)$creditScoreRaw));
+        $customerSets['credit_score'] = ['i', max(0, min(100, (int)$creditScoreRaw))];
     }
 
-    $active = $active === 1 ? 1 : 0;
+    $activeRaw = $posted('active');
+    if ($activeRaw !== null) {
+        $active = ((int)$activeRaw === 1) ? 1 : 0;
+        $userSets['status']     = ['i', $active];
+        $customerSets['active'] = ['i', $active];
+    }
+
+    $runUpdate = static function (mysqli $conn, string $table, string $keyCol, array $sets, int $id): void {
+        if (!$sets) {
+            return;
+        }
+
+        $types  = '';
+        $values = [];
+        $parts  = [];
+        foreach ($sets as $col => [$type, $value]) {
+            $parts[]  = "`$col` = ?";
+            $types   .= $type;
+            $values[] = $value;
+        }
+        $types   .= 'i';
+        $values[] = $id;
+
+        $stmt = $conn->prepare("UPDATE `$table` SET " . implode(', ', $parts) . " WHERE `$keyCol` = ? LIMIT 1");
+        if (!$stmt) {
+            throw new RuntimeException("Failed to prepare $table update: " . $conn->error);
+        }
+
+        $stmt->bind_param($types, ...$values);
+
+        if (!$stmt->execute()) {
+            $error = $stmt->error;
+            $stmt->close();
+            throw new RuntimeException("Failed to update client profile: " . $error);
+        }
+
+        $stmt->close();
+    };
 
     mysqli_begin_transaction($conn);
 
     try {
-        $checkUsername = $conn->prepare("
-            SELECT id
-            FROM user
-            WHERE username = ? 
-            AND id <> ?
-            LIMIT 1
-        ");
-
+        $checkUsername = $conn->prepare("SELECT id FROM user WHERE username = ? AND id <> ? LIMIT 1");
         if (!$checkUsername) {
             throw new RuntimeException("Failed to prepare username check.");
         }
-
         $checkUsername->bind_param("si", $username, $user_id);
         $checkUsername->execute();
         $usernameExists = $checkUsername->get_result()->fetch_assoc();
@@ -197,19 +242,11 @@ if ($action === 'update_client') {
             throw new RuntimeException("Username already exists.");
         }
 
-        if ($email !== '') {
-            $checkEmail = $conn->prepare("
-                SELECT id
-                FROM user
-                WHERE email = ? 
-                AND id <> ?
-                LIMIT 1
-            ");
-
+        if ($email !== null && $email !== '') {
+            $checkEmail = $conn->prepare("SELECT id FROM user WHERE email = ? AND id <> ? LIMIT 1");
             if (!$checkEmail) {
                 throw new RuntimeException("Failed to prepare email check.");
             }
-
             $checkEmail->bind_param("si", $email, $user_id);
             $checkEmail->execute();
             $emailExists = $checkEmail->get_result()->fetch_assoc();
@@ -220,102 +257,8 @@ if ($action === 'update_client') {
             }
         }
 
-        $userStmt = $conn->prepare("
-            UPDATE user
-            SET 
-                fname = ?, 
-                lname = ?, 
-                username = ?, 
-                email = ?, 
-                status = ?
-            WHERE id = ?
-            LIMIT 1
-        ");
-
-        if (!$userStmt) {
-            throw new RuntimeException("Failed to prepare user update.");
-        }
-
-        $userStmt->bind_param(
-            "ssssii",
-            $fname,
-            $lname,
-            $username,
-            $email,
-            $active,
-            $user_id
-        );
-
-        if (!$userStmt->execute()) {
-            throw new RuntimeException("Failed to update user details.");
-        }
-
-        $userStmt->close();
-
-        $customerStmt = $conn->prepare("
-            UPDATE customers
-            SET 
-                gender = ?,
-                dob = ?,
-                phone = ?,
-                bank_name = ?,
-                bank_account = ?,
-                email = ?,
-                business_name = ?,
-                business_type = ?,
-                business_period = ?,
-                amount_last = ?,
-                amount_this = ?,
-                district = ?,
-                location = ?,
-                nok_name = ?,
-                nok_tel = ?,
-                nok_rel = ?,
-                nin = ?,
-                loan_limit = ?,
-                stock = ?,
-                license = ?,
-                credit_score = ?,
-                active = ?
-            WHERE user_id = ?
-        ");
-
-        if (!$customerStmt) {
-            throw new RuntimeException("Failed to prepare customer update: " . $conn->error);
-        }
-
-        $customerStmt->bind_param(
-            "sssssssssddssssssdssiii",
-            $gender,
-            $dob,
-            $phone,
-            $bank_name,
-            $bank_account,
-            $email,
-            $business_name,
-            $business_type,
-            $business_period,
-            $amount_last_value,
-            $amount_this_value,
-            $district,
-            $location,
-            $nok_name,
-            $nok_tel,
-            $nok_rel,
-            $nin,
-            $loan_limit,
-            $stock,
-            $license,
-            $credit_score,
-            $active,
-            $user_id
-        );
-
-        if (!$customerStmt->execute()) {
-            throw new RuntimeException("Failed to update client profile: " . $customerStmt->error);
-        }
-
-        $customerStmt->close();
+        $runUpdate($conn, 'user', 'id', $userSets, $user_id);
+        $runUpdate($conn, 'customers', 'user_id', $customerSets, $user_id);
 
         mysqli_commit($conn);
 
@@ -323,6 +266,7 @@ if ($action === 'update_client') {
 
     } catch (Throwable $e) {
         mysqli_rollback($conn);
+        error_log('view_client_process update_client failed: ' . $e->getMessage());
         flash($e->getMessage(), "error");
     }
 
@@ -332,7 +276,7 @@ if ($action === 'update_client') {
 /* ============================================================
    RESET PASSWORD
 ============================================================ */
-if ($action === 'reset_password') {
+if ($action === 'reset_password' || $action === 'update_password') {
     $new_password     = (string)($_POST['new_password'] ?? '');
     $confirm_password = (string)($_POST['confirm_password'] ?? '');
 
