@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+// Keep notices or accidental output from included files out of the JSON API response.
+ob_start();
+
 /*
 |--------------------------------------------------------------------------
 | Session
@@ -35,7 +38,11 @@ function loanRespond(
     string $message,
     array $data = [],
     int $statusCode = 200
-): never {
+): void {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
     http_response_code($statusCode);
 
     echo json_encode(
@@ -51,6 +58,13 @@ function loanRespond(
 
     exit;
 }
+
+// Database/schema checks before the transaction can also throw under strict
+// mysqli reporting. Convert those failures to JSON instead of returning HTML.
+set_exception_handler(static function (Throwable $exception): void {
+    error_log('[New Loan] Unhandled request error: ' . $exception->getMessage());
+    loanRespond(false, 'The loan could not be created due to a server error.', [], 500);
+});
 
 function loanPostString(string $key, string $default = ''): string
 {
@@ -736,7 +750,7 @@ try {
 
     loanRespond(
         false,
-        $exception->getMessage(),
+        'The loan could not be created due to a server error.',
         [],
         500
     );

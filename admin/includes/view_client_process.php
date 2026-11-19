@@ -285,7 +285,7 @@ if ($action === 'update_client') {
         }
 
         $customerStmt->bind_param(
-            "sssssssssddssssssdsiiii",
+            "sssssssssddssssssdssiii",
             $gender,
             $dob,
             $phone,

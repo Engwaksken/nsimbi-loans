@@ -101,7 +101,12 @@ try {
     $values[] = $user_id;
 
     $stmt = $conn->prepare("UPDATE customers SET " . implode(', ', $sets) . " WHERE user_id = ? LIMIT 1");
-    $stmt->bind_param($types, ...$values);
+    $bindValues = [&$types];
+    foreach ($values as &$value) {
+        $bindValues[] = &$value;
+    }
+    unset($value);
+    call_user_func_array([$stmt, 'bind_param'], $bindValues);
     $stmt->execute();
     $stmt->close();
 } catch (Throwable $e) {
