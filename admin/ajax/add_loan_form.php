@@ -477,7 +477,7 @@ $totalEligible += count($organisations);
 <form
     id="form-add-loan"
     method="post"
-    action="/loans/admin/includes/process-new-loan.php"
+    action="includes/process-new-loan.php"
     autocomplete="off"
     onsubmit="
         event.preventDefault();
@@ -613,12 +613,14 @@ $totalEligible += count($organisations);
                     result = JSON.parse(responseText);
                 } catch (error) {
                     console.error(
-                        'Invalid server response:',
+                        'Invalid server response (HTTP ' + response.status + ' from ' + response.url + '):',
                         responseText
                     );
 
                     throw new Error(
-                        'The server returned an invalid response. Check the PHP error log.'
+                        response.status === 404
+                            ? 'The loan service could not be found (HTTP 404). Please refresh the page and try again.'
+                            : 'The server returned an unexpected response (HTTP ' + response.status + '). Check the PHP error log.'
                     );
                 }
 
@@ -650,7 +652,7 @@ $totalEligible += count($organisations);
 
                 window.location.href =
                     result.redirect ||
-                    '/loans/admin/pending_loans.php';
+                    'pending_loans.php';
             }, 800);
         })
         .catch(function (error) {

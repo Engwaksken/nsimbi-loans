@@ -22,25 +22,27 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-require_once __DIR__ . '/../db.php';
-require_once __DIR__ . '/../services_check.php';
-require_once __DIR__ . '/../../includes/loan_workflow.php';
-
-date_default_timezone_set('Africa/Kampala');
-
 /*
 |--------------------------------------------------------------------------
 | Utility functions
 |--------------------------------------------------------------------------
 */
+$GLOBALS['loanResponded'] = false;
+
 function loanRespond(
     bool $success,
     string $message,
     array $data = [],
     int $statusCode = 200
 ): void {
+    $GLOBALS['loanResponded'] = true;
+
     while (ob_get_level() > 0) {
         ob_end_clean();
+    }
+
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
     }
 
     http_response_code($statusCode);
@@ -65,6 +67,48 @@ set_exception_handler(static function (Throwable $exception): void {
     error_log('[New Loan] Unhandled request error: ' . $exception->getMessage());
     loanRespond(false, 'The loan could not be created due to a server error.', [], 500);
 });
+
+// Fatal errors and exit() calls inside included files (for example a failed
+// database connection) would otherwise send plain text or HTML to the form.
+register_shutdown_function(static function (): void {
+    if (!empty($GLOBALS['loanResponded'])) {
+        return;
+    }
+
+    $error  = error_get_last();
+    $output = '';
+
+    while (ob_get_level() > 0) {
+        $output .= (string)ob_get_clean();
+    }
+
+    error_log(
+        '[New Loan] Request ended without a JSON response.' .
+        ($error ? ' Last error: ' . $error['message'] . ' in ' . $error['file'] . ':' . $error['line'] : '') .
+        ($output !== '' ? ' Output: ' . substr(trim(strip_tags($output)), 0, 500) : '')
+    );
+
+    $GLOBALS['loanResponded'] = true;
+
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+    }
+
+    echo json_encode([
+        'success' => false,
+        'message' => 'The loan could not be created due to a server error.',
+    ]);
+});
+
+require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../../includes/loan_workflow.php';
+
+date_default_timezone_set('Africa/Kampala');
+
+if (empty($_SESSION['logged_in'])) {
+    loanRespond(false, 'Your session has expired. Please sign in again.', [], 401);
+}
 
 function loanPostString(string $key, string $default = ''): string
 {
@@ -278,7 +322,7 @@ switch ($clientType) {
         if ($loanPeriod < 24 || $loanPeriod > 36) {
             loanRespond(
                 false,
-                'Startup loans must have a period between 24 and 36 months (2 to 3 years).'
+                ucfirst($clientType) . ' loans must have a period between 24 and 36 months (2 to 3 years).'
             );
         }
 
@@ -362,20 +406,25 @@ switch ($clientType) {
         break;
 
     case 'startup':
+        // Match the form, which supports startups.id or startups.startup_id.
+        $startupIdColumn = loanTableHasColumn($conn, 'startups', 'id')
+            ? 'id'
+            : 'startup_id';
+
         $clientSql = "
             SELECT
-                s.id AS client_id,
+                s.{$startupIdColumn} AS client_id,
                 COALESCE(
                     NULLIF(s.company_name, ''),
                     NULLIF(s.ceo_name, ''),
-                    CONCAT('Startup #', s.id)
+                    CONCAT('Startup #', s.{$startupIdColumn})
                 ) AS client_name,
                 0 AS loan_limit,
                 COALESCE(s.phone, '') AS phone,
                 COALESCE(s.email, '') AS email,
                 COALESCE(s.company_name, '') AS organisation
             FROM startups s
-            WHERE s.id = ?
+            WHERE s.{$startupIdColumn} = ?
             LIMIT 1
         ";
         break;
@@ -727,9 +776,7 @@ try {
             'loan_period'   => $loanPeriod,
             'status'        => $status,
             'due_date'      => $dueDate,
-
-           
-           'redirect' => '/loans/admin/pending_loans.php',
+            'redirect'      => 'pending_loans.php',
         ],
         201
     );
