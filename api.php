@@ -839,7 +839,7 @@ function updateClient(mysqli $conn, array $user, array $input): void
     }
 
     // Same loan assessment as the website and admin (includes/loan_assessment.php).
-    $assessment = loan_assessment_limit($business_type, $amount_last_raw, $amount_this_raw);
+    $assessment = loan_assessment_limit($business_type, $amount_last_raw, $amount_this_raw, $client_id);
     $credit_score = $assessment["score"];
     $loan_limit = $assessment["limit"];
 
@@ -1293,6 +1293,119 @@ function payLoan(mysqli $conn, array $user, array $input): void
     }
 }
 
+/**
+ * Credit documents: the client uploads a mobile money statement, utility bill
+ * or business records. The active AI provider reads it and staff approve the
+ * result before the score/limit change (includes/credit_scoring.php).
+ *
+ * Accepts either:
+ *  - multipart files named mobileMoneyTransactions, personalRecords (utility
+ *    bill) and/or businessRecords (one or more in one request), or
+ *  - doc_type (mobile_money|utility_bill|business_records) with a file field
+ *    "file", or base64 "file_base64" (+ optional "file_name").
+ */
+function uploadCreditEvidence(mysqli $conn, array $user, array $input): void
+{
+    $userId = (int)$user["sub"];
+    $fieldToType = [];
+    foreach (CREDIT_EVIDENCE_TYPES as $type => $meta) {
+        $fieldToType[$meta["field"]] = $type;
+    }
+
+    $uploads = []; // [doc_type, bytes, name]
+    foreach ($fieldToType as $field => $type) {
+        $f = $_FILES[$field] ?? null;
+        if (is_array($f) && (int)($f["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if ((int)$f["error"] !== UPLOAD_ERR_OK || !is_uploaded_file((string)$f["tmp_name"])) {
+                respond(["status" => "error", "message" => "The {$type} upload did not complete. Please try again."], 422);
+            }
+            $uploads[] = [$type, (string)file_get_contents((string)$f["tmp_name"]), (string)($f["name"] ?? "")];
+        }
+    }
+
+    $docType = clean($input["doc_type"] ?? "");
+    if ($docType !== "") {
+        if (isset($_FILES["file"]) && (int)($_FILES["file"]["error"] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && is_uploaded_file((string)$_FILES["file"]["tmp_name"])) {
+            $uploads[] = [$docType, (string)file_get_contents((string)$_FILES["file"]["tmp_name"]), (string)($_FILES["file"]["name"] ?? "")];
+        } elseif (($b64 = (string)($input["file_base64"] ?? "")) !== "") {
+            $b64 = preg_replace("#^data:[^;]+;base64,#", "", $b64);
+            $bytes = base64_decode((string)$b64, true);
+            if ($bytes === false) {
+                respond(["status" => "error", "message" => "The file could not be read."], 422);
+            }
+            $uploads[] = [$docType, $bytes, clean($input["file_name"] ?? "")];
+        }
+    }
+
+    if (!$uploads) {
+        respond(["status" => "error", "message" => "Choose at least one document to upload."], 422);
+    }
+
+    $results = [];
+    foreach ($uploads as [$type, $bytes, $name]) {
+        try {
+            $row = credit_evidence_submit($conn, $userId, $type, $bytes, $name, "app");
+            $results[] = credit_evidence_public($row);
+        } catch (DomainException $e) {
+            respond(["status" => "error", "message" => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            error_log("uploadCreditEvidence: " . $e->getMessage());
+            respond(["status" => "error", "message" => "The document could not be uploaded. Please try again."], 500);
+        }
+    }
+
+    $stmt = $conn->prepare("SELECT credit_score, loan_limit FROM customers WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $c = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+
+    respond([
+        "status" => "success",
+        "message" => count($results) === 1
+            ? "Document received. Our team will review it and your credit score will update once it is approved."
+            : "Documents received. Our team will review them and your credit score will update once they are approved.",
+        "creditScore" => (float)($c["credit_score"] ?? 0),
+        "credit_score" => (float)($c["credit_score"] ?? 0),
+        "loan_limit" => (float)($c["loan_limit"] ?? 0),
+        "documents" => $results,
+    ]);
+}
+
+/** The client's credit documents and how their score is made up. */
+function getCreditEvidence(mysqli $conn, array $user): void
+{
+    $userId = (int)$user["sub"];
+    $docs = array_map("credit_evidence_public", credit_evidence_for_user($conn, $userId));
+    $profile = credit_profile_for_user($conn, $userId);
+
+    $stmt = $conn->prepare("SELECT credit_score, loan_limit FROM customers WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $c = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+
+    $types = [];
+    foreach (CREDIT_EVIDENCE_TYPES as $type => $meta) {
+        $types[] = ["doc_type" => $type, "label" => $meta["label"], "hint" => $meta["hint"], "field" => $meta["field"]];
+    }
+
+    respond([
+        "status" => "success",
+        "data" => [
+            "credit_score" => (float)($c["credit_score"] ?? 0),
+            "loan_limit" => (float)($c["loan_limit"] ?? 0),
+            "document_types" => $types,
+            "documents" => $docs,
+            "components" => $profile ? array_values(array_map(
+                static fn($k, $v) => ["key" => $k, "label" => $v["label"], "score" => $v["score"], "weight" => round($v["weight"], 2), "from_document" => $v["from_evidence"]],
+                array_keys($profile["components"]),
+                $profile["components"]
+            )) : [],
+        ],
+    ]);
+}
+
 // Bookkeeping (ledger) actions - soft-loaded from books_api.php.
 require_once __DIR__ . '/books_api.php';
 
@@ -1324,6 +1437,15 @@ switch ($action) {
 
     case "get_credit_score":
         getCreditScore($conn, requireAuth());
+        break;
+
+    case "upload_credit_evidence":
+    case "upload_credit_documents":
+        uploadCreditEvidence($conn, requireAuth(), $input);
+        break;
+
+    case "get_credit_evidence":
+        getCreditEvidence($conn, requireAuth());
         break;
 
     case "request_loan":

@@ -76,10 +76,12 @@ function rl_load(mysqli $conn, ?array $onlyIds = null): array
     $rows = [];
     $res = $conn->query($sql);
     while ($res && ($r = $res->fetch_assoc())) {
+        // Includes approved credit documents (verified income, document scores).
         $r['calc'] = loan_assessment_limit(
             (string)($r['business_type'] ?? ''),
             (string)($r['amount_last'] ?? ''),
-            (string)($r['amount_this'] ?? '')
+            (string)($r['amount_this'] ?? ''),
+            (int)$r['user_id']
         );
         $r['saved_limit'] = (float)($r['loan_limit'] ?? 0);
         $r['saved_score'] = is_numeric($r['credit_score'] ?? null) ? (float)$r['credit_score'] : null;

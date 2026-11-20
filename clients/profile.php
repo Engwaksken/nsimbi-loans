@@ -4,6 +4,7 @@ $phead = "My Profile";
 require "nav-head.php";
 require_once __DIR__ . '/../includes/loan_workflow.php';
 require_once __DIR__ . '/../includes/client_documents.php';
+require_once __DIR__ . '/../includes/credit_scoring.php';
 
 /*
  * Client profile. Edits go through modals:
@@ -120,6 +121,19 @@ $other_docs     = array_values(array_filter($documents, static fn($d) => $d['doc
 $docs_missing   = client_docs_missing_required($doc_summary);
 $limit_pending  = client_limit_pending($limit_requests);
 $limit_last     = $limit_requests[0] ?? null;
+// Credit documents (mobile money, utility bill, business records) and score make-up.
+$credit_docs = [];
+$credit_profile = null;
+try {
+    $credit_docs = credit_evidence_for_user($conn, $user_id);
+    $credit_profile = credit_profile_for_user($conn, $user_id);
+} catch (Throwable $e) {
+    error_log('profile credit evidence load failed: ' . $e->getMessage());
+}
+$credit_latest = [];
+foreach ($credit_docs as $cd) {
+    $credit_latest[$cd['doc_type']] ??= $cd;
+}
 $docs_attention = count($docs_missing) + count(array_filter($documents, static fn($d) => $d['status'] === 'rejected'));
 if (empty($_SESSION['docs_csrf'])) {
     $_SESSION['docs_csrf'] = bin2hex(random_bytes(16));
@@ -205,6 +219,22 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 .pf-doc-sub{font-size:.75rem;color:var(--text-muted);margin-top:.15rem}
 .pf-doc-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.4rem;padding-top:.7rem;border-top:1px dashed var(--border)}
 #uploadDocModal .modal-body{min-height:0}
+.cr-score{display:flex;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,var(--primary),#2563eb);color:#fff;border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem}
+.cr-score>div{flex:1;min-width:150px}.cr-score .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;opacity:.85}
+.cr-score .val{font-size:2rem;font-weight:800;line-height:1.1}.cr-score .val small{font-size:1rem;opacity:.8}.cr-score .val.sm{font-size:1.3rem}
+.cr-parts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.7rem;margin-bottom:.5rem}
+.cr-part{border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:.7rem .8rem}
+.cr-part-top{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:.35rem}
+.cr-bar{height:7px;border-radius:99px;background:#e5e7eb;overflow:hidden}.cr-bar div{height:100%;background:var(--primary)}
+.cr-part-sub{font-size:.72rem;color:var(--text-muted);margin-top:.35rem}
+.cr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem}
+.cr-card{border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:1rem;display:flex;flex-direction:column;gap:.4rem;margin:0}
+.cr-card-head{display:flex;gap:.7rem;align-items:flex-start}.cr-card-head>i{font-size:1.4rem;color:var(--primary);margin-top:.15rem}
+.cr-card-head strong{display:block}.cr-hint{font-size:.82rem;color:var(--text-muted);margin:0}
+.cr-note{font-size:.8rem;color:var(--danger,#b91c1c);margin:0}
+.cr-msg{font-size:.82rem}.cr-msg.ok{color:#15803d}.cr-msg.err{color:var(--danger,#b91c1c)}
+.cr-history{display:flex;flex-direction:column;gap:.4rem}
+.cr-row{display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;border-bottom:1px solid var(--border,#eef0f3);padding:.4rem 0;font-size:.86rem}
 .pf-subhead{margin:1.4rem 0 .6rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);display:flex;align-items:center;gap:.4rem}
 .pf-subhead span{background:var(--body-bg);border:1px solid var(--border);border-radius:9px;padding:0 .45rem;font-size:.68rem}
 .pf-empty-box{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem;border:1px dashed var(--border);border-radius:12px;font-size:.8rem;color:var(--text-muted)}
@@ -304,6 +334,7 @@ $tabs = [
 if ($has_business) {
     $tabs['business'] = ['Business', 'fa-briefcase'];
 }
+$tabs['credit'] = ['Credit score', 'fa-chart-line'];
 $tabs['documents'] = ['Documents', 'fa-folder-open'];
 $tabs['security'] = ['Security', 'fa-lock'];
 
@@ -543,6 +574,77 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                             </form>
                         <?php endif; ?>
                     <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+
+        <section class="profile-tab-pane" id="pane-credit" role="tabpanel" aria-labelledby="tab-credit" hidden>
+            <div class="pf-pane-head">
+                <div><h3>Raise your credit score</h3><p>Upload proof of your income and stability. Our team checks each document; once approved, your credit score and loan limit are updated.</p></div>
+            </div>
+
+            <div class="cr-score">
+                <div>
+                    <div class="lbl">Your credit score</div>
+                    <div class="val"><?= esc(rtrim(rtrim(number_format((float)($profile['credit_score'] ?? 0), 1), '0'), '.')); ?><small>/10</small></div>
+                </div>
+                <div>
+                    <div class="lbl">Loan limit</div>
+                    <div class="val sm"><?= (float)($profile['loan_limit'] ?? 0) > 0 ? money($profile['loan_limit']) : 'Not set'; ?></div>
+                </div>
+            </div>
+
+            <?php if ($credit_profile): ?>
+                <h4 class="pf-subhead"><i class="fas fa-balance-scale"></i> What makes up your score</h4>
+                <div class="cr-parts">
+                    <?php foreach ($credit_profile['components'] as $comp): ?>
+                        <?php if ($comp['weight'] <= 0) continue; ?>
+                        <div class="cr-part">
+                            <div class="cr-part-top"><span><?= esc($comp['label']); ?></span><strong><?= esc(number_format($comp['score'], 1)); ?></strong></div>
+                            <div class="cr-bar"><div style="width:<?= (int)round($comp['score'] * 10); ?>%"></div></div>
+                            <div class="cr-part-sub">Counts for <?= (int)round($comp['weight'] * 100); ?>%<?= $comp['from_evidence'] ? '' : ' | upload a document to improve'; ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <h4 class="pf-subhead"><i class="fas fa-upload"></i> Upload a document</h4>
+            <div class="cr-grid">
+                <?php foreach (CREDIT_EVIDENCE_TYPES as $ctype => $cmeta): ?>
+                    <?php
+                    $last = $credit_latest[$ctype] ?? null;
+                    [$stText, $stClass] = $last ? credit_evidence_status_label((string)$last['status']) : ['Not uploaded', 'badge-muted'];
+                    ?>
+                    <form class="cr-card js-credit-upload" enctype="multipart/form-data" novalidate>
+                        <input type="hidden" name="csrf" value="<?= esc($docs_csrf); ?>">
+                        <input type="hidden" name="doc_type" value="<?= esc($ctype); ?>">
+                        <div class="cr-card-head">
+                            <i class="fas <?= esc($cmeta['icon']); ?>"></i>
+                            <div><strong><?= esc($cmeta['label']); ?></strong><span class="badge <?= esc($stClass); ?>"><?= esc($stText); ?></span></div>
+                        </div>
+                        <p class="cr-hint"><?= esc($cmeta['hint']); ?></p>
+                        <?php if ($last && $last['status'] === 'rejected' && !empty($last['review_note'])): ?>
+                            <p class="cr-note"><i class="fas fa-info-circle"></i> <?= esc($last['review_note']); ?></p>
+                        <?php endif; ?>
+                        <input type="file" name="file" class="form-control" accept="application/pdf,image/jpeg,image/png,image/webp" required>
+                        <small class="text-muted">PDF or a clear photo (JPG, PNG), up to 10 MB.</small>
+                        <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="fas fa-upload"></i> Upload</button>
+                        <div class="cr-msg" role="status" aria-live="polite"></div>
+                    </form>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ($credit_docs): ?>
+                <h4 class="pf-subhead"><i class="fas fa-history"></i> Your uploads</h4>
+                <div class="cr-history">
+                    <?php foreach (array_slice($credit_docs, 0, 15) as $cd): ?>
+                        <?php [$stText, $stClass] = credit_evidence_status_label((string)$cd['status']); ?>
+                        <div class="cr-row">
+                            <span><?= esc(CREDIT_EVIDENCE_TYPES[$cd['doc_type']]['label'] ?? $cd['doc_type']); ?></span>
+                            <span class="text-muted"><?= esc(fmt_date($cd['created_at'], 'd M Y')); ?></span>
+                            <span class="badge <?= esc($stClass); ?>"><?= esc($stText); ?></span>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </section>
@@ -976,6 +1078,29 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
     if (window.history && history.replaceState && location.search) history.replaceState(null, '', location.pathname + location.hash);
     <?php endif; ?>
 })();
+document.querySelectorAll('.js-credit-upload').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var msg = form.querySelector('.cr-msg');
+        var btn = form.querySelector('button[type=submit]');
+        var input = form.querySelector('input[type=file]');
+        if (!input.files.length) { msg.className = 'cr-msg err'; msg.textContent = 'Please choose a file first.'; return; }
+        if (input.files[0].size > 10 * 1024 * 1024) { msg.className = 'cr-msg err'; msg.textContent = 'The file is too large. The maximum size is 10 MB.'; return; }
+        var old = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reading your document...';
+        msg.className = 'cr-msg'; msg.textContent = 'This can take up to a minute. Please keep this page open.';
+        fetch('credit_evidence_action.php', { method: 'POST', body: new FormData(form), credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { success: false, message: 'Unexpected response. Please try again.' }; }); })
+            .then(function (data) {
+                msg.className = 'cr-msg ' + (data.success ? 'ok' : 'err');
+                msg.textContent = data.message || (data.success ? 'Uploaded.' : 'Upload failed.');
+                if (data.success) { setTimeout(function () { location.hash = 'credit'; location.reload(); }, 2500); }
+            })
+            .catch(function () { msg.className = 'cr-msg err'; msg.textContent = 'Network error. Please try again.'; })
+            .finally(function () { btn.disabled = false; btn.innerHTML = old; });
+    });
+});
 </script>
 
 <?php require "footer.php"; ?>

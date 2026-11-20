@@ -84,55 +84,8 @@ $logfetch = mysqli_fetch_assoc($clog);
         <h6 class="mb-0">Upload Transaction Documents</h6>
       </div>
       <div class="card-body pt-4 p-3">
-<form method="post" action="https://api.nsimbiimpact.com/loan-application" enctype="multipart/form-data">
-  <div class="row">
-    <div class="col-md-12">
-      <div class="form-group">
-        <label for="mobileMoneyTransactions">Mobile Money Transactions</label>
-        <input type="file" class="form-control" id="mobileMoneyTransactions"name="mobileMoneyTransactions" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" >
-        <small class="form-text text-muted">Accepted formats: PDF, JPG, PNG, DOC, DOCX</small>
-      </div>
-    </div>
-  </div>
-  
-  <div class="row">
-    <div class="col-md-12">
-      <div class="form-group">
-        <label for="personalRecords">Utility Bill</label>
-        <input type="file" class="form-control" id="personalRecords" name="personalRecords" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" placeholder="Upload Utility Bill Transactions">
-        <small class="form-text text-muted">Accepted formats: PDF, JPG, PNG, DOC, DOCX</small>
-      </div>
-    </div>
-  </div>
-  
-  <div class="row mt-2">
-    <div class="col-md-12">
-      <div class="form-group">
-        <label for="businessRecords">Business Transaction</label>
-        <input type="file" class="form-control" id="businessRecords"name="businessRecords" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" placeholder="Upload Business Transactions">
-        <small class="form-text text-muted">Accepted formats: PDF, JPG, PNG, DOC, DOCX</small>
-      </div>
-    </div>
-  </div>
-  
- <input type="hidden" name="id" value="<?= htmlspecialchars($lfect['user_id'], ENT_QUOTES, 'UTF-8') ?>">
-
-<input type="hidden" name="name" value="<?= htmlspecialchars(($lfect['fname'] . ' ' . $lfect['lname']), ENT_QUOTES, 'UTF-8') ?>">
-
-<input type="hidden" name="businessName" value="<?= htmlspecialchars($lfect['business_name'], ENT_QUOTES, 'UTF-8') ?>">
-
-<input type="hidden" name="businessType" value="<?= htmlspecialchars($lfect['business_type'], ENT_QUOTES, 'UTF-8') ?>">
-
-<input type="hidden" name="esoRecommendation" value="<?= htmlspecialchars($lfect['credit_score'], ENT_QUOTES, 'UTF-8') ?>">
-  
-  <div class="row mt-3">
-    <div class="col-md-12">
-      <div class="form-group text-end">
-        <input type="submit" name="submit" class="btn bg-gradient-info" value="Upload Documents">
-      </div>
-    </div>
-  </div>
-</form>
+<p class="text-sm mb-3">Upload your mobile money statement, utility bill and business records to raise your credit score and loan limit. Our team reviews each document before your score changes.</p>
+<a href="profile.php#credit" class="btn bg-gradient-info"><i class="fas fa-upload me-1"></i> Upload documents</a>
       </div>
     </div>
   </div>

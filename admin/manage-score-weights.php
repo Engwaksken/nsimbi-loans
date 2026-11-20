@@ -342,7 +342,7 @@ $canEditWeights = ((int)($_SESSION['role'] ?? 0) === 1);
     <div class="page-header mb-4">
         <div>
             <div class="title">Manage Score Weights</div>
-            <div class="sub">Configure how each credit scoring component contributes to the final score.</div>
+            <div class="sub">Each weight sets how much a component counts in a client's credit score. Business Sector uses the business-type score; Mobile Money Transactions, Personal Records (utility bill) and Business Records use approved credit documents (Loans &gt; Credit Documents). A component without an approved document counts at the business-type score, so documents can only raise a score. ESO Recommendation is not collected yet and also counts at the business-type score.</div>
         </div>
     </div>
 

@@ -196,8 +196,23 @@ if (!function_exists('loan_assessment')) {
      *
      * @return array{score:int, limit:float, last:float, this:float, has_turnover:bool}
      */
-    function loan_assessment_limit(string $businessType, $amountLast, $amountThis): array
+    function loan_assessment_limit(string $businessType, $amountLast, $amountThis, ?int $userId = null): array
     {
+        // With a client ID, approved credit documents (statements, bills,
+        // records) also count: see includes/credit_scoring.php.
+        if ($userId !== null && $userId > 0 && function_exists('credit_profile_compute') && ($db = credit_db()) !== null) {
+            $p = credit_profile_compute($db, $businessType, $amountLast, $amountThis, credit_approved_evidence($db, $userId));
+            if ($p['verified_income'] > 0 || $p['score'] > $p['base_score']) {
+                return [
+                    'score'        => $p['score'],
+                    'limit'        => $p['limit'],
+                    'last'         => $p['income_used'],
+                    'this'         => $p['income_used'],
+                    'has_turnover' => $p['has_turnover'],
+                ];
+            }
+        }
+
         [$score] = loan_assessment_business_score($businessType);
         [$last] = loan_assessment_parse_turnover((string)$amountLast);
         [$this_] = loan_assessment_parse_turnover((string)$amountThis);
@@ -236,8 +251,10 @@ if (!function_exists('loan_assessment')) {
         $calc = loan_assessment_limit(
             $businessType,
             (string)($customer['amount_last'] ?? ''),
-            (string)($customer['amount_this'] ?? '')
+            (string)($customer['amount_this'] ?? ''),
+            isset($customer['user_id']) ? (int)$customer['user_id'] : null
         );
+        $score = $calc['score'];
         $hasTurnover = $calc['has_turnover'];
         $formulaLimit = $calc['limit'];
 
@@ -327,6 +344,7 @@ if (!function_exists('loan_assessment')) {
             return 0.0;
         }
         $a = loan_assessment([
+            'user_id'       => (int)($row['client_id'] ?? 0),
             'business_type' => (string)$row['assess_business_type'],
             'amount_last'   => (string)($row['assess_amount_last'] ?? ''),
             'amount_this'   => (string)($row['assess_amount_this'] ?? ''),
@@ -355,3 +373,5 @@ if (!function_exists('loan_assessment')) {
         return is_numeric($plain) ? loan_assessment_money((float)$plain) : 'UGX ' . $value;
     }
 }
+
+require_once __DIR__ . '/credit_scoring.php';

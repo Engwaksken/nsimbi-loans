@@ -88,6 +88,13 @@ try {
 } catch (Throwable $ignored) {
   // Table appears once an admin opens the website CMS.
 }
+$credit_docs_pending = 0;
+try {
+  $cd = $conn->query("SELECT COUNT(*) AS c FROM credit_evidence WHERE status IN ('analyzed','failed')");
+  if ($cd) $credit_docs_pending = (int)$cd->fetch_assoc()['c'];
+} catch (Throwable $ignored) {
+  // Table appears with the first credit document upload.
+}
 // [label, [[href, icon, text, badge, badge class, other pages that mark it active]]]
 $navSections = [
   'loans' => ['Loans', [
@@ -97,6 +104,7 @@ $navSections = [
     ['overdue.php', 'fa-clock', 'Overdue'],
     ['cleared.php', 'fa-check-circle', 'Cleared'],
     ['rejected_loans.php', 'fa-times-circle', 'Rejected'],
+    ['credit_evidence.php', 'fa-file-invoice-dollar', 'Credit Documents', $credit_docs_pending, 'red', ['credit_evidence_file.php']],
     ['loan_products.php', 'fa-box-open', 'Loan Products'],
   ]],
   'people' => ['People', [
@@ -121,6 +129,7 @@ $navSections = [
     ['mailbox.php', 'fa-envelope-open-text', 'Mailbox', (int)$mail_unread, 'red'],
     ['loan_messages.php', 'fa-envelope', 'Notifications', (int)$new_messages, ''],
     ['recalculate_limits.php', 'fa-calculator', 'Recalculate Loan Limits'],
+    ['ai_settings.php', 'fa-microchip', 'AI Settings'],
     ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
     ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
     ['profile.php', 'fa-user-circle', 'My Profile'],

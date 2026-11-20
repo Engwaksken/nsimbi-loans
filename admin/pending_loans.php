@@ -1007,6 +1007,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
         $assessment = loan_assessment(
             !empty($loan['customer_table_id']) ? [
+                'user_id'         => (int)($loan['customer_user_id'] ?? 0),
                 'credit_score'    => $loan['assess_credit_score'] ?? 0,
                 'loan_limit'      => $loan['assess_loan_limit'] ?? 0,
                 'business_type'   => $loan['assess_business_type'] ?? '',
