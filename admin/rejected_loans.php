@@ -4,6 +4,7 @@ declare(strict_types=1);
 require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
+require_once __DIR__ . "/../includes/loan_assessment.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -134,7 +135,10 @@ $customerSql = "
         COALESCE(c.email, u.email) AS client_email,
         c.phone AS client_phone,
         c.business_name AS organization_name,
-        c.location AS client_location
+        c.location AS client_location,
+        c.business_type AS assess_business_type,
+        c.amount_last AS assess_amount_last,
+        c.amount_this AS assess_amount_this
     FROM loan l
     INNER JOIN customers c ON l.client_id = c.user_id
     INNER JOIN user u ON c.user_id = u.id
@@ -151,7 +155,10 @@ $memberSql = "
         COALESCE(m.work_email, u.email) AS client_email,
         m.phone AS client_phone,
         m.employer AS organization_name,
-        m.department AS client_location
+        m.department AS client_location,
+        NULL AS assess_business_type,
+        NULL AS assess_amount_last,
+        NULL AS assess_amount_this
     FROM loan l
     INNER JOIN members m ON l.client_id = m.user_id
     INNER JOIN user u ON m.user_id = u.id
@@ -168,7 +175,10 @@ $startupSql = "
         st.email AS client_email,
         st.phone AS client_phone,
         st.company_name AS organization_name,
-        st.company_location AS client_location
+        st.company_location AS client_location,
+        NULL AS assess_business_type,
+        NULL AS assess_amount_last,
+        NULL AS assess_amount_this
     FROM loan l
     INNER JOIN startups st ON l.client_id = st.id
     WHERE {$whereStatus}
@@ -293,6 +303,7 @@ foreach ($loans as $loan) {
 ?>
 
 <style>
+.ai-recommend-sm { margin-top: .25rem; font-size: .78rem; font-weight: 600; color: #1d4ed8; white-space: nowrap; }
 .stats-grid{
     display:grid;
     grid-template-columns:repeat(4,minmax(0,1fr));
@@ -707,7 +718,13 @@ foreach ($loans as $loan) {
 
                                 </td>
 
-                                <td><?= money($loan['amount'] ?? 0) ?></td>
+                                <td>
+                                    <?= money($loan['amount'] ?? 0) ?>
+                                    <?php $aiAmount = ai_recommended_amount($loan); ?>
+                                    <?php if ($aiAmount > 0): ?>
+                                        <div class="ai-recommend-sm"><i class="fas fa-robot"></i> AI recommended: <?= money($aiAmount) ?></div>
+                                    <?php endif; ?>
+                                </td>
 
                                 <td><?= money($loan['interest'] ?? 0) ?></td>
 

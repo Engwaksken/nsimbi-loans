@@ -104,28 +104,10 @@ function saveSignature(string $base64, string $dir, bool $required = false): ?st
 
 function creditScore(string $type): int
 {
-    $scores = [
-        'Beauty salon'             => 6,
-        'Education'                => 8,
-        'Electronics'              => 4,
-        'Farming'                  => 5,
-        'Healthcare'               => 9,
-        'Market stall'             => 8,
-        'Poultry keeping'          => 4,
-        'Restaurant'               => 7,
-        'Retail shop'              => 6,
-        'Sell second hand clothes' => 4,
-        'Tailoring'                => 7,
-        'Transportation'           => 5,
-    ];
-
-    foreach ($scores as $key => $val) {
-        if (stripos($type, $key) !== false || stripos($key, $type) !== false) {
-            return $val;
-        }
-    }
-
-    return 5;
+    // One scoring table for website, admin, import and the loan pages.
+    // Business types not in the table get the default score of 3.
+    require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+    return loan_assessment_business_score($type)[0];
 }
 
 function parseAmountRange(string $str): float

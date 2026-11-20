@@ -5,6 +5,7 @@ $phead = 'Pending Loan Top-Ups';
 require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
+require_once __DIR__ . "/../includes/loan_assessment.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -56,10 +57,14 @@ $sql = "
         l.loan_balance AS current_balance,
         l.due_date AS current_due_date,
         u.fname, u.lname, u.email AS client_email, u.phone AS client_phone,
+        c.business_type AS assess_business_type,
+        c.amount_last AS assess_amount_last,
+        c.amount_this AS assess_amount_this,
         officer.fname AS officer_fname, officer.lname AS officer_lname
     FROM loan_topup_requests t
     INNER JOIN loan l ON l.id = t.loan_id
     LEFT JOIN user u ON u.id = t.client_id
+    LEFT JOIN customers c ON c.user_id = t.client_id
     LEFT JOIN user officer ON officer.id = t.assigned_officer_id
     WHERE t.status IN ('PENDING', 'INFO_PROVIDED')
     ORDER BY t.id DESC
@@ -130,6 +135,19 @@ foreach ($topups as $t) {
 .review-tabs { display: flex; gap: .35rem; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; flex-wrap: wrap; }
 .review-tab-btn { border: none; background: transparent; padding: .5rem 1rem; font-size: .8rem; font-weight: 700; color: #64748b; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; cursor: pointer; }
 .review-tab-btn:hover { background: #f1f5f9; }
+.ai-recommend {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .75rem;
+    padding: .5rem .9rem;
+    border-radius: 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    font-size: .9rem;
+}
+.ai-recommend strong { color: #1d4ed8; }
 .review-tab-btn.tab-approve.active { color: #16a34a; border-bottom-color: #16a34a; background: #f0fdf4; }
 .review-tab-btn.tab-reject.active { color: #dc2626; border-bottom-color: #dc2626; background: #fef2f2; }
 .review-tab-btn.tab-info.active { color: #0369a1; border-bottom-color: #0369a1; background: #f0f9ff; }
@@ -232,6 +250,11 @@ foreach ($topups as $t) {
                     </div>
                 </div>
             </div>
+
+            <?php $aiAmount = ai_recommended_amount($topup); ?>
+            <?php if ($aiAmount > 0): ?>
+                <div class="ai-recommend"><i class="fas fa-robot"></i> AI recommended amount: <strong><?= money($aiAmount) ?></strong></div>
+            <?php endif; ?>
 
             <?php if (!empty($topup['request_notes'])): ?>
                 <div class="fs-xs text-muted mt-2">Requester notes: <?= nl2br(h($topup['request_notes'])) ?></div>

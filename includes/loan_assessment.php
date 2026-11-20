@@ -31,6 +31,8 @@ if (!function_exists('loan_assessment')) {
         'Farming'                  => 5,
         'Transportation'           => 5,
         'Electronics'              => 4,
+        'Poultry farming'          => 4,
+        'Poultry keeping'          => 4,
         'Poultry'                  => 4,
         'Sell second hand clothes' => 4,
     ]);
@@ -51,13 +53,39 @@ if (!function_exists('loan_assessment')) {
     function loan_assessment_business_score(string $type): array
     {
         $type = trim($type);
-        if ($type !== '') {
+        if ($type === '') {
+            return [LOAN_ASSESSMENT_DEFAULT_SCORE, null];
+        }
+
+        // 1. Exact name (any case).
+        foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
+            if (strcasecmp($type, $name) === 0) {
+                return [$score, $name];
+            }
+        }
+
+        // 2. Longest table name found inside the type, so "Poultry Farming"
+        //    matches "Poultry" (4), not "Farming" (5).
+        $best = null;
+        foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
+            if (stripos($type, $name) !== false && ($best === null || strlen($name) > strlen($best))) {
+                $best = $name;
+            }
+        }
+        if ($best === null && strlen($type) >= 4) {
+            // 3. A shortened type such as "Retail" or "Healthc".
             foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
-                if (stripos($type, $name) !== false || stripos($name, $type) !== false) {
-                    return [$score, $name];
+                if (stripos($name, $type) !== false) {
+                    $best = $name;
+                    break;
                 }
             }
         }
+        if ($best !== null) {
+            return [LOAN_ASSESSMENT_SCORES[$best], $best];
+        }
+
+        // Not in the table: default score.
         return [LOAN_ASSESSMENT_DEFAULT_SCORE, null];
     }
 
@@ -191,6 +219,23 @@ if (!function_exists('loan_assessment')) {
             'amount_last'     => (string)($customer['amount_last'] ?? ''),
             'amount_this'     => (string)($customer['amount_this'] ?? ''),
         ];
+    }
+
+    /**
+     * AI recommended amount for a list row that carries assess_business_type /
+     * assess_amount_last / assess_amount_this (customers only). 0 = nothing to show.
+     */
+    function ai_recommended_amount(array $row): float
+    {
+        if (!array_key_exists('assess_business_type', $row) || $row['assess_business_type'] === null) {
+            return 0.0;
+        }
+        $a = loan_assessment([
+            'business_type' => (string)$row['assess_business_type'],
+            'amount_last'   => (string)($row['assess_amount_last'] ?? ''),
+            'amount_this'   => (string)($row['assess_amount_this'] ?? ''),
+        ], (float)($row['amount'] ?? 0));
+        return $a['available'] ? (float)$a['limit'] : 0.0;
     }
 
     function loan_assessment_money(float $amount): string
