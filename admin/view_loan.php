@@ -407,7 +407,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
         <tr><td>Recommendation</td><td><?= h($assessment['headline']) ?><br><?= h($assessment['detail']) ?></td></tr>
         <?php if ($assessment['available']): ?>
             <tr><td>Credit Score</td><td><?= h($assessment['score']) ?>/10 (<?= h($assessment['score_band']) ?>)</td></tr>
-            <tr><td>Recommended Limit</td><td><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Not calculated' ?></td></tr>
+            <tr><td>Formula Limit</td><td><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Cannot calculate' ?></td></tr>
+            <tr><td>Saved Limit / Score</td><td><?= $assessment['saved_limit'] > 0 ? money($assessment['saved_limit']) : 'None' ?> / <?= $assessment['saved_score'] !== null ? h(loan_assessment_num($assessment['saved_score'])) : 'None' ?></td></tr>
+            <?php foreach ($assessment['warnings'] as $warning): ?>
+                <tr><td>Warning</td><td><?= h($warning) ?></td></tr>
+            <?php endforeach; ?>
             <tr><td>Business Type</td><td><?= h($assessment['business_type'] ?: 'Not given') ?></td></tr>
             <tr><td>Turnover (last / this month)</td><td><?= h(loan_assessment_turnover($assessment['amount_last'])) ?> / <?= h(loan_assessment_turnover($assessment['amount_this'])) ?></td></tr>
         <?php endif; ?>
@@ -751,6 +755,17 @@ require 'nav-head.php';
 .tone-warning .assessment-verdict { background: #fffbeb; color: #92400e; }
 .tone-danger  .assessment-verdict { background: #fef2f2; color: #991b1b; }
 .assessment-verdict strong { display: block; font-size: 1.05rem; margin-bottom: .2rem; }
+.assessment-warnings {
+    list-style: none;
+    margin: .75rem 0 0;
+    padding: .7rem 1rem;
+    border-radius: 12px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    font-size: .88rem;
+}
+.assessment-warnings li + li { margin-top: .3rem; }
 
 @media (max-width: 992px) {
     .loan-kpi-grid,
@@ -927,6 +942,14 @@ require 'nav-head.php';
                     <div><?= h($assessment['detail']) ?></div>
                 </div>
 
+                <?php if (!empty($assessment['warnings'])): ?>
+                    <ul class="assessment-warnings">
+                        <?php foreach ($assessment['warnings'] as $warning): ?>
+                            <li><i class="fas fa-triangle-exclamation me-1"></i><?= h($warning) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+
                 <?php if ($assessment['available']): ?>
                     <div class="info-grid mt-3">
                         <div class="info-item">
@@ -934,8 +957,16 @@ require 'nav-head.php';
                             <span class="info-value"><?= money($assessment['requested']) ?></span>
                         </div>
                         <div class="info-item">
-                            <span class="info-label">Recommended Limit</span>
-                            <span class="info-value"><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Not calculated' ?></span>
+                            <span class="info-label">Formula Limit (recommended)</span>
+                            <span class="info-value"><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Cannot calculate' ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Saved Limit / Saved Score</span>
+                            <span class="info-value">
+                                <?= $assessment['saved_limit'] > 0 ? money($assessment['saved_limit']) : 'None' ?>
+                                &middot;
+                                <?= $assessment['saved_score'] !== null ? h(loan_assessment_num($assessment['saved_score'])) : 'None' ?>
+                            </span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Business Type</span>
@@ -955,8 +986,10 @@ require 'nav-head.php';
                         </div>
                     </div>
                     <p class="fs-sm text-muted mt-3 mb-0">
-                        The score comes from the business type; the limit is the average declared turnover
-                        plus (score &times; 10%). This is guidance only &mdash; the final decision is yours.
+                        Recalculated from what the client declared: score from business type; limit = average
+                        turnover + average &times; (score &divide; 10). Website ranges use last &times; 0.9 and
+                        this &times; 1.1. Saved values are shown only for comparison. Guidance only &mdash; the
+                        final decision is yours.
                     </p>
                 <?php endif; ?>
             </div>

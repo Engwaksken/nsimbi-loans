@@ -641,6 +641,11 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 .assess-strip.tone-success { background: #f0fdf4; border-left-color: #16a34a; color: #166534; }
 .assess-strip.tone-warning { background: #fffbeb; border-left-color: #f59e0b; color: #92400e; }
 .assess-strip.tone-danger  { background: #fef2f2; border-left-color: #dc2626; color: #991b1b; }
+.assess-warn {
+    margin-top: .3rem;
+    font-size: .78rem;
+    color: #92400e;
+}
 .assess-score {
     display: inline-block;
     margin-left: .4rem;
@@ -1098,6 +1103,9 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         <span class="assess-score">Score <?= h(rtrim(rtrim(number_format($assessment['score'], 1), '0'), '.')) ?>/10 &middot; <?= h($assessment['score_band']) ?></span>
                     <?php endif; ?>
                     <div class="fs-xs"><?= h($assessment['detail']) ?></div>
+                    <?php foreach ($assessment['warnings'] as $warning): ?>
+                        <div class="assess-warn"><i class="fas fa-triangle-exclamation"></i> <?= h($warning) ?></div>
+                    <?php endforeach; ?>
                 </div>
             </div>
 
