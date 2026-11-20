@@ -417,7 +417,7 @@ function pageUrl(int $p, string $filter, string $search): string
     </div>
 </div>
 
-<div class="stats-grid mb-3">
+<div class="stats-grid stats-compact mb-3">
     <div class="stat-card c-blue">
         <div class="stat-head">
             <div class="stat-ico c-blue"><i class="fas fa-file-invoice-dollar"></i></div>
@@ -452,7 +452,7 @@ function pageUrl(int $p, string $filter, string $search): string
     </div>
 </div>
 
-<div class="stats-grid g3 mb-4">
+<div class="stats-grid g3 stats-compact mb-4">
     <div class="stat-card c-blue">
         <div class="stat-head">
             <div class="stat-ico c-blue"><i class="fas fa-users"></i></div>

@@ -465,7 +465,7 @@ if ($es) {
 </style>
 
 <!-- == MAIN STATS ====================================== -->
-<div class="stats-grid">
+<div class="stats-grid stats-compact">
 
     <a href="loans.php" class="stat-card c-blue">
         <div class="stat-head">
@@ -578,7 +578,7 @@ if ($es) {
 </div>
 
 <!-- == NEW LOAN ELIGIBILITY STATS ===================== -->
-<div class="stats-grid g3">
+<div class="stats-grid g3 stats-compact">
     <a href="add_loan.php?type=customer" class="stat-card c-blue">
         <div class="stat-head">
             <div class="stat-ico c-blue"><i class="fas fa-users"></i></div>

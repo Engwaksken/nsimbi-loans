@@ -197,6 +197,20 @@ img{max-width:100%;display:block}
 .stat-value.sm{font-size:1.08rem}
 .stat-label{font-size:.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.045em}
 .stat-foot{margin-top:.65rem;padding-top:.6rem;border-top:1px solid var(--border-light);font-size:.69rem;color:var(--text-muted);display:flex;align-items:center;gap:.3rem}
+/* Compact statistic cards (dashboard, all loans). Same columns, smaller cards,
+   amounts kept on one line so every card in a row is the same height. */
+.stats-grid.stats-compact{gap:.75rem;margin-bottom:1rem;align-items:stretch}
+.stats-compact .stat-card{padding:.75rem .85rem .7rem;min-width:0;height:100%}
+.stats-compact .stat-card::before{height:3px}
+.stats-compact .stat-head{margin-bottom:.45rem;align-items:center}
+.stats-compact .stat-ico{width:32px;height:32px;border-radius:8px;font-size:.85rem}
+.stats-compact .stat-badge{font-size:.6rem;padding:1px 6px;white-space:nowrap}
+.stats-compact .stat-value,.stats-compact .stat-value.sm{font-size:clamp(.98rem,1.15vw,1.18rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.15rem}
+.stats-compact .stat-label{font-size:.64rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stats-compact .stat-foot{margin-top:auto;padding-top:.45rem;font-size:.65rem}
+.stats-compact .stat-label + .stat-foot{margin-top:.5rem}
+@media(max-width:1000px){.stats-grid.stats-compact,.stats-grid.g3.stats-compact{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.stats-grid.stats-compact,.stats-grid.g3.stats-compact{gap:.55rem}.stats-compact .stat-card{padding:.65rem .7rem}.stats-compact .stat-value,.stats-compact .stat-value.sm{font-size:.92rem}.stats-compact .stat-badge{display:none}}
 
 /* -- CARD ---------------------------------------------------- */
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-xs);overflow:hidden}
