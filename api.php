@@ -718,6 +718,10 @@ function getClient(mysqli $conn, array $user): void
     }
 
     $row["email"] = !empty($row["user_email"]) ? $row["user_email"] : ($row["customer_email"] ?? "");
+    // Older app versions read credit_score as a whole number and fail on 8.9,
+    // so send it rounded; credit_score_exact has the decimal (0-10).
+    $row["credit_score_exact"] = round((float)($row["credit_score"] ?? 0), 1);
+    $row["credit_score"] = (int)round((float)($row["credit_score"] ?? 0));
     $row["due_date_formatted"] = formatDateOnly($row["due_date_formatted"] ?? $row["due_date"] ?? "");
     $row["next_payment"] = formatDateOnly($row["next_payment"] ?? $row["due_date"] ?? "");
 
