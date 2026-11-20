@@ -8,7 +8,18 @@ declare(strict_types=1);
  * (website profile or app). Staff can also send the files a client gave at
  * registration (trading licence, supporting documents) to be read. The active
  * AI provider reads each document; the rules below turn what it read into a
- * 0-10 score. Staff approve or reject each result. Only APPROVED evidence counts.
+ * 0-10 score. Only APPROVED evidence counts.
+ *
+ * Automatic decisions (System > AI Settings, on by default):
+ *   - not the expected kind of document: rejected, the client is told why
+ *   - name does not match, signs of editing, the same file uploaded by another
+ *     client, or a loan limit rise above the set amount: held for staff
+ *   - otherwise: approved, score and limit updated, client notified
+ *
+ * Duplicates: every file is fingerprinted (SHA-256). The same client cannot
+ * upload the same file twice (unless the earlier read failed); the same file
+ * from a different client is held for staff as possible fraud. Original files
+ * are kept (storage/client_documents/<user>/) for audits and disputes.
  *
  * Components (weights from System > Manage Score Weights, scaled to 1.00):
  *   sectorRisk               business-type score (includes/loan_assessment.php)
@@ -50,6 +61,12 @@ require_once __DIR__ . '/file_links.php';
 const CREDIT_EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 const CREDIT_EVIDENCE_DAILY_LIMIT = 10;
 const CREDIT_UTILITY_MONTHS = 6;
+const CREDIT_AUTO_DEFAULT_CAP = 2000000;
+
+/** Thrown when a client uploads a file they already uploaded. */
+class CreditDuplicateException extends DomainException
+{
+}
 
 const CREDIT_COMPONENTS = [
     'sectorRisk'              => ['label' => 'Business sector', 'doc' => null, 'kind' => 'base'],
@@ -143,12 +160,92 @@ function credit_ensure_schema(mysqli $conn): void
             KEY idx_status (status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
-    // Column added after the first release.
-    $res = $conn->query("SHOW COLUMNS FROM credit_evidence LIKE 'source_ref'");
-    if ($res && $res->num_rows === 0) {
-        $conn->query('ALTER TABLE credit_evidence ADD COLUMN source_ref VARCHAR(255) NULL AFTER source, ADD KEY idx_source_ref (user_id, source_ref)');
+    // Columns added after the first release.
+    $added = [
+        'source_ref' => 'ADD COLUMN source_ref VARCHAR(255) NULL AFTER source, ADD KEY idx_source_ref (user_id, source_ref)',
+        'file_hash'  => 'ADD COLUMN file_hash CHAR(64) NULL AFTER file_size, ADD KEY idx_file_hash (file_hash)',
+        'auto_note'  => 'ADD COLUMN auto_note VARCHAR(500) NULL AFTER review_note',
+    ];
+    foreach ($added as $col => $ddl) {
+        $res = $conn->query("SHOW COLUMNS FROM credit_evidence LIKE '{$col}'");
+        if ($res && $res->num_rows === 0) {
+            $conn->query('ALTER TABLE credit_evidence ' . $ddl);
+            if ($col === 'file_hash') {
+                credit_backfill_hashes($conn);
+            }
+        }
     }
     $done = true;
+}
+
+/** Fingerprint documents stored before duplicate checks existed. */
+function credit_backfill_hashes(mysqli $conn): void
+{
+    $rows = $conn->query('SELECT id, file_path FROM credit_evidence WHERE file_hash IS NULL')->fetch_all(MYSQLI_ASSOC);
+    $stmt = $conn->prepare('UPDATE credit_evidence SET file_hash = ? WHERE id = ?');
+    foreach ($rows as $r) {
+        $path = client_docs_storage_root() . '/' . $r['file_path'];
+        if (!is_file($path)) {
+            continue;
+        }
+        $hash = (string)hash_file('sha256', $path);
+        $id = (int)$r['id'];
+        $stmt->bind_param('si', $hash, $id);
+        $stmt->execute();
+    }
+    $stmt->close();
+}
+
+/* ---------------- Settings (automatic approval) ---------------- */
+
+function credit_settings_table(mysqli $conn): bool
+{
+    static $ok = null;
+    if ($ok === null) {
+        $t = $conn->query("SHOW TABLES LIKE 'settings'");
+        $ok = $t && $t->num_rows > 0;
+    }
+    return $ok;
+}
+
+function credit_setting(mysqli $conn, string $key, string $default): string
+{
+    if (!credit_settings_table($conn)) {
+        return $default;
+    }
+    try {
+        $stmt = $conn->prepare('SELECT `value` FROM settings WHERE `key` = ? LIMIT 1');
+        $stmt->bind_param('s', $key);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return $row ? (string)$row['value'] : $default;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function credit_setting_set(mysqli $conn, string $key, string $value): void
+{
+    if (!credit_settings_table($conn)) {
+        throw new RuntimeException('The settings table is missing.');
+    }
+    $stmt = $conn->prepare('INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)');
+    $stmt->bind_param('ss', $key, $value);
+    $stmt->execute();
+    $stmt->close();
+}
+
+/** Approve and reject documents automatically (default on). */
+function credit_auto_enabled(mysqli $conn): bool
+{
+    return credit_setting($conn, 'credit_auto_approve', '1') === '1';
+}
+
+/** Hold for staff when the loan limit would rise by more than this (0 = no cap). */
+function credit_auto_cap(mysqli $conn): float
+{
+    return max(0.0, (float)credit_setting($conn, 'credit_auto_max_increase', (string)CREDIT_AUTO_DEFAULT_CAP));
 }
 
 function credit_db(): ?mysqli
@@ -1138,6 +1235,9 @@ function credit_evidence_submit(mysqli $conn, int $userId, string $docType, stri
         throw new DomainException('Only customers can upload credit documents.');
     }
 
+    $hash = hash('sha256', $bytes);
+    credit_evidence_check_duplicate($conn, $userId, $hash);
+
     if ($source !== 'reg') {
         $stmt = $conn->prepare('SELECT COUNT(*) AS n FROM credit_evidence WHERE user_id = ? AND created_at >= NOW() - INTERVAL 1 DAY');
         $stmt->bind_param('i', $userId);
@@ -1158,8 +1258,8 @@ function credit_evidence_submit(mysqli $conn, int $userId, string $docType, stri
     $original = mb_substr(basename($originalName !== '' ? $originalName : $filename), 0, 255);
     $size = strlen($bytes);
 
-    $stmt = $conn->prepare("INSERT INTO credit_evidence (user_id, doc_type, file_path, original_name, mime_type, file_size, source, source_ref, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'processing')");
-    $stmt->bind_param('issssiss', $userId, $docType, $relative, $original, $mime, $size, $source, $sourceRef);
+    $stmt = $conn->prepare("INSERT INTO credit_evidence (user_id, doc_type, file_path, original_name, mime_type, file_size, file_hash, source, source_ref, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing')");
+    $stmt->bind_param('issssisss', $userId, $docType, $relative, $original, $mime, $size, $hash, $source, $sourceRef);
     $stmt->execute();
     $id = (int)$stmt->insert_id;
     $stmt->close();
@@ -1167,17 +1267,125 @@ function credit_evidence_submit(mysqli $conn, int $userId, string $docType, stri
     credit_evidence_analyze($conn, $id, $bytes, $client);
 
     $row = credit_evidence_find($conn, $id);
-    if ($source !== 'reg') {
-        $label = CREDIT_EVIDENCE_TYPES[$docType]['label'];
+    // Staff only hear about documents that need a person (held or unreadable).
+    if ($row && in_array($row['status'], ['analyzed', 'failed'], true)) {
+        $label = CREDIT_EVIDENCE_TYPES[$row['doc_type']]['label'] ?? 'Registration document';
         $name = htmlspecialchars(trim($client['fname'] . ' ' . $client['lname']), ENT_QUOTES, 'UTF-8');
+        $why = $row['status'] === 'failed'
+            ? 'The AI could not read it.'
+            : htmlspecialchars((string)($row['auto_note'] ?: 'Automatic approval is off.'), ENT_QUOTES, 'UTF-8');
         client_docs_notify_staff(
             $conn,
             $userId,
             "Credit document to review: {$label}",
-            "<p>{$name} uploaded a {$label}. Review it under <strong>Loans &gt; Credit Documents</strong>.</p>"
+            "<p>{$name}'s {$label} needs a review: {$why}</p><p>Open <strong>Loans &gt; Credit Documents</strong>.</p>"
         );
     }
     return $row ?? [];
+}
+
+/**
+ * Stop a client uploading the same file twice. A failed read may be retried.
+ * @throws CreditDuplicateException
+ */
+function credit_evidence_check_duplicate(mysqli $conn, int $userId, string $hash): void
+{
+    $stmt = $conn->prepare("SELECT * FROM credit_evidence WHERE user_id = ? AND file_hash = ? AND status <> 'failed' ORDER BY id DESC LIMIT 1");
+    $stmt->bind_param('is', $userId, $hash);
+    $stmt->execute();
+    $prev = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$prev) {
+        return;
+    }
+    $when = date('d M Y', strtotime((string)$prev['created_at']) ?: time());
+    $label = CREDIT_EVIDENCE_TYPES[$prev['doc_type']]['label'] ?? 'document';
+    $msg = match ((string)$prev['status']) {
+        'approved', 'superseded' => "You already uploaded this file on {$when} and it was approved. Upload a newer document to improve your score.",
+        'rejected' => "You uploaded this file on {$when} and it was not accepted" . (trim((string)$prev['review_note']) !== '' ? ': ' . $prev['review_note'] : '') . '. Please upload a different document.',
+        'ignored' => "You uploaded this file on {$when}. It is not a statement, bill or business record, so it does not count towards your score.",
+        default => "You already uploaded this file on {$when}. It is being checked.",
+    };
+    throw new CreditDuplicateException($msg);
+}
+
+/**
+ * Decide a freshly read document without staff, when automatic approval is on.
+ * Returns 'approved', 'rejected', 'held', or the unchanged status.
+ */
+function credit_evidence_auto_decide(mysqli $conn, int $id): string
+{
+    $row = credit_evidence_find($conn, $id);
+    if (!$row || $row['status'] !== 'analyzed') {
+        return (string)($row['status'] ?? '');
+    }
+    if (!credit_auto_enabled($conn)) {
+        return 'analyzed';
+    }
+    $userId = (int)$row['user_id'];
+    $data = credit_evidence_data($row);
+    $label = CREDIT_EVIDENCE_TYPES[$row['doc_type']]['label'] ?? 'document';
+
+    if (array_key_exists('matches_expected_type', $data) && empty($data['matches_expected_type'])) {
+        credit_evidence_reject($conn, $id, 0, "This does not look like a {$label}. Please upload a clear photo or PDF of the full {$label}.");
+        return 'rejected';
+    }
+
+    $hold = [];
+    if (($data['name_matches_client'] ?? '') === 'no') {
+        $hold[] = 'The name on the document (' . trim((string)($data['account_holder_name'] ?? '')) . ') does not match the client';
+    }
+    if (!empty($data['authenticity_concerns'])) {
+        $hold[] = 'Possible editing: ' . implode('; ', array_slice((array)$data['authenticity_concerns'], 0, 2));
+    }
+    if (!empty($row['file_hash'])) {
+        $stmt = $conn->prepare("SELECT COUNT(*) AS n FROM credit_evidence WHERE file_hash = ? AND user_id <> ?");
+        $stmt->bind_param('si', $row['file_hash'], $userId);
+        $stmt->execute();
+        if ((int)($stmt->get_result()->fetch_assoc()['n'] ?? 0) > 0) {
+            $hold[] = 'The same file was uploaded by another client';
+        }
+        $stmt->close();
+    }
+    $cap = credit_auto_cap($conn);
+    if ($cap > 0 && $row['proposed_limit'] !== null) {
+        $stmt = $conn->prepare('SELECT loan_limit FROM customers WHERE user_id = ? LIMIT 1');
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $saved = (float)($stmt->get_result()->fetch_assoc()['loan_limit'] ?? 0);
+        $stmt->close();
+        $without = credit_profile_for_user($conn, $userId);
+        $current = max($saved, (float)($without['limit'] ?? 0));
+        $rise = (float)$row['proposed_limit'] - $current;
+        if ($rise > $cap) {
+            $hold[] = 'The loan limit would rise by UGX ' . number_format($rise) . ' (automatic approval allows up to UGX ' . number_format($cap) . ')';
+        }
+    }
+
+    if ($hold) {
+        $note = mb_substr(implode('. ', $hold), 0, 500);
+        $stmt = $conn->prepare('UPDATE credit_evidence SET auto_note = ? WHERE id = ?');
+        $stmt->bind_param('si', $note, $id);
+        $stmt->execute();
+        $stmt->close();
+        return 'held';
+    }
+
+    credit_evidence_approve($conn, $id, 0, 'Approved automatically: all checks passed.');
+    return 'approved';
+}
+
+/** Message for the client after an upload (website and app). */
+function credit_evidence_result_message(array $row): string
+{
+    $label = CREDIT_EVIDENCE_TYPES[$row['doc_type']]['label'] ?? 'document';
+    return match ((string)($row['status'] ?? '')) {
+        'approved' => "Your {$label} was checked and approved. Your credit score has been updated.",
+        'rejected' => "Your {$label} was not accepted: " . trim((string)$row['review_note']),
+        'failed'   => "Your {$label} was uploaded, but it could not be read automatically. Our team will look at it.",
+        'ignored'  => 'Your file was uploaded, but it is not a statement, bill or business record.',
+        default    => "Your {$label} was read and sent to our team for a final check. Your credit score will update once it is approved.",
+    };
 }
 
 /** Run (or re-run) the AI on a stored document. Never throws; records failures on the row. */
@@ -1241,7 +1449,7 @@ function credit_evidence_analyze(mysqli $conn, int $id, ?string $bytes = null, ?
         $provider = $result['provider'];
         $model = $result['model'];
 
-        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'analyzed', doc_type = ?, ai_provider = ?, ai_model = ?, ai_score = ?, monthly_income = ?, summary = ?, extracted_json = ?, proposed_score = ?, proposed_limit = ?, error = NULL WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'analyzed', doc_type = ?, ai_provider = ?, ai_model = ?, ai_score = ?, monthly_income = ?, summary = ?, extracted_json = ?, proposed_score = ?, proposed_limit = ?, error = NULL, auto_note = NULL WHERE id = ?");
         $stmt->bind_param('sssddssddi', $docType, $provider, $model, $score, $income, $summary, $json, $pScore, $pLimit, $id);
         $stmt->execute();
         $stmt->close();
@@ -1252,6 +1460,13 @@ function credit_evidence_analyze(mysqli $conn, int $id, ?string $bytes = null, ?
         $stmt->bind_param('si', $msg, $id);
         $stmt->execute();
         $stmt->close();
+        return;
+    }
+    try {
+        credit_evidence_auto_decide($conn, $id);
+    } catch (Throwable $e) {
+        // Leave it waiting for staff.
+        error_log('credit_evidence_auto_decide #' . $id . ': ' . $e->getMessage());
     }
 }
 
@@ -1318,6 +1533,8 @@ function credit_evidence_import_existing(mysqli $conn, int $userId): array
                 $out['errors'][] = $name . ': ' . ($row['error'] ?? 'could not be read');
             }
             $out['read']++;
+        } catch (CreditDuplicateException $e) {
+            $out['skipped']++;
         } catch (DomainException $e) {
             $out['errors'][] = $name . ': ' . $e->getMessage();
         }

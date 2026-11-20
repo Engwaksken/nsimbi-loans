@@ -293,6 +293,9 @@ require "nav-head.php";
                         <div class="ce-sub">Before approval: score <?= h(rtrim(rtrim(number_format((float)$r['score_before'], 1), '0'), '.')) ?>, limit <?= ce_money($r['limit_before']) ?></div>
                     <?php endif; ?>
 
+                    <?php if ($r['status'] === 'analyzed' && !empty($r['auto_note'])): ?>
+                        <div class="ce-concern"><strong>Held for review:</strong> <?= h($r['auto_note']) ?></div>
+                    <?php endif; ?>
                     <?php $ruleNotes = credit_evidence_rule_notes($r, $conn); ?>
                     <?php if ($ruleNotes): ?>
                         <div class="ce-summary"><strong>What counts for the score:</strong>
@@ -319,7 +322,7 @@ require "nav-head.php";
 
                 <?php if (in_array($r['status'], ['approved', 'rejected', 'superseded'], true)): ?>
                     <div class="ce-sub mt-2">
-                        <?= h(ucfirst((string)$r['status'])) ?> by <?= h(trim(($r['reviewer_fname'] ?? '') . ' ' . ($r['reviewer_lname'] ?? '')) ?: 'staff') ?>
+                        <?= h(ucfirst((string)$r['status'])) ?> by <?= (int)($r['reviewed_by'] ?? 0) === 0 ? 'the automatic check' : h(trim(($r['reviewer_fname'] ?? '') . ' ' . ($r['reviewer_lname'] ?? '')) ?: 'staff') ?>
                         on <?= h(date('d M Y H:i', strtotime((string)$r['reviewed_at']))) ?><?= !empty($r['review_note']) ? ': ' . h($r['review_note']) : '' ?>
                     </div>
                 <?php endif; ?>

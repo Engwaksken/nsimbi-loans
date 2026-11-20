@@ -11,6 +11,7 @@ declare(strict_types=1);
 $phead = 'AI Settings';
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/ai_gateway.php';
+require_once dirname(__DIR__) . '/includes/credit_scoring.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -71,6 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ai_test_provider($conn, $p);
                 ai_flash('Connection works: ' . $p['label'] . ' (' . $p['model'] . ') answered correctly.');
                 break;
+            case 'auto_save':
+                $cap = (float)preg_replace('/[^0-9.]/', '', (string)($_POST['auto_cap'] ?? ''));
+                credit_setting_set($conn, 'credit_auto_approve', !empty($_POST['auto_on']) ? '1' : '0');
+                credit_setting_set($conn, 'credit_auto_max_increase', (string)round(max(0, $cap)));
+                ai_flash(!empty($_POST['auto_on'])
+                    ? 'Automatic approval is on.'
+                    : 'Automatic approval is off. Staff must approve every credit document.');
+                break;
             case 'delete':
                 $p = ai_provider_find($conn, $id);
                 if ($p && (int)$p['is_active'] === 1 && count(ai_providers_all($conn)) > 1) {
@@ -98,6 +107,8 @@ try {
 $editId = (int)($_GET['edit'] ?? 0);
 $editing = $editId > 0 ? ai_provider_find($conn, $editId) : null;
 $secretMissing = (string)(getenv('APP_KEY') ?: getenv('JWT_SECRET') ?: '') === '';
+$autoOn = credit_auto_enabled($conn);
+$autoCap = credit_auto_cap($conn);
 
 [$flashMsg, $flashType] = $_SESSION['ai_flash'] ?? ['', ''];
 unset($_SESSION['ai_flash']);
@@ -149,8 +160,36 @@ require "nav-head.php";
         <h5><i class="fas fa-microchip text-primary me-2"></i>AI Settings</h5>
         <p class="text-muted mb-0">
             The active provider reads clients' mobile money statements, utility bills and business records and suggests a credit score.
-            Staff still approve every result under Loans &gt; Credit Documents. Only one provider is active at a time.
+            Only one provider is active at a time.
         </p>
+    </div>
+
+    <div class="ai-card">
+        <h5><i class="fas fa-check-double text-primary me-2"></i>Automatic approval</h5>
+        <p class="text-muted">
+            When this is on, each document is decided as soon as it is read:
+            a file that is not the right kind of document is rejected and the client is told why;
+            a document with a different name on it, signs of editing, a file another client already uploaded,
+            or a loan limit rise above the amount below is held for staff under Loans &gt; Credit Documents;
+            everything else is approved and the client's score and limit are updated straight away.
+            The same client can never upload the same file twice.
+        </p>
+        <form method="post" class="ai-form">
+            <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+            <input type="hidden" name="action" value="auto_save">
+            <div>
+                <label><input type="checkbox" name="auto_on" value="1" <?= $autoOn ? 'checked' : '' ?> style="width:auto"> Approve and reject automatically</label>
+                <small>Off: staff approve every document.</small>
+            </div>
+            <div>
+                <label for="autoCap">Hold for staff when the loan limit would rise by more than (UGX)</label>
+                <input id="autoCap" name="auto_cap" inputmode="numeric" value="<?= h(number_format($autoCap)) ?>">
+                <small>0 means no limit.</small>
+            </div>
+            <div style="align-self:end">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+            </div>
+        </form>
     </div>
 
     <div class="ai-card">

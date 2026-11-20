@@ -1346,16 +1346,25 @@ function uploadCreditEvidence(mysqli $conn, array $user, array $input): void
     }
 
     $results = [];
+    $messages = [];
     foreach ($uploads as [$type, $bytes, $name]) {
         try {
             $row = credit_evidence_submit($conn, $userId, $type, $bytes, $name, "app");
             $results[] = credit_evidence_public($row);
+            $messages[] = credit_evidence_result_message($row);
         } catch (DomainException $e) {
-            respond(["status" => "error", "message" => $e->getMessage()], 422);
+            if (count($uploads) === 1) {
+                respond(["status" => "error", "message" => $e->getMessage()], 422);
+            }
+            $messages[] = (CREDIT_EVIDENCE_TYPES[$type]["label"] ?? "Document") . ": " . $e->getMessage();
         } catch (Throwable $e) {
             error_log("uploadCreditEvidence: " . $e->getMessage());
             respond(["status" => "error", "message" => "The document could not be uploaded. Please try again."], 500);
         }
+    }
+
+    if (!$results) {
+        respond(["status" => "error", "message" => implode(" ", $messages)], 422);
     }
 
     $stmt = $conn->prepare("SELECT credit_score, loan_limit FROM customers WHERE user_id = ? LIMIT 1");
@@ -1366,9 +1375,7 @@ function uploadCreditEvidence(mysqli $conn, array $user, array $input): void
 
     respond([
         "status" => "success",
-        "message" => count($results) === 1
-            ? "Document received. Our team will review it and your credit score will update once it is approved."
-            : "Documents received. Our team will review them and your credit score will update once they are approved.",
+        "message" => implode(" ", $messages),
         "creditScore" => (float)($c["credit_score"] ?? 0),
         "credit_score" => (float)($c["credit_score"] ?? 0),
         "loan_limit" => (float)($c["loan_limit"] ?? 0),

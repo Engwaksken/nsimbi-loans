@@ -62,9 +62,4 @@ try {
     credit_json(false, 'The document could not be uploaded. Please try again.', [], 500);
 }
 
-$status = (string)($row['status'] ?? '');
-credit_json(true, $status === 'failed'
-    ? 'Your document was uploaded, but it could not be read automatically. Our team will look at it.'
-    : 'Thank you. Your document has been read and sent to our team for review. Your credit score will update once it is approved.',
-    ['document' => credit_evidence_public($row)]
-);
+credit_json(true, credit_evidence_result_message($row), ['document' => credit_evidence_public($row)]);
