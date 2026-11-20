@@ -234,8 +234,8 @@ function importClientRow(mysqli $conn, array $data, array $requiredCols): string
         : calcLoanLimit($amount_last_raw, $amount_this_raw, $business_type);
 
     $credit_score    = creditScore($business_type);
-    $amount_last_num = parseAmountRange($amount_last_raw) * 0.9;
-    $amount_this_num = parseAmountRange($amount_this_raw) * 1.1;
+    $amount_last_num = parseAmountRange($amount_last_raw);
+    $amount_this_num = parseAmountRange($amount_this_raw);
 
     $role   = 3;
     $active = 1;

@@ -126,19 +126,11 @@ function saveSignature($base64) {
     return $path;
 }
 
+require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+
 function amountToNumber($value) {
-    $value = trim($value);
-
-    $map = [
-        "10,000 - 50,000" => 30000,
-        "50,000 - 100,000" => 75000,
-        "100,000 - 500,000" => 300000,
-        "500,000 - 1M" => 750000,
-        "1 - 2M" => 1500000,
-        "Above 2M" => 2000000
-    ];
-
-    return $map[$value] ?? 0;
+    // Shared reader: range options, plain numbers, 200k, 1.5M, ...
+    return loan_assessment_parse_turnover((string)$value)[0];
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -241,24 +233,10 @@ try {
     $amount_last = amountToNumber($amount_last_raw);
     $amount_this = amountToNumber($amount_this_raw);
 
-    $credit_scores = [
-        "Beauty salon" => 6,
-        "Education" => 8,
-        "Electronics" => 4,
-        "Farming" => 5,
-        "Healthcare" => 9,
-        "Market stall" => 8,
-        "Poultry keeping" => 4,
-        "Restaurant" => 7,
-        "Retail shop" => 6,
-        "Sell second hand clothes" => 4,
-        "Tailoring" => 7,
-        "Transportation" => 5
-    ];
-
-    $credit_score = $credit_scores[$business_type] ?? 5;
-    $avg_amount = ($amount_last + $amount_this) / 2;
-    $loan_limit = $avg_amount + (($avg_amount * $credit_score) / 10);
+    // Same loan assessment as the app and admin (includes/loan_assessment.php).
+    $assessment = loan_assessment_limit($business_type, $amount_last_raw, $amount_this_raw);
+    $credit_score = $assessment["score"];
+    $loan_limit = $assessment["limit"];
 
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
     $active = 1;

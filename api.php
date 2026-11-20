@@ -53,6 +53,7 @@ require "config.php";
 require "jwt.php";
 require_once __DIR__ . '/includes/loan_workflow.php';
 require_once __DIR__ . '/includes/auth_lookup.php';
+require_once __DIR__ . '/includes/loan_assessment.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -459,9 +460,10 @@ function addClient(mysqli $conn, array $input): void
         respond(["status" => "error", "message" => "Invalid amount_this value"], 422);
     }
 
-    $credit_score = businessScore($business_type);
-    $avg = ($amount_last + $amount_this) / 2;
-    $loan_limit = round($avg + (($avg * $credit_score) / 10), 0);
+    // Same loan assessment as the website and admin (includes/loan_assessment.php).
+    $assessment = loan_assessment_limit($business_type, $amount_last_raw, $amount_this_raw);
+    $credit_score = $assessment["score"];
+    $loan_limit = $assessment["limit"];
 
     $requiredImages = ["id_front", "id_back", "image_url", "license"];
     $imagePaths = [];
@@ -836,9 +838,10 @@ function updateClient(mysqli $conn, array $user, array $input): void
         respond(["status" => "error", "message" => "Invalid amount_this value"], 422);
     }
 
-    $credit_score = businessScore($business_type);
-    $avg = ($amount_last + $amount_this) / 2;
-    $loan_limit = round($avg + (($avg * $credit_score) / 10), 0);
+    // Same loan assessment as the website and admin (includes/loan_assessment.php).
+    $assessment = loan_assessment_limit($business_type, $amount_last_raw, $amount_this_raw);
+    $credit_score = $assessment["score"];
+    $loan_limit = $assessment["limit"];
 
     $conn->begin_transaction();
 

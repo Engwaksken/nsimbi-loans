@@ -120,10 +120,9 @@ function parseAmountRange(string $str): float
 
 function calcLoanLimit(string $amountLast, string $amountThis, string $businessType): float
 {
-    $last  = parseAmountRange($amountLast)  * 0.9;
-    $this_ = parseAmountRange($amountThis)  * 1.1;
-    $avg   = ($last + $this_) / 2;
-    return $avg + $avg * creditScore($businessType) / 10;
+    // Same loan assessment as the app and website (includes/loan_assessment.php).
+    require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+    return loan_assessment_limit($businessType, $amountLast, $amountThis)['limit'];
 }
 
 
@@ -180,8 +179,8 @@ $loan_limit      = $manual_limit !== ''
     : calcLoanLimit($amount_last_raw, $amount_this_raw, $business_type);
 
 $credit_score    = creditScore($business_type);
-$amount_last_num = parseAmountRange($amount_last_raw) * 0.9;
-$amount_this_num = parseAmountRange($amount_this_raw) * 1.1;
+$amount_last_num = parseAmountRange($amount_last_raw);
+$amount_this_num = parseAmountRange($amount_this_raw);
 
 $role   = 3;
 $active = 1;

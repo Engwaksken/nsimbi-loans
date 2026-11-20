@@ -120,6 +120,7 @@ $navSections = [
   'system' => ['System', [
     ['mailbox.php', 'fa-envelope-open-text', 'Mailbox', (int)$mail_unread, 'red'],
     ['loan_messages.php', 'fa-envelope', 'Notifications', (int)$new_messages, ''],
+    ['recalculate_limits.php', 'fa-calculator', 'Recalculate Loan Limits'],
     ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
     ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
     ['profile.php', 'fa-user-circle', 'My Profile'],

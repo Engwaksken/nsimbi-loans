@@ -10,9 +10,10 @@ declare(strict_types=1);
  *   average   = (turnover last month + turnover this month) / 2
  *   limit     = average + average × (business score ÷ 10)
  *
- * Website sign-ups declare turnover as a range label and the website formula
- * adjusts it (last × 0.9, this × 1.1) before averaging; app sign-ups declare
- * plain numbers. We mirror whichever form the client used.
+ * This is the ONE formula for every path: app sign-up and profile update
+ * (api.php), website sign-up (clients/added_client.php), admin add client and
+ * bulk import, and the AI recommended amount on the loan pages. Use
+ * loan_assessment_limit() rather than re-implementing it.
  *
  * The score/limit SAVED on the customer record can be edited by hand in several
  * admin screens, so they are only shown for comparison and flagged when they
@@ -125,7 +126,7 @@ if (!function_exists('loan_assessment')) {
      * Read a declared turnover written in any common way:
      *   single amounts  450000 | 450,000 | UGX 450,000/= | 200k | 1.5M | 2 million
      *   ranges          100,000 - 500,000 | 50k-100k | 1 - 2M | 500,000 to 1M | between 1M and 2M
-     *   open ranges     Above 2M | over 500k | 1M+ | more than 1 million (amount + 25%)
+     *   open ranges     Above 2M | over 500k | 1M+ | more than 1 million (the amount itself)
      *                   Below 50,000 | under 100k | up to 1M | less than 50k (half the amount)
      * Ranges use their midpoint.
      *
@@ -153,7 +154,7 @@ if (!function_exists('loan_assessment')) {
         }
         if ($openUp !== null) {
             [$amount] = loan_assessment_parse_amount_part($openUp);
-            return $amount > 0 ? [round($amount * 1.25), 'range'] : [0.0, 'none'];
+            return $amount > 0 ? [round($amount), 'range'] : [0.0, 'none'];
         }
 
         // Open-ended downwards: "below 50,000", "under 100k", "up to 1m".
@@ -185,6 +186,33 @@ if (!function_exists('loan_assessment')) {
     }
 
     /**
+     * THE loan limit formula, shared by every sign-up path and the loan pages:
+     *
+     *   score   = business-type score (1-10, unknown types score 3)
+     *   average = (turnover last month + turnover this month) / 2
+     *   limit   = average + average * (score / 10)
+     *
+     * Turnover may be a number, "200k", a range ("100,000 - 500,000") etc.
+     *
+     * @return array{score:int, limit:float, last:float, this:float, has_turnover:bool}
+     */
+    function loan_assessment_limit(string $businessType, $amountLast, $amountThis): array
+    {
+        [$score] = loan_assessment_business_score($businessType);
+        [$last] = loan_assessment_parse_turnover((string)$amountLast);
+        [$this_] = loan_assessment_parse_turnover((string)$amountThis);
+        $has = $last > 0 || $this_ > 0;
+        $avg = ($last + $this_) / 2;
+        return [
+            'score'        => $score,
+            'limit'        => $has ? round($avg + $avg * $score / 10) : 0.0,
+            'last'         => $last,
+            'this'         => $this_,
+            'has_turnover' => $has,
+        ];
+    }
+
+    /**
      * @param array|null $customer Row with business_type, amount_last, amount_this and
      *                             (for comparison) credit_score, loan_limit, business_period.
      *                             Pass null for staff members / startups (no automated scoring).
@@ -205,19 +233,13 @@ if (!function_exists('loan_assessment')) {
         $businessType = (string)($customer['business_type'] ?? '');
         [$score, $matchedType] = loan_assessment_business_score($businessType);
 
-        [$last, $lastKind] = loan_assessment_parse_turnover((string)($customer['amount_last'] ?? ''));
-        [$this_, $thisKind] = loan_assessment_parse_turnover((string)($customer['amount_this'] ?? ''));
-
-        $hasTurnover = $last > 0 || $this_ > 0;
-        $formulaLimit = 0.0;
-        if ($hasTurnover) {
-            if ($lastKind === 'range' || $thisKind === 'range') {
-                $last *= 0.9;
-                $this_ *= 1.1;
-            }
-            $avg = ($last + $this_) / 2;
-            $formulaLimit = round($avg + $avg * $score / 10);
-        }
+        $calc = loan_assessment_limit(
+            $businessType,
+            (string)($customer['amount_last'] ?? ''),
+            (string)($customer['amount_this'] ?? '')
+        );
+        $hasTurnover = $calc['has_turnover'];
+        $formulaLimit = $calc['limit'];
 
         $band = match (true) {
             $score >= 7 => ['Strong', 'success'],

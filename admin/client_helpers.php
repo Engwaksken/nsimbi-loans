@@ -29,10 +29,9 @@ function parseAmountRange(string $str): float
 
 function calcLoanLimit(string $amountLast, string $amountThis, string $businessType): float
 {
-    $last  = parseAmountRange($amountLast) * 0.9;
-    $this_ = parseAmountRange($amountThis) * 1.1;
-    $avg   = ($last + $this_) / 2;
-    return $avg + $avg * creditScore($businessType) / 10;
+    // Same loan assessment as the app and website (includes/loan_assessment.php).
+    require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+    return loan_assessment_limit($businessType, $amountLast, $amountThis)['limit'];
 }
 
 
