@@ -21,26 +21,10 @@ function creditScore(string $type): int
 
 function parseAmountRange(string $str): float
 {
-    $patterns = [
-        '/10,?000?\s*[-\x{2013}\x{2014}]\s*50,?000?/iu'         => 30_000,
-        '/50,?000?\s*[-\x{2013}\x{2014}]\s*100,?000?/iu'        => 75_000,
-        '/100,?000?\s*[-\x{2013}\x{2014}]\s*500,?000?/iu'       => 300_000,
-        '/500,?000?\s*[-\x{2013}\x{2014}]\s*(1m|1,000,000)/iu'  => 750_000,
-        '/1\s*[-\x{2013}\x{2014}]\s*2\s*m/iu'                   => 1_500_000,
-        '/(above|over|more than)\s*2\s*m/i'     => 2_500_000,
-    ];
-
-    foreach ($patterns as $pattern => $value) {
-        if (preg_match($pattern, $str)) return (float)$value;
-    }
-
-    if (preg_match('/([\d,.]+)\s*([kKmM]?)\s*[-\x{2013}\x{2014}]\s*([\d,.]+)\s*([kKmM]?)/u', $str, $m)) {
-        $v1 = (float)str_replace(',', '', $m[1]) * match (strtolower($m[2])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
-        $v2 = (float)str_replace(',', '', $m[3]) * match (strtolower($m[4])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
-        return ($v1 + $v2) / 2;
-    }
-
-    return 0.0;
+    // Same reader as the AI recommended amount: plain amounts, k/M, currency
+    // words, ranges ("50k-100k", "500,000 to 1M") and open ranges ("Above 2M").
+    require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+    return loan_assessment_parse_turnover($str)[0];
 }
 
 function calcLoanLimit(string $amountLast, string $amountThis, string $businessType): float
