@@ -402,22 +402,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
         <tr><td>Due Date</td><td><?= h(safeDate($dueDate)) ?></td></tr>
     </table>
 
-    <?php if ($assessment['show']): ?>
-    <div class="section">Automated Assessment</div>
+    <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
+    <div class="section">AI Recommendation</div>
     <table>
-        <tr><td>Recommendation</td><td><?= h($assessment['headline']) ?><br><?= h($assessment['detail']) ?></td></tr>
-        <?php if ($assessment['available']): ?>
-            <tr><td>Credit Score</td><td><?= h($assessment['score']) ?>/10 (<?= h($assessment['score_band']) ?>)</td></tr>
-            <tr><td>Formula Limit</td><td><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Cannot calculate' ?></td></tr>
-            <tr><td>Saved Limit / Score</td><td><?= $assessment['saved_limit'] > 0 ? money($assessment['saved_limit']) : 'None' ?> / <?= $assessment['saved_score'] !== null ? h(loan_assessment_num($assessment['saved_score'])) : 'None' ?></td></tr>
-            <?php foreach ($assessment['warnings'] as $warning): ?>
-                <tr><td>Warning</td><td><?= h($warning) ?></td></tr>
-            <?php endforeach; ?>
-            <tr><td>Business Type</td><td><?= h($assessment['business_type'] ?: 'Not given') ?></td></tr>
-            <tr><td>Turnover (last / this month)</td><td><?= h(loan_assessment_turnover($assessment['amount_last'])) ?> / <?= h(loan_assessment_turnover($assessment['amount_this'])) ?></td></tr>
-        <?php endif; ?>
+        <tr><td>AI recommended amount</td><td><?= money($assessment['limit']) ?></td></tr>
     </table>
-
     <?php endif; ?>
 
     <div class="section">Payment History</div>
@@ -743,32 +732,19 @@ require 'nav-head.php';
     text-align: right;
 }
 
-.assessment-card { border-left: 5px solid #94a3b8; }
-.assessment-card.tone-success { border-left-color: #16a34a; }
-.assessment-card.tone-warning { border-left-color: #f59e0b; }
-.assessment-card.tone-danger  { border-left-color: #dc2626; }
-
-.assessment-verdict {
-    border-radius: 12px;
-    padding: .9rem 1rem;
-    background: #f1f5f9;
-    color: #334155;
+.ai-recommend {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .75rem;
+    padding: .5rem .9rem;
+    border-radius: 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    font-size: .9rem;
 }
-.tone-success .assessment-verdict { background: #f0fdf4; color: #166534; }
-.tone-warning .assessment-verdict { background: #fffbeb; color: #92400e; }
-.tone-danger  .assessment-verdict { background: #fef2f2; color: #991b1b; }
-.assessment-verdict strong { display: block; font-size: 1.05rem; margin-bottom: .2rem; }
-.assessment-warnings {
-    list-style: none;
-    margin: .75rem 0 0;
-    padding: .7rem 1rem;
-    border-radius: 12px;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    color: #92400e;
-    font-size: .88rem;
-}
-.assessment-warnings li + li { margin-top: .3rem; }
+.ai-recommend strong { color: #1d4ed8; }
 
 @media (max-width: 992px) {
     .loan-kpi-grid,
@@ -927,75 +903,10 @@ require 'nav-head.php';
                 </div>
             </div>
 
-            <?php if ($assessment['show']): ?>
-            <div class="loan-tab-card mt-3 assessment-card tone-<?= h($assessment['tone']) ?>">
-                <div class="loan-tab-header">
-                    <div>
-                        <h5><i class="fas fa-robot text-primary me-2"></i>Automated Assessment</h5>
-                        <p>What the system recommends, based on what the client submitted at registration.</p>
-                    </div>
-                    <?php if ($assessment['available']): ?>
-                        <span class="badge badge-soft-<?= h($assessment['score_tone']) ?> px-3 py-2">
-                            Score <?= h(rtrim(rtrim(number_format($assessment['score'], 1), '0'), '.')) ?>/10 &middot; <?= h($assessment['score_band']) ?>
-                        </span>
-                    <?php endif; ?>
-                </div>
-
-                <div class="assessment-verdict">
-                    <strong><?= h($assessment['headline']) ?></strong>
-                    <div><?= h($assessment['detail']) ?></div>
-                </div>
-
-                <?php if (!empty($assessment['warnings'])): ?>
-                    <ul class="assessment-warnings">
-                        <?php foreach ($assessment['warnings'] as $warning): ?>
-                            <li><i class="fas fa-triangle-exclamation me-1"></i><?= h($warning) ?></li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endif; ?>
-
-                <?php if ($assessment['available']): ?>
-                    <div class="info-grid mt-3">
-                        <div class="info-item">
-                            <span class="info-label">Amount Requested</span>
-                            <span class="info-value"><?= money($assessment['requested']) ?></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Formula Limit (recommended)</span>
-                            <span class="info-value"><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Cannot calculate' ?></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Saved Limit / Saved Score</span>
-                            <span class="info-value">
-                                <?= $assessment['saved_limit'] > 0 ? money($assessment['saved_limit']) : 'None' ?>
-                                &middot;
-                                <?= $assessment['saved_score'] !== null ? h(loan_assessment_num($assessment['saved_score'])) : 'None' ?>
-                            </span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Business Type</span>
-                            <span class="info-value"><?= h($assessment['business_type'] !== '' ? $assessment['business_type'] : 'Not given') ?></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Turnover Last Month</span>
-                            <span class="info-value"><?= h(loan_assessment_turnover($assessment['amount_last'])) ?></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Turnover This Month</span>
-                            <span class="info-value"><?= h(loan_assessment_turnover($assessment['amount_this'])) ?></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Time in Business</span>
-                            <span class="info-value"><?= h($assessment['business_period'] !== '' ? $assessment['business_period'] : 'Not given') ?></span>
-                        </div>
-                    </div>
-                    <p class="fs-sm text-muted mt-3 mb-0">
-                        Recalculated from what the client declared: score from business type; limit = average
-                        turnover + average &times; (score &divide; 10). Website ranges use last &times; 0.9 and
-                        this &times; 1.1. Saved values are shown only for comparison. Guidance only &mdash; the
-                        final decision is yours.
-                    </p>
-                <?php endif; ?>
+            <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
+            <div class="ai-recommend mt-3">
+                <i class="fas fa-robot"></i>
+                AI recommended amount: <strong><?= money($assessment['limit']) ?></strong>
             </div>
             <?php endif; ?>
         </div>

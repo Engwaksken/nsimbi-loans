@@ -625,36 +625,19 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     padding: .3rem .75rem;
 }
 
-.assess-strip {
-    display: flex;
-    gap: .7rem;
-    align-items: flex-start;
+.ai-recommend {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
     margin-top: .75rem;
-    padding: .6rem .8rem;
+    padding: .5rem .9rem;
     border-radius: 10px;
-    border-left: 4px solid #94a3b8;
-    background: #f8fafc;
-    color: #334155;
-    font-size: .85rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    font-size: .9rem;
 }
-.assess-strip > i { margin-top: .2rem; }
-.assess-strip.tone-success { background: #f0fdf4; border-left-color: #16a34a; color: #166534; }
-.assess-strip.tone-warning { background: #fffbeb; border-left-color: #f59e0b; color: #92400e; }
-.assess-strip.tone-danger  { background: #fef2f2; border-left-color: #dc2626; color: #991b1b; }
-.assess-warn {
-    margin-top: .3rem;
-    font-size: .78rem;
-    color: #92400e;
-}
-.assess-score {
-    display: inline-block;
-    margin-left: .4rem;
-    padding: .05rem .5rem;
-    border-radius: 999px;
-    background: rgba(255,255,255,.7);
-    font-size: .75rem;
-    font-weight: 700;
-}
+.ai-recommend strong { color: #1d4ed8; }
 
 .review-panel {
     border: 1px solid #e5e7eb;
@@ -1095,19 +1078,10 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                 </div>
             </div>
 
-            <?php if ($assessment['show']): ?>
-            <div class="assess-strip tone-<?= h($assessment['tone']) ?>">
+            <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
+            <div class="ai-recommend">
                 <i class="fas fa-robot"></i>
-                <div>
-                    <strong><?= h($assessment['headline']) ?></strong>
-                    <?php if ($assessment['available']): ?>
-                        <span class="assess-score">Score <?= h(rtrim(rtrim(number_format($assessment['score'], 1), '0'), '.')) ?>/10 &middot; <?= h($assessment['score_band']) ?></span>
-                    <?php endif; ?>
-                    <div class="fs-xs"><?= h($assessment['detail']) ?></div>
-                    <?php foreach ($assessment['warnings'] as $warning): ?>
-                        <div class="assess-warn"><i class="fas fa-triangle-exclamation"></i> <?= h($warning) ?></div>
-                    <?php endforeach; ?>
-                </div>
+                AI recommended amount: <strong><?= money($assessment['limit']) ?></strong>
             </div>
             <?php endif; ?>
 
