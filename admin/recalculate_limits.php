@@ -111,12 +111,12 @@ function rl_tab(array $r): ?string
     return null;
 }
 
-function rl_search(array $rows, string $q): array
+function rl_search(array $rows, string $search): array
 {
-    if ($q === '') {
+    if ($search === '') {
         return $rows;
     }
-    $needle = strtolower($q);
+    $needle = strtolower($search);
     return array_values(array_filter($rows, static function (array $r) use ($needle): bool {
         $hay = strtolower(implode(' ', [
             $r['fname'] ?? '', $r['lname'] ?? '', $r['email'] ?? '',
@@ -133,7 +133,7 @@ function rl_url(array $params): string
 }
 
 /* ---------- Read the view state ---------- */
-$q = trim((string)($_GET['q'] ?? ''));
+$search = trim((string)($_GET['q'] ?? ''));
 $tab = (string)($_GET['tab'] ?? 'higher');
 if (!isset(RL_TABS[$tab])) {
     $tab = 'higher';
@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         if (($_POST['scope'] ?? '') === 'all') {
             // Every client in this tab that matches the current search.
-            $targets = array_filter(rl_search(rl_load($conn), $q), static fn($r) => $r['tab'] === $tab);
+            $targets = array_filter(rl_search(rl_load($conn), $search), static fn($r) => $r['tab'] === $tab);
         } else {
             $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
             $targets = rl_load($conn, $ids);
@@ -186,12 +186,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : 'No clients were selected.';
         $_SESSION['message_type'] = $updated > 0 ? 'success' : 'error';
     }
-    header('Location: ' . rl_url(['tab' => $tab, 'q' => $q, 'per_page' => $perPage]));
+    header('Location: ' . rl_url(['tab' => $tab, 'q' => $search, 'per_page' => $perPage]));
     exit;
 }
 
 /* ---------- Build the list ---------- */
-$rows = rl_search(rl_load($conn), $q);
+$rows = rl_search(rl_load($conn), $search);
 $counts = array_fill_keys(array_keys(RL_TABS), 0);
 foreach ($rows as $r) {
     if ($r['tab'] !== null) {
@@ -267,7 +267,7 @@ require "nav-head.php";
         <nav class="rl-tabs" aria-label="Limit groups">
             <?php foreach (RL_TABS as $key => [$label, $icon]): ?>
                 <a class="rl-tab tab-<?= h($key) ?><?= $key === $tab ? ' active' : '' ?>"
-                   href="<?= h(rl_url(['tab' => $key, 'q' => $q, 'per_page' => $perPage])) ?>">
+                   href="<?= h(rl_url(['tab' => $key, 'q' => $search, 'per_page' => $perPage])) ?>">
                     <i class="fas <?= h($icon) ?>"></i> <?= h($label) ?>
                     <span class="rl-count"><?= number_format($counts[$key]) ?></span>
                 </a>
@@ -279,33 +279,33 @@ require "nav-head.php";
         <div class="rl-toolbar">
             <form method="get" class="rl-search">
                 <input type="hidden" name="tab" value="<?= h($tab) ?>">
-                <input type="text" name="q" value="<?= h($q) ?>" placeholder="Search name, email, phone, business type or client ID">
+                <input type="text" name="q" value="<?= h($search) ?>" placeholder="Search name, email, phone, business type or client ID">
                 <select name="per_page" aria-label="Rows per page" onchange="this.form.submit()">
                     <?php foreach (RL_PER_PAGE as $n): ?>
                         <option value="<?= $n ?>" <?= $n === $perPage ? 'selected' : '' ?>><?= $n ?> per page</option>
                     <?php endforeach; ?>
                 </select>
                 <button class="btn btn-secondary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
-                <?php if ($q !== ''): ?>
+                <?php if ($search !== ''): ?>
                     <a class="btn btn-light btn-sm" href="<?= h(rl_url(['tab' => $tab, 'per_page' => $perPage])) ?>">Clear</a>
                 <?php endif; ?>
             </form>
         </div>
 
-        <?php if ($q !== ''): ?>
+        <?php if ($search !== ''): ?>
             <p class="text-muted fs-sm">
-                Results for "<?= h($q) ?>". Tab counts include only matching clients.
+                Results for "<?= h($search) ?>". Tab counts include only matching clients.
             </p>
         <?php endif; ?>
 
         <?php if (!$pageRows): ?>
             <div class="rl-empty">
                 <i class="fas fa-check-circle fa-2x mb-2" style="color:#16a34a"></i>
-                <div>No clients in this tab<?= $q !== '' ? ' match your search' : '' ?>.</div>
+                <div>No clients in this tab<?= $search !== '' ? ' match your search' : '' ?>.</div>
             </div>
         <?php else: ?>
             <form method="post" id="rlForm"
-                  action="<?= h(rl_url(['tab' => $tab, 'q' => $q, 'per_page' => $perPage])) ?>">
+                  action="<?= h(rl_url(['tab' => $tab, 'q' => $search, 'per_page' => $perPage])) ?>">
                 <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
                 <input type="hidden" name="scope" id="rlScope" value="selected">
 
@@ -357,7 +357,7 @@ require "nav-head.php";
                             <i class="fas fa-check me-2"></i>Update ticked clients
                         </button>
                         <button type="submit" class="btn btn-outline-primary" data-scope="all"
-                                data-confirm="Set all <?= number_format($total) ?> client<?= $total === 1 ? '' : 's' ?> in &quot;<?= h(RL_TABS[$tab][0]) ?>&quot;<?= $q !== '' ? ' matching your search' : '' ?> to the formula limit?">
+                                data-confirm="Set all <?= number_format($total) ?> client<?= $total === 1 ? '' : 's' ?> in &quot;<?= h(RL_TABS[$tab][0]) ?>&quot;<?= $search !== '' ? ' matching your search' : '' ?> to the formula limit?">
                             <i class="fas fa-layer-group me-2"></i>Update all <?= number_format($total) ?> in this tab
                         </button>
                     </div>
@@ -372,7 +372,7 @@ require "nav-head.php";
                 <div class="text-muted fs-sm">Showing <?= number_format($from) ?>-<?= number_format($to) ?> of <?= number_format($total) ?></div>
                 <?php if ($totalPages > 1): ?>
                     <ul class="rl-pages" aria-label="Pages">
-                        <?php $base = ['tab' => $tab, 'q' => $q, 'per_page' => $perPage]; ?>
+                        <?php $base = ['tab' => $tab, 'q' => $search, 'per_page' => $perPage]; ?>
                         <li><?php if ($page > 1): ?><a href="<?= h(rl_url($base + ['page' => $page - 1])) ?>">Prev</a><?php else: ?><span class="disabled">Prev</span><?php endif; ?></li>
                         <?php
                         $start = max(1, $page - 2);

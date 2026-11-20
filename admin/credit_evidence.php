@@ -57,12 +57,12 @@ $tab = (string)($_GET['tab'] ?? 'review');
 if (!isset(CE_TABS[$tab])) {
     $tab = 'review';
 }
-$q = trim((string)($_GET['q'] ?? ''));
+$search = trim((string)($_GET['q'] ?? ''));
 $page = max(1, (int)($_GET['page'] ?? 1));
 
 /* ---------- Actions ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $back = ce_url(['tab' => $tab, 'q' => $q, 'page' => $page]);
+    $back = ce_url(['tab' => $tab, 'q' => $search, 'page' => $page]);
     try {
         if (!hash_equals($csrf, (string)($_POST['csrf_token'] ?? ''))) {
             throw new DomainException('Your session expired. Please try again.');
@@ -109,9 +109,9 @@ credit_ensure_schema($conn);
 $where = '1=1';
 $types = '';
 $params = [];
-if ($q !== '') {
+if ($search !== '') {
     $where .= " AND (CONCAT_WS(' ', u.fname, u.lname) LIKE ? OR u.email LIKE ? OR c.phone LIKE ? OR c.business_name LIKE ?)";
-    $like = '%' . $q . '%';
+    $like = '%' . $search . '%';
     $types .= 'ssss';
     array_push($params, $like, $like, $like, $like);
 }
@@ -217,7 +217,7 @@ require "nav-head.php";
     <div class="ce-card">
         <nav class="ce-tabs">
             <?php foreach (CE_TABS as $key => [$label, $icon]): ?>
-                <a class="ce-tab<?= $key === $tab ? ' active' : '' ?>" href="<?= h(ce_url(['tab' => $key, 'q' => $q])) ?>">
+                <a class="ce-tab<?= $key === $tab ? ' active' : '' ?>" href="<?= h(ce_url(['tab' => $key, 'q' => $search])) ?>">
                     <i class="fas <?= h($icon) ?>"></i> <?= h($label) ?> <span class="ce-count"><?= number_format($counts[$key]) ?></span>
                 </a>
             <?php endforeach; ?>
@@ -225,13 +225,13 @@ require "nav-head.php";
 
         <form method="get" class="ce-search">
             <input type="hidden" name="tab" value="<?= h($tab) ?>">
-            <input type="text" name="q" value="<?= h($q) ?>" placeholder="Search client name, email, phone or business">
+            <input type="text" name="q" value="<?= h($search) ?>" placeholder="Search client name, email, phone or business">
             <button class="btn btn-secondary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
-            <?php if ($q !== ''): ?><a class="btn btn-light btn-sm" href="<?= h(ce_url(['tab' => $tab])) ?>">Clear</a><?php endif; ?>
+            <?php if ($search !== ''): ?><a class="btn btn-light btn-sm" href="<?= h(ce_url(['tab' => $tab])) ?>">Clear</a><?php endif; ?>
         </form>
 
         <?php if (!$rows): ?>
-            <div class="ce-empty"><i class="fas fa-inbox fa-2x mb-2"></i><div>Nothing here<?= $q !== '' ? ' for your search' : '' ?>.</div></div>
+            <div class="ce-empty"><i class="fas fa-inbox fa-2x mb-2"></i><div>Nothing here<?= $search !== '' ? ' for your search' : '' ?>.</div></div>
         <?php endif; ?>
 
         <?php foreach ($rows as $r): ?>
@@ -322,7 +322,7 @@ require "nav-head.php";
                 <?php if ($canDecide && in_array($r['status'], ['analyzed', 'failed', 'processing'], true)): ?>
                     <div class="ce-actions">
                         <?php if ($r['status'] === 'analyzed'): ?>
-                            <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $q, 'page' => $page])) ?>">
+                            <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $search, 'page' => $page])) ?>">
                                 <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
                                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                                 <input type="text" name="note" maxlength="500" placeholder="Note (optional)">
@@ -331,13 +331,13 @@ require "nav-head.php";
                                     <i class="fas fa-check me-1"></i>Approve</button>
                             </form>
                         <?php endif; ?>
-                        <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $q, 'page' => $page])) ?>">
+                        <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $search, 'page' => $page])) ?>">
                             <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                             <input type="text" name="note" maxlength="500" placeholder="Reason for the client (required)" required>
                             <button class="btn btn-sm btn-outline-danger" name="action" value="reject" type="submit"><i class="fas fa-times me-1"></i>Reject</button>
                         </form>
-                        <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $q, 'page' => $page])) ?>">
+                        <form method="post" action="<?= h(ce_url(['tab' => $tab, 'q' => $search, 'page' => $page])) ?>">
                             <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                             <button class="btn btn-sm btn-light" name="action" value="rerun" type="submit"><i class="fas fa-redo me-1"></i>Read again</button>
@@ -352,7 +352,7 @@ require "nav-head.php";
                 <div class="ce-sub">Showing <?= number_format($offset + 1) ?>-<?= number_format(min($total, $offset + CE_PER_PAGE)) ?> of <?= number_format($total) ?></div>
                 <?php if ($totalPages > 1): ?>
                     <ul class="ce-pages">
-                        <?php $base = ['tab' => $tab, 'q' => $q]; ?>
+                        <?php $base = ['tab' => $tab, 'q' => $search]; ?>
                         <li><?php if ($page > 1): ?><a href="<?= h(ce_url($base + ['page' => $page - 1])) ?>">Prev</a><?php else: ?><span class="disabled">Prev</span><?php endif; ?></li>
                         <?php for ($p = max(1, $page - 2); $p <= min($totalPages, $page + 2); $p++): ?>
                             <li><?php if ($p === $page): ?><span class="current"><?= $p ?></span><?php else: ?><a href="<?= h(ce_url($base + ['page' => $p])) ?>"><?= $p ?></a><?php endif; ?></li>
