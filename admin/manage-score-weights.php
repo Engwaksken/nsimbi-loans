@@ -16,8 +16,10 @@ $components = [
     'esoRecommendation'        => 'ESO Recommendation',
     'sectorRisk'               => 'Business Sector',
     'mobileMoneyTransactions'  => 'Mobile Money Transactions',
-    'personalRecords'          => 'Personal Records',
-    'businessRecords'          => 'Business Records'
+    'personalRecords'          => 'Water / Electricity Bills',
+    'businessRecords'          => 'Business Records and Licences',
+    'repaymentHistory'         => 'Repayment History',
+    'documentation'            => 'Documents on File',
 ];
 
 $weights = [];
@@ -342,7 +344,7 @@ $canEditWeights = ((int)($_SESSION['role'] ?? 0) === 1);
     <div class="page-header mb-4">
         <div>
             <div class="title">Manage Score Weights</div>
-            <div class="sub">Each weight sets how much a component counts in a client's credit score. Business Sector uses the business-type score; Mobile Money Transactions, Personal Records (utility bill) and Business Records use approved credit documents (Loans &gt; Credit Documents). A component without an approved document counts at the business-type score, so documents can only raise a score. ESO Recommendation is not collected yet and also counts at the business-type score.</div>
+            <div class="sub">Each weight sets how much a component counts in a client's credit score. Business Sector uses the business-type score. Mobile Money Transactions (6 months for the top score), Water / Electricity Bills (6 consecutive months on the same account) and Business Records and Licences (URSB, trading licence, TIN, permits, sales records) use approved credit documents (Loans &gt; Credit Documents). Documents on File counts the ID, photos, licence and signature given at registration or on the profile. These document components can only raise a score: without a document they count at the business-type score. Repayment History is how the client paid earlier and current loans; it can raise or lower the score, and a loan overdue more than 30 days caps the score at 4 (more than 90 days at 2). ESO Recommendation is not collected yet and counts at the business-type score.</div>
         </div>
     </div>
 

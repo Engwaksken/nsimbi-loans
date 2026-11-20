@@ -38,7 +38,7 @@ const CE_TABS = [
     'review'   => ['Waiting for review', 'fa-hourglass-half', ['analyzed']],
     'failed'   => ['Could not be read', 'fa-exclamation-triangle', ['failed', 'processing']],
     'approved' => ['Approved', 'fa-check-circle', ['approved', 'superseded']],
-    'rejected' => ['Rejected', 'fa-times-circle', ['rejected']],
+    'rejected' => ['Rejected', 'fa-times-circle', ['rejected', 'ignored']],
 ];
 const CE_PER_PAGE = 10;
 
@@ -237,13 +237,11 @@ require "nav-head.php";
         <?php foreach ($rows as $r): ?>
             <?php
             $data = json_decode((string)($r['extracted_json'] ?? ''), true) ?: [];
-            $typeMeta = CREDIT_EVIDENCE_TYPES[$r['doc_type']] ?? ['label' => $r['doc_type'], 'icon' => 'fa-file', 'income' => false];
+            $typeMeta = CREDIT_EVIDENCE_TYPES[$r['doc_type']] ?? ['label' => 'Registration document', 'icon' => 'fa-file', 'income' => false];
             [$statusText, $statusClass] = credit_evidence_status_label((string)$r['status']);
             $preview = null;
             if ($r['status'] === 'analyzed') {
-                $preview = credit_profile_for_user($conn, (int)$r['user_id'], [
-                    'doc_type' => $r['doc_type'], 'ai_score' => $r['ai_score'], 'monthly_income' => $r['monthly_income'],
-                ]);
+                $preview = credit_profile_for_user($conn, (int)$r['user_id'], $r);
             }
             $name = trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? ''));
             ?>
@@ -253,7 +251,7 @@ require "nav-head.php";
                         <div class="who"><i class="fas <?= h($typeMeta['icon']) ?> text-primary me-1"></i><?= h($typeMeta['label']) ?>: <?= h($name !== '' ? $name : 'Client #' . $r['user_id']) ?></div>
                         <div class="ce-sub">
                             <?= h($r['business_name'] ?? '') ?><?= !empty($r['business_type']) ? ' (' . h($r['business_type']) . ')' : '' ?>
-                            | <?= h($r['email'] ?? '') ?> | Uploaded <?= h(date('d M Y H:i', strtotime((string)$r['created_at']))) ?> from the <?= $r['source'] === 'app' ? 'app' : 'website' ?>
+                            | <?= h($r['email'] ?? '') ?> | <?= $r['source'] === 'reg' ? 'Registration file sent to be read' : 'Uploaded' ?> <?= h(date('d M Y H:i', strtotime((string)$r['created_at']))) ?><?= $r['source'] === 'reg' ? '' : ' from the ' . ($r['source'] === 'app' ? 'app' : 'website') ?>
                         </div>
                     </div>
                     <div class="text-end">
@@ -293,6 +291,13 @@ require "nav-head.php";
                         </div>
                     <?php elseif (in_array($r['status'], ['approved', 'superseded'], true) && $r['score_before'] !== null): ?>
                         <div class="ce-sub">Before approval: score <?= h(rtrim(rtrim(number_format((float)$r['score_before'], 1), '0'), '.')) ?>, limit <?= ce_money($r['limit_before']) ?></div>
+                    <?php endif; ?>
+
+                    <?php $ruleNotes = credit_evidence_rule_notes($r, $conn); ?>
+                    <?php if ($ruleNotes): ?>
+                        <div class="ce-summary"><strong>What counts for the score:</strong>
+                            <ul class="ce-list"><?php foreach ($ruleNotes as $rn): ?><li><?= h($rn) ?></li><?php endforeach; ?></ul>
+                        </div>
                     <?php endif; ?>
 
                     <?php if (!empty($r['summary'])): ?>

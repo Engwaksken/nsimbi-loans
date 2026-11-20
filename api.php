@@ -1398,7 +1398,7 @@ function getCreditEvidence(mysqli $conn, array $user): void
             "document_types" => $types,
             "documents" => $docs,
             "components" => $profile ? array_values(array_map(
-                static fn($k, $v) => ["key" => $k, "label" => $v["label"], "score" => $v["score"], "weight" => round($v["weight"], 2), "from_document" => $v["from_evidence"]],
+                static fn($k, $v) => ["key" => $k, "label" => $v["label"], "score" => $v["score"], "weight" => round($v["weight"], 2), "from_document" => $v["from_evidence"], "note" => (string)($v["note"] ?? "")],
                 array_keys($profile["components"]),
                 $profile["components"]
             )) : [],

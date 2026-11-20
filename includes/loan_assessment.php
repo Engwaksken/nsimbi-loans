@@ -199,10 +199,11 @@ if (!function_exists('loan_assessment')) {
     function loan_assessment_limit(string $businessType, $amountLast, $amountThis, ?int $userId = null): array
     {
         // With a client ID, approved credit documents (statements, bills,
-        // records) also count: see includes/credit_scoring.php.
+        // licences), documents on file and repayment history also count:
+        // see includes/credit_scoring.php.
         if ($userId !== null && $userId > 0 && function_exists('credit_profile_compute') && ($db = credit_db()) !== null) {
-            $p = credit_profile_compute($db, $businessType, $amountLast, $amountThis, credit_approved_evidence($db, $userId));
-            if ($p['verified_income'] > 0 || $p['score'] > $p['base_score']) {
+            $p = credit_profile_compute($db, $businessType, $amountLast, $amountThis, credit_approved_evidence($db, $userId), $userId);
+            if ($p['verified_income'] > 0 || abs($p['score'] - $p['base_score']) >= 0.05) {
                 return [
                     'score'        => $p['score'],
                     'limit'        => $p['limit'],

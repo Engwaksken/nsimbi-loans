@@ -5,6 +5,7 @@ declare(strict_types=1);
 // so a problem with it can never blank the normal view page.
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+require_once dirname(__DIR__) . '/includes/credit_scoring.php';
 require_once dirname(__DIR__) . '/includes/file_links.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -1129,7 +1130,10 @@ require 'nav-head.php';
                         <p>Everything this applicant has attached: registration files, collateral and supporting documents.</p>
                     </div>
                     <?php if ($clientSource === 'customer'): ?>
-                        <a class="btn btn-sm btn-outline-primary" href="view_client.php?user_id=<?= (int)$client_id ?>"><i class="fas fa-user me-1"></i>Client profile</a>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <?= credit_import_panel((int)$client_id, 'view_loan.php?id=' . (int)$loan_id . '&tab=documents') ?>
+                            <a class="btn btn-sm btn-outline-primary" href="view_client.php?user_id=<?= (int)$client_id ?>"><i class="fas fa-user me-1"></i>Client profile</a>
+                        </div>
                     <?php endif; ?>
                 </div>
                 <?= stored_file_card_css() ?>
@@ -1430,7 +1434,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    openLoanTab('#overview');
+    const startTab = new URLSearchParams(window.location.search).get('tab');
+    openLoanTab(startTab && document.getElementById(startTab) ? '#' + startTab : '#overview');
 });
 </script>
 <?php require 'footer.php'; ?>

@@ -602,7 +602,7 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                         <div class="cr-part">
                             <div class="cr-part-top"><span><?= esc($comp['label']); ?></span><strong><?= esc(number_format($comp['score'], 1)); ?></strong></div>
                             <div class="cr-bar"><div style="width:<?= (int)round($comp['score'] * 10); ?>%"></div></div>
-                            <div class="cr-part-sub">Counts for <?= (int)round($comp['weight'] * 100); ?>%<?= $comp['from_evidence'] ? '' : ' | upload a document to improve'; ?></div>
+                            <div class="cr-part-sub">Counts for <?= (int)round($comp['weight'] * 100); ?>%<?= ($comp['note'] ?? '') !== '' ? ' | ' . esc($comp['note']) : ''; ?></div>
                         </div>
                     <?php endforeach; ?>
                 </div>

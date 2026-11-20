@@ -109,6 +109,7 @@ function money($amount): string {
 }
 
 require_once dirname(__DIR__) . '/includes/file_links.php';
+require_once dirname(__DIR__) . '/includes/credit_scoring.php';
 
 /** Link to a client's uploaded file wherever it was saved ('' if none or missing). */
 function client_file_url(?string $path): string {
@@ -436,6 +437,7 @@ $docTypes = client_doc_types();
                         <p>Uploaded verification and business documents.</p>
                     </div>
 
+                    <div style="margin-bottom:.8rem"><?= credit_import_panel((int)$user_id, 'view_client.php?user_id=' . (int)$user_id . '&tab=documents') ?></div>
                     <?= stored_file_card_css() ?>
                     <div class="sf-grid">
                         <?= client_doc_card('Profile Image', $client['image_url'] ?? '') ?>
