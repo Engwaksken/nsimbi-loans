@@ -4,4 +4,5 @@
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="datatables/jquery.dataTables.min.js"></script>
 <script src="js/loanpro.js"></script>
+<script src="../assets/js/table-pager.js"></script>
 </body></html>

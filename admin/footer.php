@@ -4,6 +4,7 @@
 
 <script src="../datatables2/datatables.min.js"></script>
 <script src="<?= htmlspecialchars(function_exists('asset_url') ? asset_url('assets/js/loanpro.js') : '../assets/js/loanpro.js', ENT_QUOTES, 'UTF-8') ?>"></script>
+<script src="<?= htmlspecialchars(function_exists('asset_url') ? asset_url('assets/js/table-pager.js') : '../assets/js/table-pager.js', ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php foreach (($pageScripts ?? []) as $pageScript): ?>
 <script src="<?= htmlspecialchars($pageScript, ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php endforeach; ?>

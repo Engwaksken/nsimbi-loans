@@ -233,6 +233,39 @@ $stats = $conn->query("
             </table>
         </div>
     </div>
+
+    <div class="card-footer clients-pagination">
+        <div class="pagination-info">
+            Page <?= number_format($page) ?> of <?= number_format($totalPages) ?>
+            · <?= number_format($totalRows) ?> user<?= $totalRows === 1 ? '' : 's' ?>
+        </div>
+
+        <?php if ($totalPages > 1): ?>
+            <nav aria-label="Users pagination">
+                <ul class="pagination mb-0">
+                    <?php
+                    $query = $search !== "" ? '&q=' . urlencode($search) : '';
+                    $start = max(1, $page - 2);
+                    $end = min($totalPages, $page + 2);
+                    ?>
+
+                    <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                        <a class="page-link" href="?page=<?= max(1, $page - 1) . $query ?>">Previous</a>
+                    </li>
+
+                    <?php for ($p = $start; $p <= $end; $p++): ?>
+                        <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                            <a class="page-link" href="?page=<?= $p . $query ?>"><?= $p ?></a>
+                        </li>
+                    <?php endfor; ?>
+
+                    <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                        <a class="page-link" href="?page=<?= min($totalPages, $page + 1) . $query ?>">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        <?php endif; ?>
+    </div>
 </div>
 
 <script>
