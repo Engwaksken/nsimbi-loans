@@ -48,6 +48,7 @@ foreach ($weights as $weight) {
 
 $weightPercent = $totalWeight * 100;
 $isBalanced = abs($totalWeight - 1.0) < 0.001;
+$canEditWeights = ((int)($_SESSION['role'] ?? 0) === 1);
 ?>
 
 <style>
@@ -208,6 +209,14 @@ $isBalanced = abs($totalWeight - 1.0) < 0.001;
     color: #166534;
 }
 
+.weight-alert-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
 .weight-alert.warning {
     background: #fffbeb;
     color: #92400e;
@@ -343,9 +352,19 @@ $isBalanced = abs($totalWeight - 1.0) < 0.001;
             Total weight is balanced at 1.00.
         </div>
     <?php else: ?>
-        <div class="weight-alert warning">
-            <i class="fas fa-exclamation-triangle me-1"></i>
-            Total weight is currently <?= number_format($totalWeight, 2) ?>. Recommended total is 1.00.
+        <div class="weight-alert warning weight-alert-action">
+            <div>
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Total weight is currently <?= number_format($totalWeight, 2) ?>. Recommended total is 1.00.
+                <?php if ($canEditWeights && !empty($weights)): ?>
+                    <div class="fs-sm mt-1">Balancing scales every weight by the same amount, so each component keeps its share.</div>
+                <?php endif; ?>
+            </div>
+            <?php if ($canEditWeights && !empty($weights)): ?>
+                <button type="button" class="btn btn-warning btn-sm" id="normalizeWeights">
+                    <i class="fas fa-balance-scale me-1"></i> Balance to 1.00
+                </button>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 
@@ -459,6 +478,7 @@ $isBalanced = abs($totalWeight - 1.0) < 0.001;
                             </td>
 
                             <td class="text-center">
+                                <?php if ($canEditWeights): ?>
                                 <button type="button"
                                         class="btn btn-sm btn-info js-edit-weight"
                                         data-component="<?= h($name) ?>"
@@ -467,6 +487,9 @@ $isBalanced = abs($totalWeight - 1.0) < 0.001;
                                         data-id="<?= h($id) ?>">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                <?php else: ?>
+                                <span class="text-muted fs-xs">Reviewers only</span>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -516,7 +539,7 @@ $isBalanced = abs($totalWeight - 1.0) < 0.001;
                            min="0"
                            max="1"
                            required>
-                    <small class="text-muted">Enter a value from 0 to 1.</small>
+                    <small class="text-muted" id="weightHint">Enter a value from 0 to 1.</small>
                 </div>
             </form>
         </div>
@@ -588,6 +611,17 @@ document.addEventListener('DOMContentLoaded', function () {
             tableId.value = this.dataset.id || '';
             weightValue.value = this.dataset.weight || 0;
 
+            let others = 0;
+            document.querySelectorAll('.weight-value').forEach(el => {
+                if (el.dataset.component !== this.dataset.component) {
+                    others += parseFloat(el.textContent) || 0;
+                }
+            });
+            const maxAllowed = Math.max(0, Math.min(1, 1 - others));
+            weightValue.max = maxAllowed.toFixed(2);
+            document.getElementById('weightHint').textContent =
+                'Other components total ' + others.toFixed(2) + ', so this can be at most ' + maxAllowed.toFixed(2) + ' (total 1.00).';
+
             clearAlert();
             openModal();
         });
@@ -640,7 +674,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: JSON.stringify({
-                    name: component,
+                    action: 'update',
                     weight: weight,
                     id: id
                 })
@@ -670,6 +704,32 @@ document.addEventListener('DOMContentLoaded', function () {
         } finally {
             btn.disabled = false;
             btn.innerHTML = oldHtml;
+        }
+    });
+
+    document.getElementById('normalizeWeights')?.addEventListener('click', async function () {
+        if (!window.confirm('Scale all weights so they add up to 1.00? Each component keeps the same share.')) {
+            return;
+        }
+        const btn = this;
+        const oldHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Balancing...';
+        try {
+            const response = await fetch('update_weight.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ action: 'normalize' })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || 'Could not balance the weights.');
+            }
+            window.location.reload();
+        } catch (error) {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+            window.alert(error.message || 'Could not balance the weights.');
         }
     });
 

@@ -6,9 +6,16 @@ declare(strict_types=1);
  * (includes/loan_assessment.php), the same formula used by the app, the
  * website, admin add client, import and the AI recommended amount.
  *
- * Lists every customer whose saved limit or score differs from the formula.
- * Reviewers tick the rows to correct and apply. Clients without turnover are
- * never changed: a 0 limit means "no limit" on the website.
+ * Tabs:
+ *   higher      saved limit is above the formula  (the risky ones)
+ *   lower       saved limit is below the formula
+ *   score       limit matches but the saved score does not
+ *   noturnover  has a limit but no turnover, so the formula cannot be applied
+ *
+ * Reviewers (role 1) can update the ticked rows, or every row in a tab
+ * (respecting the search). Values are always recalculated on the server.
+ * Clients without turnover are never changed: a 0 limit means "no limit"
+ * on the website.
  */
 
 $phead = 'Recalculate Loan Limits';
@@ -36,6 +43,14 @@ if (empty($_SESSION['limit_recalc_csrf'])) {
 }
 $csrf = $_SESSION['limit_recalc_csrf'];
 
+const RL_TABS = [
+    'higher'     => ['Limit too high', 'fa-arrow-up', 'Saved limit is above the formula. These clients can borrow more than their turnover supports.'],
+    'lower'      => ['Limit too low', 'fa-arrow-down', 'Saved limit is below the formula. Some may be deliberate, so check before updating.'],
+    'score'      => ['Score only', 'fa-star-half-alt', 'Limit is right but the saved score is missing, 0 or on a different scale.'],
+    'noturnover' => ['No turnover', 'fa-ban', 'These clients have a limit but no turnover on file, so the formula cannot be applied. Add their turnover on the client profile first.'],
+];
+const RL_PER_PAGE = [10, 25, 50, 100];
+
 function rl_money(float $v): string
 {
     return 'UGX ' . number_format($v);
@@ -61,25 +76,71 @@ function rl_load(mysqli $conn, ?array $onlyIds = null): array
     $rows = [];
     $res = $conn->query($sql);
     while ($res && ($r = $res->fetch_assoc())) {
-        $calc = loan_assessment_limit(
+        $r['calc'] = loan_assessment_limit(
             (string)($r['business_type'] ?? ''),
             (string)($r['amount_last'] ?? ''),
             (string)($r['amount_this'] ?? '')
         );
-        $r['calc'] = $calc;
         $r['saved_limit'] = (float)($r['loan_limit'] ?? 0);
         $r['saved_score'] = is_numeric($r['credit_score'] ?? null) ? (float)$r['credit_score'] : null;
+        $r['tab'] = rl_tab($r);
         $rows[] = $r;
     }
     return $rows;
 }
 
-function rl_differs(array $r): bool
+/** Which tab a client belongs in, or null when everything matches. */
+function rl_tab(array $r): ?string
 {
-    $limitDiff = abs($r['saved_limit'] - $r['calc']['limit']) > max(1000, $r['calc']['limit'] * 0.01);
-    $scoreDiff = $r['saved_score'] === null || abs($r['saved_score'] - $r['calc']['score']) >= 0.5;
-    return $limitDiff || $scoreDiff;
+    if (!$r['calc']['has_turnover']) {
+        return $r['saved_limit'] > 0 ? 'noturnover' : null;
+    }
+    $formula = (float)$r['calc']['limit'];
+    $tolerance = max(1000, $formula * 0.01);
+    if ($r['saved_limit'] - $formula > $tolerance) {
+        return 'higher';
+    }
+    if ($formula - $r['saved_limit'] > $tolerance) {
+        return 'lower';
+    }
+    if ($r['saved_score'] === null || abs($r['saved_score'] - $r['calc']['score']) >= 0.5) {
+        return 'score';
+    }
+    return null;
 }
+
+function rl_search(array $rows, string $q): array
+{
+    if ($q === '') {
+        return $rows;
+    }
+    $needle = strtolower($q);
+    return array_values(array_filter($rows, static function (array $r) use ($needle): bool {
+        $hay = strtolower(implode(' ', [
+            $r['fname'] ?? '', $r['lname'] ?? '', $r['email'] ?? '',
+            $r['phone'] ?? '', $r['business_type'] ?? '', (string)$r['user_id'],
+        ]));
+        return str_contains($hay, $needle);
+    }));
+}
+
+function rl_url(array $params): string
+{
+    $params = array_filter($params, static fn($v) => $v !== '' && $v !== null);
+    return 'recalculate_limits.php' . ($params ? '?' . http_build_query($params) : '');
+}
+
+/* ---------- Read the view state ---------- */
+$q = trim((string)($_GET['q'] ?? ''));
+$tab = (string)($_GET['tab'] ?? 'higher');
+if (!isset(RL_TABS[$tab])) {
+    $tab = 'higher';
+}
+$perPage = (int)($_GET['per_page'] ?? 25);
+if (!in_array($perPage, RL_PER_PAGE, true)) {
+    $perPage = 25;
+}
+$page = max(1, (int)($_GET['page'] ?? 1));
 
 /* ---------- Apply ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -90,11 +151,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!hash_equals($csrf, $postedCsrf)) {
         $_SESSION['message'] = 'Your session expired. Please try again.';
         $_SESSION['message_type'] = 'error';
+    } elseif ($tab === 'noturnover') {
+        $_SESSION['message'] = 'Clients without turnover cannot be recalculated. Add their turnover first.';
+        $_SESSION['message_type'] = 'error';
     } else {
-        $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
+        if (($_POST['scope'] ?? '') === 'all') {
+            // Every client in this tab that matches the current search.
+            $targets = array_filter(rl_search(rl_load($conn), $q), static fn($r) => $r['tab'] === $tab);
+        } else {
+            $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
+            $targets = rl_load($conn, $ids);
+        }
+
         $updated = 0;
         $stmt = $conn->prepare("UPDATE customers SET loan_limit = ?, credit_score = ? WHERE user_id = ?");
-        foreach (rl_load($conn, $ids) as $r) {
+        foreach ($targets as $r) {
             if (!$r['calc']['has_turnover']) {
                 continue; // never write a 0 limit
             }
@@ -107,49 +178,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         $stmt->close();
-        $_SESSION['message'] = "Updated {$updated} client" . ($updated === 1 ? '' : 's') . ' to the formula limit.';
-        $_SESSION['message_type'] = 'success';
+
+        $_SESSION['message'] = $updated > 0
+            ? "Updated {$updated} client" . ($updated === 1 ? '' : 's') . ' to the formula limit.'
+            : 'No clients were selected.';
+        $_SESSION['message_type'] = $updated > 0 ? 'success' : 'error';
     }
-    header('Location: recalculate_limits.php' . (isset($_GET['q']) ? '?q=' . urlencode((string)$_GET['q']) : ''));
+    header('Location: ' . rl_url(['tab' => $tab, 'q' => $q, 'per_page' => $perPage]));
     exit;
 }
 
-/* ---------- List ---------- */
-require "nav-head.php";
-
-$q = trim((string)($_GET['q'] ?? ''));
-$all = rl_load($conn);
-if ($q !== '') {
-    $all = array_values(array_filter($all, static function (array $r) use ($q): bool {
-        $hay = strtolower(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? '') . ' ' . ($r['email'] ?? '') . ' ' . ($r['phone'] ?? ''));
-        return str_contains($hay, strtolower($q));
-    }));
-}
-
-$mismatched = [];
-$noTurnover = [];
-foreach ($all as $r) {
-    if (!$r['calc']['has_turnover']) {
-        if ($r['saved_limit'] > 0) {
-            $noTurnover[] = $r;
-        }
-        continue;
-    }
-    if (rl_differs($r)) {
-        $mismatched[] = $r;
+/* ---------- Build the list ---------- */
+$rows = rl_search(rl_load($conn), $q);
+$counts = array_fill_keys(array_keys(RL_TABS), 0);
+foreach ($rows as $r) {
+    if ($r['tab'] !== null) {
+        $counts[$r['tab']]++;
     }
 }
+$tabRows = array_values(array_filter($rows, static fn($r) => $r['tab'] === $tab));
+$total = count($tabRows);
+$totalPages = max(1, (int)ceil($total / $perPage));
+$page = min($page, $totalPages);
+$pageRows = array_slice($tabRows, ($page - 1) * $perPage, $perPage);
+$from = $total ? ($page - 1) * $perPage + 1 : 0;
+$to = min($total, $page * $perPage);
+$canUpdateTab = $canApply && $tab !== 'noturnover';
+
 $flash = $_SESSION['message'] ?? '';
 $flashType = $_SESSION['message_type'] ?? 'success';
 unset($_SESSION['message'], $_SESSION['message_type']);
+
+require "nav-head.php";
 ?>
 
 <style>
 .rl-page { padding: 1rem; }
 .rl-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 1.1rem; margin-bottom: 1rem; }
 .rl-card h5 { font-weight: 800; margin: 0 0 .25rem; }
+.rl-tabs { display: flex; gap: .5rem; flex-wrap: wrap; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; }
+.rl-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .65rem .9rem; border-radius: 10px 10px 0 0; color: #475569; font-weight: 700; text-decoration: none; border-bottom: 3px solid transparent; }
+.rl-tab:hover { background: #f8fafc; color: #1e293b; }
+.rl-tab.active { color: #1d4ed8; border-bottom-color: #2563eb; background: #eff6ff; }
+.rl-count { background: #e2e8f0; color: #334155; border-radius: 999px; padding: 0 .5rem; font-size: .75rem; }
+.rl-tab.active .rl-count { background: #2563eb; color: #fff; }
+.rl-tab.tab-higher .rl-count { background: #fee2e2; color: #b91c1c; }
+.rl-tab.tab-higher.active .rl-count { background: #dc2626; color: #fff; }
+.rl-toolbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+.rl-search { display: flex; gap: .5rem; flex-wrap: wrap; flex: 1; min-width: 260px; }
+.rl-search input { flex: 1; min-width: 200px; border: 1px solid #d1d5db; border-radius: 10px; padding: .55rem .8rem; }
+.rl-search select { border: 1px solid #d1d5db; border-radius: 10px; padding: .45rem .6rem; }
 .rl-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
-.rl-table th { background: #f8fafc; color: #475569; font-size: .74rem; text-transform: uppercase; padding: .6rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+.rl-table th { background: #f8fafc; color: #475569; font-size: .74rem; text-transform: uppercase; padding: .6rem; text-align: left; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
 .rl-table td { padding: .6rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
 .rl-up { color: #b91c1c; font-weight: 700; }
 .rl-down { color: #92400e; font-weight: 700; }
@@ -157,8 +237,14 @@ unset($_SESSION['message'], $_SESSION['message_type']);
 .rl-flash { padding: .7rem 1rem; border-radius: 10px; margin-bottom: 1rem; }
 .rl-flash.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 .rl-flash.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
-.rl-search { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
-.rl-search input { flex: 1; min-width: 220px; border: 1px solid #d1d5db; border-radius: 10px; padding: .55rem .8rem; }
+.rl-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+.rl-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.rl-pages { display: flex; gap: .3rem; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.rl-pages a, .rl-pages span { display: inline-block; min-width: 2.1rem; text-align: center; padding: .35rem .6rem; border: 1px solid #e2e8f0; border-radius: 8px; color: #334155; text-decoration: none; font-size: .85rem; }
+.rl-pages a:hover { background: #f1f5f9; }
+.rl-pages .current { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+.rl-pages .disabled { color: #cbd5e1; }
+.rl-empty { padding: 2rem 1rem; text-align: center; color: #64748b; }
 </style>
 
 <div class="container-fluid rl-page">
@@ -171,94 +257,168 @@ unset($_SESSION['message'], $_SESSION['message_type']);
         <h5><i class="fas fa-calculator text-primary me-2"></i>Recalculate Loan Limits</h5>
         <p class="text-muted mb-0">
             One formula for app, website and admin: average turnover + average &times; (business score &divide; 10).
-            Business types not in the scoring table score 3. Clients below have a saved limit or score that does
-            not match it. Rows where the saved limit is higher are ticked.
+            Business types not in the scoring table score 3.
         </p>
-        <form method="get" class="rl-search">
-            <input type="text" name="q" value="<?= h($q) ?>" placeholder="Search by name, email or phone">
-            <button class="btn btn-secondary btn-sm" type="submit">Search</button>
-            <?php if ($q !== ''): ?><a class="btn btn-light btn-sm" href="recalculate_limits.php">Clear</a><?php endif; ?>
-        </form>
     </div>
 
     <div class="rl-card">
-        <h5><?= count($mismatched) ?> client<?= count($mismatched) === 1 ? '' : 's' ?> not matching the formula</h5>
+        <nav class="rl-tabs" aria-label="Limit groups">
+            <?php foreach (RL_TABS as $key => [$label, $icon]): ?>
+                <a class="rl-tab tab-<?= h($key) ?><?= $key === $tab ? ' active' : '' ?>"
+                   href="<?= h(rl_url(['tab' => $key, 'q' => $q, 'per_page' => $perPage])) ?>">
+                    <i class="fas <?= h($icon) ?>"></i> <?= h($label) ?>
+                    <span class="rl-count"><?= number_format($counts[$key]) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </nav>
 
-        <?php if (!$mismatched): ?>
-            <p class="text-muted mb-0">Every client<?= $q !== '' ? ' matching your search' : '' ?> already matches the formula.</p>
+        <p class="text-muted"><?= h(RL_TABS[$tab][2]) ?></p>
+
+        <div class="rl-toolbar">
+            <form method="get" class="rl-search">
+                <input type="hidden" name="tab" value="<?= h($tab) ?>">
+                <input type="text" name="q" value="<?= h($q) ?>" placeholder="Search name, email, phone, business type or client ID">
+                <select name="per_page" aria-label="Rows per page" onchange="this.form.submit()">
+                    <?php foreach (RL_PER_PAGE as $n): ?>
+                        <option value="<?= $n ?>" <?= $n === $perPage ? 'selected' : '' ?>><?= $n ?> per page</option>
+                    <?php endforeach; ?>
+                </select>
+                <button class="btn btn-secondary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
+                <?php if ($q !== ''): ?>
+                    <a class="btn btn-light btn-sm" href="<?= h(rl_url(['tab' => $tab, 'per_page' => $perPage])) ?>">Clear</a>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <?php if ($q !== ''): ?>
+            <p class="text-muted fs-sm">
+                Results for "<?= h($q) ?>". Tab counts include only matching clients.
+            </p>
+        <?php endif; ?>
+
+        <?php if (!$pageRows): ?>
+            <div class="rl-empty">
+                <i class="fas fa-check-circle fa-2x mb-2" style="color:#16a34a"></i>
+                <div>No clients in this tab<?= $q !== '' ? ' match your search' : '' ?>.</div>
+            </div>
         <?php else: ?>
-            <form method="post" action="recalculate_limits.php<?= $q !== '' ? '?q=' . h(urlencode($q)) : '' ?>"
-                  onsubmit="return this.querySelectorAll('input[name=&quot;ids[]&quot;]:checked').length > 0;">
+            <form method="post" id="rlForm"
+                  action="<?= h(rl_url(['tab' => $tab, 'q' => $q, 'per_page' => $perPage])) ?>">
                 <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+                <input type="hidden" name="scope" id="rlScope" value="selected">
+
                 <div class="table-responsive">
                     <table class="rl-table" data-no-paginate>
                         <thead>
                         <tr>
-                            <th><input type="checkbox" id="rlAll" aria-label="Select all"></th>
+                            <?php if ($canUpdateTab): ?>
+                                <th><input type="checkbox" id="rlAll" aria-label="Select all on this page"></th>
+                            <?php endif; ?>
                             <th>Client</th>
                             <th>Business type</th>
                             <th>Turnover (last / this)</th>
                             <th>Score (saved / formula)</th>
                             <th>Saved limit</th>
-                            <th>Formula limit</th>
+                            <?php if ($tab !== 'noturnover'): ?>
+                                <th>Formula limit</th>
+                            <?php endif; ?>
                         </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($mismatched as $r): ?>
-                            <?php
-                            $name = trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? ''));
-                            $higher = $r['saved_limit'] > $r['calc']['limit'];
-                            ?>
+                        <?php foreach ($pageRows as $r): ?>
+                            <?php $name = trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? '')); ?>
                             <tr>
-                                <td><input type="checkbox" name="ids[]" value="<?= (int)$r['user_id'] ?>" <?= $higher ? 'checked' : '' ?> <?= $canApply ? '' : 'disabled' ?>></td>
-                                <td><strong><?= h($name !== '' ? $name : 'Client #' . $r['user_id']) ?></strong><div class="text-muted"><?= h($r['email'] ?? '') ?></div></td>
+                                <?php if ($canUpdateTab): ?>
+                                    <td><input type="checkbox" class="rl-pick" name="ids[]" value="<?= (int)$r['user_id'] ?>" <?= $tab === 'higher' ? 'checked' : '' ?>></td>
+                                <?php endif; ?>
+                                <td>
+                                    <strong><?= h($name !== '' ? $name : 'Client #' . $r['user_id']) ?></strong>
+                                    <div class="text-muted"><?= h($r['email'] ?? '') ?></div>
+                                    <a class="fs-xs" href="view_client.php?user_id=<?= (int)$r['user_id'] ?>">Open profile</a>
+                                </td>
                                 <td><?= h(($r['business_type'] ?? '') !== '' ? $r['business_type'] : 'Not given') ?></td>
                                 <td><?= h(loan_assessment_turnover((string)$r['amount_last'])) ?><br><?= h(loan_assessment_turnover((string)$r['amount_this'])) ?></td>
                                 <td><?= $r['saved_score'] !== null ? h(loan_assessment_num($r['saved_score'])) : 'None' ?> / <?= (int)$r['calc']['score'] ?></td>
-                                <td class="<?= $higher ? 'rl-up' : 'rl-down' ?>"><?= rl_money($r['saved_limit']) ?></td>
-                                <td class="rl-new"><?= rl_money((float)$r['calc']['limit']) ?></td>
+                                <td class="<?= $tab === 'higher' ? 'rl-up' : ($tab === 'lower' ? 'rl-down' : '') ?>"><?= rl_money($r['saved_limit']) ?></td>
+                                <?php if ($tab !== 'noturnover'): ?>
+                                    <td class="rl-new"><?= rl_money((float)$r['calc']['limit']) ?></td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
-                <?php if ($canApply): ?>
-                    <button type="submit" class="btn btn-primary mt-3">
-                        <i class="fas fa-check me-2"></i>Set ticked clients to the formula limit
-                    </button>
-                <?php else: ?>
+
+                <?php if ($canUpdateTab): ?>
+                    <div class="rl-actions">
+                        <button type="submit" class="btn btn-primary" data-scope="selected">
+                            <i class="fas fa-check me-2"></i>Update ticked clients
+                        </button>
+                        <button type="submit" class="btn btn-outline-primary" data-scope="all"
+                                data-confirm="Set all <?= number_format($total) ?> client<?= $total === 1 ? '' : 's' ?> in &quot;<?= h(RL_TABS[$tab][0]) ?>&quot;<?= $q !== '' ? ' matching your search' : '' ?> to the formula limit?">
+                            <i class="fas fa-layer-group me-2"></i>Update all <?= number_format($total) ?> in this tab
+                        </button>
+                    </div>
+                <?php elseif (!$canApply && $tab !== 'noturnover'): ?>
                     <p class="text-muted mt-3 mb-0">Only reviewers can apply changes.</p>
                 <?php endif; ?>
             </form>
         <?php endif; ?>
-    </div>
 
-    <?php if ($noTurnover): ?>
-        <div class="rl-card">
-            <h5><?= count($noTurnover) ?> client<?= count($noTurnover) === 1 ? '' : 's' ?> with a limit but no turnover</h5>
-            <p class="text-muted">The formula cannot be applied, so these are not changed here. Add their turnover on the client profile first.</p>
-            <div class="table-responsive">
-                <table class="rl-table" data-no-paginate>
-                    <thead><tr><th>Client</th><th>Business type</th><th>Saved limit</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($noTurnover as $r): ?>
-                        <tr>
-                            <td><strong><?= h(trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? ''))) ?></strong><div class="text-muted"><?= h($r['email'] ?? '') ?></div></td>
-                            <td><?= h(($r['business_type'] ?? '') !== '' ? $r['business_type'] : 'Not given') ?></td>
-                            <td><?= rl_money($r['saved_limit']) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
+        <?php if ($total > 0): ?>
+            <div class="rl-footer">
+                <div class="text-muted fs-sm">Showing <?= number_format($from) ?>-<?= number_format($to) ?> of <?= number_format($total) ?></div>
+                <?php if ($totalPages > 1): ?>
+                    <ul class="rl-pages" aria-label="Pages">
+                        <?php $base = ['tab' => $tab, 'q' => $q, 'per_page' => $perPage]; ?>
+                        <li><?php if ($page > 1): ?><a href="<?= h(rl_url($base + ['page' => $page - 1])) ?>">Prev</a><?php else: ?><span class="disabled">Prev</span><?php endif; ?></li>
+                        <?php
+                        $start = max(1, $page - 2);
+                        $end = min($totalPages, $page + 2);
+                        if ($start > 1): ?>
+                            <li><a href="<?= h(rl_url($base + ['page' => 1])) ?>">1</a></li>
+                            <?php if ($start > 2): ?><li><span class="disabled">...</span></li><?php endif; ?>
+                        <?php endif; ?>
+                        <?php for ($p = $start; $p <= $end; $p++): ?>
+                            <li><?php if ($p === $page): ?><span class="current"><?= $p ?></span><?php else: ?><a href="<?= h(rl_url($base + ['page' => $p])) ?>"><?= $p ?></a><?php endif; ?></li>
+                        <?php endfor; ?>
+                        <?php if ($end < $totalPages): ?>
+                            <?php if ($end < $totalPages - 1): ?><li><span class="disabled">...</span></li><?php endif; ?>
+                            <li><a href="<?= h(rl_url($base + ['page' => $totalPages])) ?>"><?= $totalPages ?></a></li>
+                        <?php endif; ?>
+                        <li><?php if ($page < $totalPages): ?><a href="<?= h(rl_url($base + ['page' => $page + 1])) ?>">Next</a><?php else: ?><span class="disabled">Next</span><?php endif; ?></li>
+                    </ul>
+                <?php endif; ?>
             </div>
-        </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
 <script>
-document.getElementById('rlAll')?.addEventListener('change', function () {
-    document.querySelectorAll('input[name="ids[]"]:not(:disabled)').forEach(cb => { cb.checked = this.checked; });
-});
+(function () {
+    var form = document.getElementById('rlForm');
+    if (!form) return;
+    var all = document.getElementById('rlAll');
+    if (all) {
+        all.addEventListener('change', function () {
+            form.querySelectorAll('.rl-pick').forEach(function (cb) { cb.checked = all.checked; });
+        });
+    }
+    form.querySelectorAll('button[data-scope]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            var scope = btn.getAttribute('data-scope');
+            if (scope === 'selected' && !form.querySelector('.rl-pick:checked')) {
+                e.preventDefault();
+                return;
+            }
+            if (scope === 'all' && !window.confirm(btn.getAttribute('data-confirm'))) {
+                e.preventDefault();
+                return;
+            }
+            document.getElementById('rlScope').value = scope;
+        });
+    });
+})();
 </script>
 
 <?php require "footer.php"; ?>
