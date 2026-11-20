@@ -1,8 +1,18 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/vendor/autoload.php';
-require 'db.php';
+// Session/auth check first; the PDF library is only loaded for ?export=pdf
+// so a problem with it can never blank the normal view page.
+require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'] ?? null, ['1', '2', 1, 2], true)) {
+    header('Location: ../login.php');
+    exit();
+}
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -136,7 +146,11 @@ try {
             c.location,
             c.district,
             c.credit_score,
-            c.loan_limit
+            c.loan_limit,
+            c.business_type,
+            c.business_period,
+            c.amount_last,
+            c.amount_this
         FROM customers c
         INNER JOIN user u ON c.user_id = u.id
         WHERE c.user_id = ?
@@ -262,6 +276,8 @@ if ($clientSource === 'startup') {
 $issueDate = pickLoanDate($loan);
 $dueDate = pickDueDate($loan);
 
+$assessment = loan_assessment($clientSource === 'customer' ? $client : null, $principal);
+
 /* ============================================================
    PDF EXPORT
 ============================================================ */
@@ -386,6 +402,17 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
         <tr><td>Due Date</td><td><?= h(safeDate($dueDate)) ?></td></tr>
     </table>
 
+    <div class="section">Automated Assessment</div>
+    <table>
+        <tr><td>Recommendation</td><td><?= h($assessment['headline']) ?><br><?= h($assessment['detail']) ?></td></tr>
+        <?php if ($assessment['available']): ?>
+            <tr><td>Credit Score</td><td><?= h($assessment['score']) ?>/10 (<?= h($assessment['score_band']) ?>)</td></tr>
+            <tr><td>Recommended Limit</td><td><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Not calculated' ?></td></tr>
+            <tr><td>Business Type</td><td><?= h($assessment['business_type'] ?: 'Not given') ?></td></tr>
+            <tr><td>Turnover (last / this month)</td><td><?= h(loan_assessment_turnover($assessment['amount_last'])) ?> / <?= h(loan_assessment_turnover($assessment['amount_this'])) ?></td></tr>
+        <?php endif; ?>
+    </table>
+
     <div class="section">Payment History</div>
     <table>
         <thead>
@@ -426,6 +453,18 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
     <?php
 
     $html = ob_get_clean();
+
+    $autoload = __DIR__ . '/vendor/autoload.php';
+    try {
+        if (!is_file($autoload)) {
+            throw new RuntimeException('PDF library is not installed on the server (admin/vendor).');
+        }
+        require_once $autoload;
+    } catch (Throwable $e) {
+        error_log('view_loan PDF export failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('PDF export is unavailable: ' . h($e->getMessage()));
+    }
 
     $options = new Options();
     $options->set('isHtml5ParserEnabled', true);
@@ -697,6 +736,22 @@ require 'nav-head.php';
     text-align: right;
 }
 
+.assessment-card { border-left: 5px solid #94a3b8; }
+.assessment-card.tone-success { border-left-color: #16a34a; }
+.assessment-card.tone-warning { border-left-color: #f59e0b; }
+.assessment-card.tone-danger  { border-left-color: #dc2626; }
+
+.assessment-verdict {
+    border-radius: 12px;
+    padding: .9rem 1rem;
+    background: #f1f5f9;
+    color: #334155;
+}
+.tone-success .assessment-verdict { background: #f0fdf4; color: #166534; }
+.tone-warning .assessment-verdict { background: #fffbeb; color: #92400e; }
+.tone-danger  .assessment-verdict { background: #fef2f2; color: #991b1b; }
+.assessment-verdict strong { display: block; font-size: 1.05rem; margin-bottom: .2rem; }
+
 @media (max-width: 992px) {
     .loan-kpi-grid,
     .info-grid {
@@ -852,6 +907,58 @@ require 'nav-head.php';
                         <h5 class="loan-kpi-value"><?= money($loan_balance) ?></h5>
                     </div>
                 </div>
+            </div>
+
+            <div class="loan-tab-card mt-3 assessment-card tone-<?= h($assessment['tone']) ?>">
+                <div class="loan-tab-header">
+                    <div>
+                        <h5><i class="fas fa-robot text-primary me-2"></i>Automated Assessment</h5>
+                        <p>What the system recommends, based on what the client submitted at registration.</p>
+                    </div>
+                    <?php if ($assessment['available']): ?>
+                        <span class="badge badge-soft-<?= h($assessment['score_tone']) ?> px-3 py-2">
+                            Score <?= h(rtrim(rtrim(number_format($assessment['score'], 1), '0'), '.')) ?>/10 &middot; <?= h($assessment['score_band']) ?>
+                        </span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="assessment-verdict">
+                    <strong><?= h($assessment['headline']) ?></strong>
+                    <div><?= h($assessment['detail']) ?></div>
+                </div>
+
+                <?php if ($assessment['available']): ?>
+                    <div class="info-grid mt-3">
+                        <div class="info-item">
+                            <span class="info-label">Amount Requested</span>
+                            <span class="info-value"><?= money($assessment['requested']) ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Recommended Limit</span>
+                            <span class="info-value"><?= $assessment['limit'] > 0 ? money($assessment['limit']) : 'Not calculated' ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Business Type</span>
+                            <span class="info-value"><?= h($assessment['business_type'] !== '' ? $assessment['business_type'] : 'Not given') ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Turnover Last Month</span>
+                            <span class="info-value"><?= h(loan_assessment_turnover($assessment['amount_last'])) ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Turnover This Month</span>
+                            <span class="info-value"><?= h(loan_assessment_turnover($assessment['amount_this'])) ?></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Time in Business</span>
+                            <span class="info-value"><?= h($assessment['business_period'] !== '' ? $assessment['business_period'] : 'Not given') ?></span>
+                        </div>
+                    </div>
+                    <p class="fs-sm text-muted mt-3 mb-0">
+                        The score comes from the business type; the limit is the average declared turnover
+                        plus (score &times; 10%). This is guidance only &mdash; the final decision is yours.
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
 

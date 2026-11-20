@@ -6,6 +6,7 @@ require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
 require_once __DIR__ . "/../includes/loan_workflow.php";
+require_once __DIR__ . "/../includes/loan_assessment.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -348,6 +349,13 @@ $sql = "
         officer.fname AS officer_fname,
         officer.lname AS officer_lname,
 
+        c.credit_score AS assess_credit_score,
+        c.loan_limit AS assess_loan_limit,
+        c.business_type AS assess_business_type,
+        c.business_period AS assess_business_period,
+        c.amount_last AS assess_amount_last,
+        c.amount_this AS assess_amount_this,
+
         c.id AS customer_table_id,
         c.user_id AS customer_user_id,
         m.id AS member_table_id,
@@ -615,6 +623,32 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     border: 1px solid #e2e8f0;
     border-radius: 999px;
     padding: .3rem .75rem;
+}
+
+.assess-strip {
+    display: flex;
+    gap: .7rem;
+    align-items: flex-start;
+    margin-top: .75rem;
+    padding: .6rem .8rem;
+    border-radius: 10px;
+    border-left: 4px solid #94a3b8;
+    background: #f8fafc;
+    color: #334155;
+    font-size: .85rem;
+}
+.assess-strip > i { margin-top: .2rem; }
+.assess-strip.tone-success { background: #f0fdf4; border-left-color: #16a34a; color: #166534; }
+.assess-strip.tone-warning { background: #fffbeb; border-left-color: #f59e0b; color: #92400e; }
+.assess-strip.tone-danger  { background: #fef2f2; border-left-color: #dc2626; color: #991b1b; }
+.assess-score {
+    display: inline-block;
+    margin-left: .4rem;
+    padding: .05rem .5rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,.7);
+    font-size: .75rem;
+    font-weight: 700;
 }
 
 .review-panel {
@@ -982,6 +1016,18 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
         $assignedOfficerId = (int)($loan['assigned_officer_id'] ?? 0);
         $isAssignedToMe = $isOfficer && $currentUserId > 0 && $assignedOfficerId === $currentUserId;
+
+        $assessment = loan_assessment(
+            !empty($loan['customer_table_id']) ? [
+                'credit_score'    => $loan['assess_credit_score'] ?? 0,
+                'loan_limit'      => $loan['assess_loan_limit'] ?? 0,
+                'business_type'   => $loan['assess_business_type'] ?? '',
+                'business_period' => $loan['assess_business_period'] ?? '',
+                'amount_last'     => $loan['assess_amount_last'] ?? '',
+                'amount_this'     => $loan['assess_amount_this'] ?? '',
+            ] : null,
+            (float)($loan['amount'] ?? 0)
+        );
         ?>
 
         <div class="pending-card status-<?= h(strtolower($status)) ?>">
@@ -1041,6 +1087,17 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Applied</div>
                         <div class="fs-sm text-muted"><?= h($appliedDate) ?></div>
                     </div>
+                </div>
+            </div>
+
+            <div class="assess-strip tone-<?= h($assessment['tone']) ?>">
+                <i class="fas fa-robot"></i>
+                <div>
+                    <strong><?= h($assessment['headline']) ?></strong>
+                    <?php if ($assessment['available']): ?>
+                        <span class="assess-score">Score <?= h(rtrim(rtrim(number_format($assessment['score'], 1), '0'), '.')) ?>/10 &middot; <?= h($assessment['score_band']) ?></span>
+                    <?php endif; ?>
+                    <div class="fs-xs"><?= h($assessment['detail']) ?></div>
                 </div>
             </div>
 
