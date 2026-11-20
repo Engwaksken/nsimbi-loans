@@ -108,51 +108,15 @@ function money($amount): string {
     return 'UGX ' . number_format((float)$amount);
 }
 
+require_once dirname(__DIR__) . '/includes/file_links.php';
+
+/** Link to a client's uploaded file wherever it was saved ('' if none or missing). */
 function client_file_url(?string $path): string {
-    if (!$path) return '';
-
-    $path = trim($path);
-
-    if ($path === '') return '';
-
-    if (preg_match('/^https?:\/\//i', $path)) {
-        return $path;
-    }
-
-    return "/loans/clients/" . ltrim($path, '/');
+    return (string)(stored_file_url($path) ?? '');
 }
 
 function client_doc_card(string $label, ?string $path): string {
-    $url = client_file_url($path);
-
-    if ($url === '') {
-        return '
-            <div class="client-doc-card">
-                <div class="doc-icon muted">
-                    <i class="fas fa-file"></i>
-                </div>
-                <div>
-                    <strong>' . h($label) . '</strong>
-                    <p>No file uploaded</p>
-                </div>
-            </div>
-        ';
-    }
-
-    return '
-        <div class="client-doc-card">
-            <div class="doc-icon">
-                <i class="fas fa-file-alt"></i>
-            </div>
-            <div>
-                <strong>' . h($label) . '</strong>
-                <p>Uploaded document</p>
-                <a href="' . h($url) . '" target="_blank" class="btn btn-sm btn-outline">
-                    <i class="fas fa-eye"></i> View File
-                </a>
-            </div>
-        </div>
-    ';
+    return stored_file_card($label, $path);
 }
 
 $user_id = (int)($_GET['user_id'] ?? $_GET['client_id'] ?? $_GET['id'] ?? 0);
@@ -472,7 +436,8 @@ $docTypes = client_doc_types();
                         <p>Uploaded verification and business documents.</p>
                     </div>
 
-                    <div class="profile-doc-grid">
+                    <?= stored_file_card_css() ?>
+                    <div class="sf-grid">
                         <?= client_doc_card('Profile Image', $client['image_url'] ?? '') ?>
                         <?= client_doc_card('National ID Front', $client['id_front'] ?? '') ?>
                         <?= client_doc_card('National ID Back', $client['id_back'] ?? '') ?>

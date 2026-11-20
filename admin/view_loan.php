@@ -5,6 +5,7 @@ declare(strict_types=1);
 // so a problem with it can never blank the normal view page.
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+require_once dirname(__DIR__) . '/includes/file_links.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -150,7 +151,13 @@ try {
             c.business_type,
             c.business_period,
             c.amount_last,
-            c.amount_this
+            c.amount_this,
+            u.image_url,
+            c.id_front,
+            c.id_back,
+            c.license,
+            c.stock,
+            c.applicant_signature
         FROM customers c
         INNER JOIN user u ON c.user_id = u.id
         WHERE c.user_id = ?
@@ -277,6 +284,38 @@ $issueDate = pickLoanDate($loan);
 $dueDate = pickDueDate($loan);
 
 $assessment = loan_assessment($clientSource === 'customer' ? $client : null, $principal);
+
+/* Everything the applicant attached: registration files, collateral,
+   supporting documents and credit documents. */
+$regFiles = [];
+if ($clientSource === 'customer') {
+    $regFiles = [
+        'National ID (front)'    => $client['id_front'] ?? '',
+        'National ID (back)'     => $client['id_back'] ?? '',
+        'Profile photo'          => $client['image_url'] ?? '',
+        'Trading licence'        => $client['license'] ?? '',
+        'Business photo / stock' => $client['stock'] ?? '',
+        'Signature'              => $client['applicant_signature'] ?? '',
+    ];
+}
+$collateralDesc = trim((string)($loan['collateral_description'] ?? ''));
+$collateralDoc  = trim((string)($loan['collateral_document'] ?? ''));
+$supportDocs = [];
+$creditDocs  = [];
+if ($clientSource === 'customer' && $client_id > 0) {
+    try {
+        $supportDocs = client_docs_for_user($conn, $client_id);
+    } catch (Throwable $e) {
+        error_log('view_loan supporting docs: ' . $e->getMessage());
+    }
+    try {
+        $creditDocs = credit_evidence_for_user($conn, $client_id);
+    } catch (Throwable $e) {
+        error_log('view_loan credit docs: ' . $e->getMessage());
+    }
+}
+$docCount = count(array_filter($regFiles, static fn($p) => trim((string)$p) !== ''))
+    + ($collateralDoc !== '' ? 1 : 0) + count($supportDocs) + count($creditDocs);
 
 /* ============================================================
    PDF EXPORT
@@ -819,6 +858,20 @@ require 'nav-head.php';
 
             <li class="nav-item" role="presentation">
                 <button class="nav-link"
+                        id="documents-tab"
+                        data-bs-toggle="pill"
+                        data-bs-target="#documents"
+                        type="button"
+                        role="tab"
+                        aria-controls="documents"
+                        aria-selected="false">
+                    <i class="fas fa-folder-open me-2"></i>Documents
+                    <span class="badge badge-soft-secondary ms-1"><?= (int)$docCount ?></span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link"
                         id="details-tab"
                         data-bs-toggle="pill"
                         data-bs-target="#details"
@@ -1062,6 +1115,87 @@ require 'nav-head.php';
 
                     <?php endif; ?>
                 </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade"
+             id="documents"
+             role="tabpanel"
+             aria-labelledby="documents-tab">
+            <div class="loan-tab-card">
+                <div class="loan-tab-header">
+                    <div>
+                        <h5><i class="fas fa-folder-open text-primary me-2"></i>Documents</h5>
+                        <p>Everything this applicant has attached: registration files, collateral and supporting documents.</p>
+                    </div>
+                    <?php if ($clientSource === 'customer'): ?>
+                        <a class="btn btn-sm btn-outline-primary" href="view_client.php?user_id=<?= (int)$client_id ?>"><i class="fas fa-user me-1"></i>Client profile</a>
+                    <?php endif; ?>
+                </div>
+                <?= stored_file_card_css() ?>
+
+                <?php if ($collateralDesc !== '' || $collateralDoc !== ''): ?>
+                    <h6 class="fw-bold mt-1">Collateral offered with this loan</h6>
+                    <?php if ($collateralDesc !== ''): ?><p class="mb-2"><?= nl2br(h($collateralDesc)) ?></p><?php endif; ?>
+                    <div class="sf-grid mb-3"><?= stored_file_card('Collateral evidence', $collateralDoc) ?></div>
+                <?php endif; ?>
+
+                <?php if ($regFiles): ?>
+                    <h6 class="fw-bold mt-1">Registration documents</h6>
+                    <div class="sf-grid mb-3">
+                        <?php foreach ($regFiles as $label => $path): ?>
+                            <?= stored_file_card($label, (string)$path) ?>
+                        <?php endforeach; ?>
+                    </div>
+                <?php elseif ($clientSource !== 'customer'): ?>
+                    <p class="text-muted">Registration documents for <?= h(strtolower($clientType)) ?> clients are on their profile.</p>
+                <?php endif; ?>
+
+                <?php if ($supportDocs): ?>
+                    <h6 class="fw-bold mt-1">Supporting documents uploaded from the client profile</h6>
+                    <div class="table-responsive mb-3">
+                        <table class="loan-table" data-no-paginate>
+                            <thead><tr><th>Document</th><th>Uploaded</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                            <?php foreach ($supportDocs as $d): ?>
+                                <tr>
+                                    <td><?= h($d['title'] ?: (client_doc_types()[$d['doc_type']]['label'] ?? $d['doc_type'])) ?></td>
+                                    <td><?= h(safeDate($d['created_at'] ?? '')) ?></td>
+                                    <td><?= h(ucfirst((string)$d['status'])) ?></td>
+                                    <td><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="client_document.php?id=<?= (int)$d['id'] ?>"><i class="fas fa-eye"></i> View</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($creditDocs): ?>
+                    <h6 class="fw-bold mt-1">Credit documents (statements, bills, business records)</h6>
+                    <div class="table-responsive mb-3">
+                        <table class="loan-table" data-no-paginate>
+                            <thead><tr><th>Document</th><th>Uploaded</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                            <?php foreach ($creditDocs as $d): ?>
+                                <?php [$stText] = credit_evidence_status_label((string)$d['status']); ?>
+                                <tr>
+                                    <td><?= h(CREDIT_EVIDENCE_TYPES[$d['doc_type']]['label'] ?? $d['doc_type']) ?></td>
+                                    <td><?= h(safeDate($d['created_at'] ?? '')) ?></td>
+                                    <td><?= h($stText) ?></td>
+                                    <td><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="credit_evidence_file.php?id=<?= (int)$d['id'] ?>"><i class="fas fa-eye"></i> View</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($docCount === 0): ?>
+                    <div class="loan-empty-state">
+                        <i class="fas fa-folder-open fa-2x"></i>
+                        <p>This applicant has not attached any documents.</p>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 

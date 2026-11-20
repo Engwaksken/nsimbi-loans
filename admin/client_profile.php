@@ -13,12 +13,11 @@ function money($amount): string {
     return 'UGX ' . number_format((float)$amount);
 }
 
+require_once dirname(__DIR__) . '/includes/file_links.php';
+
+/** Link to a client's uploaded file wherever it was saved ('' if none or missing). */
 function client_file_url(?string $path): string {
-    if (!$path) return '';
-    $path = trim($path);
-    if ($path === '') return '';
-    if (preg_match('/^https?:\/\//i', $path)) return $path;
-    return "/loans/clients/" . ltrim($path, '/');
+    return (string)(stored_file_url($path) ?? '');
 }
 
 function fmt_date(?string $value): string {

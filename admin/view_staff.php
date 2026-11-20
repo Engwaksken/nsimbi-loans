@@ -21,15 +21,11 @@ function money($amount): string {
     return number_format((float)$amount, 2);
 }
 
+require_once dirname(__DIR__) . '/includes/file_links.php';
+
+/** Link to a staff member's uploaded file wherever it was saved ('' if none or missing). */
 function staffFileUrl(?string $path): string {
-    if (!$path) return '';
-    $path = ltrim($path, '/');
-
-    if (preg_match('/^https?:\/\//i', $path)) {
-        return $path;
-    }
-
-    return "/loans/staff/" . $path;
+    return (string)(stored_file_url($path, ['staff']) ?? '');
 }
 
 function fileButton(string $label, ?string $path): string {
@@ -38,6 +34,9 @@ function fileButton(string $label, ?string $path): string {
     }
 
     $url = staffFileUrl($path);
+    if ($url === '') {
+        return '<span class="text-muted">File missing on server</span>';
+    }
 
     return '
         <a href="' . h($url) . '" target="_blank" class="btn btn-sm btn-outline-primary">

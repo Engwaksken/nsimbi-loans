@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/includes/file_links.php';
 require_once 'db.php';
 require_once __DIR__ . '/vendor/autoload.php';
 
@@ -20,8 +21,8 @@ $user_id = trim($_REQUEST['user_id']);
 function imageToBase64($relativePath, bool $forceLandscape = false, int $maxWidthPx = 1400) {
     if (!$relativePath) return null;
 
-    $filePath = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . "/loans/staff/" . ltrim($relativePath, '/');
-    if (!file_exists($filePath)) return null;
+    $filePath = stored_file_path((string)$relativePath, ['staff']);
+    if ($filePath === null) return null;
 
     $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
     if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif'], true)) return null;
@@ -83,8 +84,8 @@ function imageToBase64($relativePath, bool $forceLandscape = false, int $maxWidt
 function signatureBase64WhiteBg(?string $relativePath, int $maxWidthPx = 600): ?string {
     if (!$relativePath) return null;
 
-    $filePath = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . "/loans/staff/" . ltrim($relativePath, '/');
-    if (!file_exists($filePath)) return null;
+    $filePath = stored_file_path((string)$relativePath, ['staff']);
+    if ($filePath === null) return null;
 
     $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
     if (!in_array($ext, ['jpg','jpeg','png','gif'], true)) return null;
