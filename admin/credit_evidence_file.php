@@ -20,4 +20,10 @@ if (!$doc) {
     exit('Document not found.');
 }
 
+if (!empty($doc['file_deleted_at'])) {
+    http_response_code(410);
+    exit('This file was deleted on ' . date('d M Y', strtotime((string)$doc['file_deleted_at']))
+        . ' under the clean-up rule for rejected documents. What was read from it is kept on the Credit Documents page.');
+}
+
 client_docs_stream($doc, isset($_GET['download']));

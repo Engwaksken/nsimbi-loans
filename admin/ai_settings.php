@@ -80,6 +80,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? 'Automatic approval is on.'
                     : 'Automatic approval is off. Staff must approve every credit document.');
                 break;
+            case 'retention_save':
+                $months = max(0, min(120, (int)($_POST['retention_months'] ?? CREDIT_RETENTION_DEFAULT_MONTHS)));
+                credit_setting_set($conn, 'credit_retention_months', (string)$months);
+                ai_flash($months > 0
+                    ? "Files of rejected documents will be deleted after {$months} month(s)."
+                    : 'Files of rejected documents will be kept for ever.');
+                break;
+            case 'cleanup_now':
+                $r = credit_cleanup_old_files($conn);
+                ai_flash($r['files'] > 0
+                    ? 'Deleted ' . $r['files'] . ' old file(s), freeing ' . number_format($r['bytes'] / 1048576, 1) . ' MB.'
+                    : 'There were no old rejected files to delete.');
+                break;
             case 'delete':
                 $p = ai_provider_find($conn, $id);
                 if ($p && (int)$p['is_active'] === 1 && count(ai_providers_all($conn)) > 1) {
@@ -109,6 +122,9 @@ $editing = $editId > 0 ? ai_provider_find($conn, $editId) : null;
 $secretMissing = (string)(getenv('APP_KEY') ?: getenv('JWT_SECRET') ?: '') === '';
 $autoOn = credit_auto_enabled($conn);
 $autoCap = credit_auto_cap($conn);
+$retentionMonths = credit_retention_months($conn);
+$cleanupRows = credit_cleanup_candidates($conn);
+$cleanupBytes = array_sum(array_map(static fn($r) => (int)$r['file_size'], $cleanupRows));
 
 [$flashMsg, $flashType] = $_SESSION['ai_flash'] ?? ['', ''];
 unset($_SESSION['ai_flash']);
@@ -190,6 +206,41 @@ require "nav-head.php";
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
             </div>
         </form>
+    </div>
+
+    <div class="ai-card">
+        <h5><i class="fas fa-broom text-primary me-2"></i>Clean up old rejected files</h5>
+        <p class="text-muted">
+            The files of rejected documents, and of files that were not statements, bills or business records,
+            are deleted after the number of months below. This runs by itself once a day when staff open Credit Documents.
+            The record, what the AI read and the file fingerprint are kept, so the same file still cannot be uploaded again.
+            Approved and replaced documents are never deleted.
+        </p>
+        <form method="post" class="ai-form">
+            <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+            <input type="hidden" name="action" value="retention_save">
+            <div>
+                <label for="retMonths">Delete rejected files after (months)</label>
+                <input id="retMonths" name="retention_months" type="number" min="0" max="120" value="<?= (int)$retentionMonths ?>">
+                <small>0 keeps them for ever.</small>
+            </div>
+            <div style="align-self:end">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+            </div>
+        </form>
+        <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+            <span class="ai-meta">
+                <?= count($cleanupRows) ?> file(s) older than <?= (int)$retentionMonths ?> month(s) waiting to be deleted
+                (<?= h(number_format($cleanupBytes / 1048576, 1)) ?> MB).
+            </span>
+            <?php if ($cleanupRows): ?>
+                <form method="post" onsubmit="return confirm('Delete <?= count($cleanupRows) ?> old rejected file(s)? The files cannot be recovered; the records stay.');">
+                    <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+                    <input type="hidden" name="action" value="cleanup_now">
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt me-1"></i>Delete them now</button>
+                </form>
+            <?php endif; ?>
+        </div>
     </div>
 
     <div class="ai-card">

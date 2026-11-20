@@ -21,6 +21,12 @@ declare(strict_types=1);
  * from a different client is held for staff as possible fraud. Original files
  * are kept (storage/client_documents/<user>/) for audits and disputes.
  *
+ * Clean-up: files of rejected documents and of files that were not credit
+ * documents are deleted after a set number of months (System > AI Settings,
+ * default 12). The record, what the AI read and the fingerprint are kept, so
+ * the same file still cannot be uploaded again. Approved and replaced
+ * documents are never deleted.
+ *
  * Components (weights from System > Manage Score Weights, scaled to 1.00):
  *   sectorRisk               business-type score (includes/loan_assessment.php)
  *   esoRecommendation        not collected yet, counts as the business-type score
@@ -62,6 +68,8 @@ const CREDIT_EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 const CREDIT_EVIDENCE_DAILY_LIMIT = 10;
 const CREDIT_UTILITY_MONTHS = 6;
 const CREDIT_AUTO_DEFAULT_CAP = 2000000;
+const CREDIT_RETENTION_DEFAULT_MONTHS = 12;
+const CREDIT_CLEANUP_STATUSES = ['rejected', 'ignored'];
 
 /** Thrown when a client uploads a file they already uploaded. */
 class CreditDuplicateException extends DomainException
@@ -165,6 +173,7 @@ function credit_ensure_schema(mysqli $conn): void
         'source_ref' => 'ADD COLUMN source_ref VARCHAR(255) NULL AFTER source, ADD KEY idx_source_ref (user_id, source_ref)',
         'file_hash'  => 'ADD COLUMN file_hash CHAR(64) NULL AFTER file_size, ADD KEY idx_file_hash (file_hash)',
         'auto_note'  => 'ADD COLUMN auto_note VARCHAR(500) NULL AFTER review_note',
+        'file_deleted_at' => 'ADD COLUMN file_deleted_at DATETIME NULL AFTER file_hash',
     ];
     foreach ($added as $col => $ddl) {
         $res = $conn->query("SHOW COLUMNS FROM credit_evidence LIKE '{$col}'");
@@ -240,6 +249,83 @@ function credit_setting_set(mysqli $conn, string $key, string $value): void
 function credit_auto_enabled(mysqli $conn): bool
 {
     return credit_setting($conn, 'credit_auto_approve', '1') === '1';
+}
+
+/** Months to keep files of rejected documents (0 = keep for ever). */
+function credit_retention_months(mysqli $conn): int
+{
+    return max(0, (int)credit_setting($conn, 'credit_retention_months', (string)CREDIT_RETENTION_DEFAULT_MONTHS));
+}
+
+/**
+ * Rejected / not-a-credit-document files older than the retention period.
+ * @return array<int, array> rows
+ */
+function credit_cleanup_candidates(mysqli $conn, ?int $months = null): array
+{
+    credit_ensure_schema($conn);
+    $months ??= credit_retention_months($conn);
+    if ($months <= 0) {
+        return [];
+    }
+    $in = "'" . implode("','", CREDIT_CLEANUP_STATUSES) . "'";
+    $stmt = $conn->prepare("
+        SELECT id, file_path, file_size FROM credit_evidence
+        WHERE status IN ({$in}) AND file_deleted_at IS NULL
+          AND COALESCE(reviewed_at, updated_at, created_at) < NOW() - INTERVAL ? MONTH
+        ORDER BY id
+        LIMIT 500
+    ");
+    $stmt->bind_param('i', $months);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    return $rows;
+}
+
+/**
+ * Delete the stored files of old rejected documents; the records stay.
+ * @return array{files: int, bytes: int}
+ */
+function credit_cleanup_old_files(mysqli $conn, ?int $months = null): array
+{
+    $out = ['files' => 0, 'bytes' => 0];
+    $mark = $conn->prepare('UPDATE credit_evidence SET file_deleted_at = NOW() WHERE id = ?');
+    foreach (credit_cleanup_candidates($conn, $months) as $row) {
+        $path = client_docs_file_path($row); // validated path inside the storage folder, or null
+        if ($path !== null) {
+            $size = (int)filesize($path);
+            if (!@unlink($path)) {
+                error_log('credit_cleanup: could not delete ' . $path);
+                continue;
+            }
+            $out['files']++;
+            $out['bytes'] += $size;
+        }
+        $id = (int)$row['id'];
+        $mark->bind_param('i', $id);
+        $mark->execute();
+    }
+    $mark->close();
+    return $out;
+}
+
+/** Run the clean-up at most once a day (called when staff open Credit Documents). */
+function credit_cleanup_maybe_run(mysqli $conn): void
+{
+    try {
+        $today = date('Y-m-d');
+        if (credit_setting($conn, 'credit_cleanup_last', '') === $today || !credit_settings_table($conn)) {
+            return;
+        }
+        credit_setting_set($conn, 'credit_cleanup_last', $today);
+        $r = credit_cleanup_old_files($conn);
+        if ($r['files'] > 0) {
+            error_log('credit_cleanup: deleted ' . $r['files'] . ' old rejected file(s), ' . $r['bytes'] . ' bytes');
+        }
+    } catch (Throwable $e) {
+        error_log('credit_cleanup_maybe_run: ' . $e->getMessage());
+    }
 }
 
 /** Hold for staff when the loan limit would rise by more than this (0 = no cap). */

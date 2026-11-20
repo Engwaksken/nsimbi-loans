@@ -53,6 +53,8 @@ function ce_url(array $p): string
     return 'credit_evidence.php' . ($p ? '?' . http_build_query($p) : '');
 }
 
+credit_cleanup_maybe_run($conn);
+
 $tab = (string)($_GET['tab'] ?? 'review');
 if (!isset(CE_TABS[$tab])) {
     $tab = 'review';
@@ -257,7 +259,11 @@ require "nav-head.php";
                     <div class="text-end">
                         <span class="badge <?= h($statusClass) ?>"><?= h($statusText) ?></span>
                         <div class="mt-1">
-                            <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="credit_evidence_file.php?id=<?= (int)$r['id'] ?>"><i class="fas fa-eye me-1"></i>Open document</a>
+                            <?php if (!empty($r['file_deleted_at'])): ?>
+                                <span class="btn btn-sm btn-light disabled" title="Deleted by the clean-up rule for rejected documents"><i class="fas fa-trash-alt me-1"></i>File deleted <?= h(date('d M Y', strtotime((string)$r['file_deleted_at']))) ?></span>
+                            <?php else: ?>
+                                <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="credit_evidence_file.php?id=<?= (int)$r['id'] ?>"><i class="fas fa-eye me-1"></i>Open document</a>
+                            <?php endif; ?>
                             <a class="btn btn-sm btn-light" href="view_client.php?user_id=<?= (int)$r['user_id'] ?>">Profile</a>
                         </div>
                     </div>
