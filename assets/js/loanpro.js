@@ -422,7 +422,7 @@ window.addPaymentModal = async function (loanId) {
     const modalId = 'm-add-payment';
 
     Modal.open(modalId, {
-        title: `Add Payment — Loan #${loanId}`,
+        title: `Add Payment - Loan #${loanId}`,
         icon: 'money-bill-wave',
         size: 'md'
     });

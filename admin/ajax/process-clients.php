@@ -212,7 +212,7 @@ function action_view(mysqli $conn): never {
                 <?= $statusBadge ?>
                 <span class="cv-email"><?= h($c['email']) ?></span>
                 <?php if ($c['credit_score']): ?>
-                    <span class="badge bg-<?= $scoreClass ?>"><?= $scoreLabel ?> · <?= $score ?></span>
+                    <span class="badge bg-<?= $scoreClass ?>"><?= $scoreLabel ?> | <?= $score ?></span>
                 <?php endif; ?>
             </div>
         </div>
@@ -570,7 +570,7 @@ function render_client_form(?array $c): void {
                     <label class="form-label">Credit Score</label>
                     <input type="number" name="credit_score" class="form-control"
                            min="0" max="850" step="1" value="<?= $v('credit_score') ?>"
-                           placeholder="0 – 850">
+                           placeholder="0 - 850">
                 </div>
             </div>
         </div>
@@ -1059,7 +1059,7 @@ function action_loan_details(mysqli $conn): never {
         <div class="ld-name"><?= h(trim($client['fname'] . ' ' . $client['lname'])) ?></div>
         <div class="ld-sub">
             <?= h($client['business_name'] ?: $client['email']) ?>
-            <?php if ($client['phone']): ?> &nbsp;·&nbsp; <?= h($client['phone']) ?><?php endif; ?>
+            <?php if ($client['phone']): ?> &nbsp;|&nbsp; <?= h($client['phone']) ?><?php endif; ?>
         </div>
     </div>
 

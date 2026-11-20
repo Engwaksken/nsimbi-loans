@@ -26,7 +26,7 @@ $badge='<span class="badge '.($m[$loan['status']]??'badge-muted').'">'.htmlspeci
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem">
   <div>
     <div style="font-family:'Outfit',sans-serif;font-size:1.5rem;font-weight:800;color:var(--text-dark)">UGX <?= number_format($loan['amount']) ?></div>
-    <div class="fs-sm text-muted"><?= $ctype ?> · <?= htmlspecialchars($full) ?></div>
+    <div class="fs-sm text-muted"><?= $ctype ?> | <?= htmlspecialchars($full) ?></div>
   </div>
   <?= $badge ?>
 </div>
@@ -53,7 +53,7 @@ $badge='<span class="badge '.($m[$loan['status']]??'badge-muted').'">'.htmlspeci
   </div>
   <!--<div class="detail-item"><div class="lbl">Duration</div><div class="val"><?= $loan['duration'] ?> <?= $loan['duration_type']??'months' ?></div></div>-->
   <div class="detail-item"><div class="lbl">Rate</div><div class="val"><?= $loan['interest_rate']??'N/A' ?>%</div></div>
-  <div class="detail-item full"><div class="lbl">Client</div><div class="val"><?= htmlspecialchars($full) ?> · <?= htmlspecialchars($cfect['phone']??'') ?></div></div>
+  <div class="detail-item full"><div class="lbl">Client</div><div class="val"><?= htmlspecialchars($full) ?> | <?= htmlspecialchars($cfect['phone']??'') ?></div></div>
   <?php if (!empty($cfect['business_name'])): ?><div class="detail-item full"><div class="lbl">Business</div><div class="val"><?= htmlspecialchars($cfect['business_name']) ?></div></div><?php endif; ?>
   <?php if (!empty($loan['purpose'])): ?><div class="detail-item full"><div class="lbl">Purpose</div><div class="val"><?= htmlspecialchars($loan['purpose']) ?></div></div><?php endif; ?>
 </div>
@@ -65,7 +65,7 @@ $badge='<span class="badge '.($m[$loan['status']]??'badge-muted').'">'.htmlspeci
   <div class="timeline">
     <?php foreach ($pays as $p): ?>
       <div class="timeline-item">
-        <div class="tl-date"><?= date('M j, Y · h:i A',strtotime($p['datetime'])) ?></div>
+        <div class="tl-date"><?= date('M j, Y, h:i A',strtotime($p['datetime'])) ?></div>
         <div class="tl-amount">+ UGX <?= number_format($p['amount']) ?></div>
       </div>
     <?php endforeach; ?>

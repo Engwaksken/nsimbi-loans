@@ -6,9 +6,9 @@ session_start();
 require "db.php";
 
 // Requires Composer:  composer require dompdf/dompdf
-// (If Packagist is blocked on your network, dompdf and its dependencies —
+// (If Packagist is blocked on your network, dompdf and its dependencies -
 // dompdf/php-font-lib, dompdf/php-svg-lib, sabberworm/php-css-parser,
-// masterminds/html5, thecodingmachine/safe — can be added as local "path"
+// masterminds/html5, thecodingmachine/safe - can be added as local "path"
 // repositories in composer.json instead of pulling from packagist.org.)
 require_once __DIR__ . '/vendor/autoload.php';
 
@@ -48,7 +48,7 @@ if (!$loan) {
 }
 
 if (empty($loan['disbursed_at'])) {
-    die("This loan has not been disbursed yet — no voucher to generate.");
+    die("This loan has not been disbursed yet - no voucher to generate.");
 }
 
 // Who disbursed it.

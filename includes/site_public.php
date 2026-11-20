@@ -60,7 +60,7 @@ function site_public_footer(): string
         . '<a href="https://www.facebook.com/witug/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>'
         . '<a href="https://x.com/wituganda" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>'
         . '<a href="https://www.linkedin.com/company/witu/" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a></div></div>'
-        . '<div class="footer-bottom"><span>© ' . date('Y') . ' ' . site_e($s['site_name']) . ' · Plot 12, Corporation Rise, Bukoto · Kampala, Uganda</span>'
+        . '<div class="footer-bottom"><span>© ' . date('Y') . ' ' . site_e($s['site_name']) . ' | Plot 12, Corporation Rise, Bukoto | Kampala, Uganda</span>'
         . '<nav class="footer-links" aria-label="Footer"><a href="/contact-us">Contact us</a><a href="/join-us">Join as Donor / ESO</a><a href="/privacy-policy">Privacy policy</a>'
         . '<a href="/login">Client &amp; staff login <i class="fa-solid fa-arrow-right"></i></a></nav></div></footer>'
         . '<script src="' . site_asset('/assets/js/site-builder.js') . '" defer></script></body></html>';

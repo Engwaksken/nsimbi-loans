@@ -9,7 +9,7 @@ declare(strict_types=1);
  * of the application. Host-provided environment variables take precedence.
  */
 
-// ── Load .env ───────────────────────────────────────────────────────────────
+// -- Load .env ---------------------------------------------------------------
 $envFile = __DIR__ . DIRECTORY_SEPARATOR . '.env';
 if (is_file($envFile) && is_readable($envFile)) {
     $envLines = file($envFile, FILE_IGNORE_NEW_LINES);
@@ -41,7 +41,7 @@ if (is_file($envFile) && is_readable($envFile)) {
     }
 }
 
-// ── Database configuration (from .env) ──────────────────────────────────────
+// -- Database configuration (from .env) --------------------------------------
 $dbHost = getenv('DB_HOST') ?: 'localhost';
 $dbUser = getenv('DB_USER') ?: '';
 $dbPassValue = getenv('DB_PASS');
@@ -138,7 +138,7 @@ function moneyValue(mixed $value): float
 
     $normalized = html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, "UTF-8");
     $normalized = str_replace(["UGX", "Ugx", "ugx", "/=", "SHS", "Shs", "shs"], "", $normalized);
-    $normalized = str_replace(["—", "–", "-"], "-", $normalized);
+    $normalized = str_replace(["\u{2014}", "\u{2013}", "-"], "-", $normalized);
     $normalized = preg_replace("/\s+/", " ", trim($normalized));
 
     $key = strtolower($normalized);
@@ -1290,7 +1290,7 @@ function payLoan(mysqli $conn, array $user, array $input): void
     }
 }
 
-// Bookkeeping (ledger) actions — soft-loaded from books_api.php.
+// Bookkeeping (ledger) actions - soft-loaded from books_api.php.
 require_once __DIR__ . '/books_api.php';
 
 /**

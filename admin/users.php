@@ -237,7 +237,7 @@ $stats = $conn->query("
     <div class="card-footer clients-pagination">
         <div class="pagination-info">
             Page <?= number_format($page) ?> of <?= number_format($totalPages) ?>
-            · <?= number_format($totalRows) ?> user<?= $totalRows === 1 ? '' : 's' ?>
+            | <?= number_format($totalRows) ?> user<?= $totalRows === 1 ? '' : 's' ?>
         </div>
 
         <?php if ($totalPages > 1): ?>

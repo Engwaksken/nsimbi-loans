@@ -42,11 +42,11 @@ if (!function_exists('loan_assessment')) {
 
     /** Midpoints of the website's turnover range options. */
     define('LOAN_ASSESSMENT_RANGES', [
-        '/^\s*10,?000\s*[-–—]\s*50,?000\s*$/i'          => 30000,
-        '/^\s*50,?000\s*[-–—]\s*100,?000\s*$/i'         => 75000,
-        '/^\s*100,?000\s*[-–—]\s*500,?000\s*$/i'        => 300000,
-        '/^\s*500,?000\s*[-–—]\s*(1\s*m|1,000,000)\s*$/i' => 750000,
-        '/^\s*1\s*[-–—]\s*2\s*m\s*$/i'                  => 1500000,
+        '/^\s*10,?000\s*[-\x{2013}\x{2014}]\s*50,?000\s*$/iu'          => 30000,
+        '/^\s*50,?000\s*[-\x{2013}\x{2014}]\s*100,?000\s*$/iu'         => 75000,
+        '/^\s*100,?000\s*[-\x{2013}\x{2014}]\s*500,?000\s*$/iu'        => 300000,
+        '/^\s*500,?000\s*[-\x{2013}\x{2014}]\s*(1\s*m|1,000,000)\s*$/iu' => 750000,
+        '/^\s*1\s*[-\x{2013}\x{2014}]\s*2\s*m\s*$/iu'                  => 1500000,
         '/^\s*(above|over|more than)\s*2\s*m\s*$/i'     => 2500000,
     ]);
 
@@ -158,7 +158,7 @@ if (!function_exists('loan_assessment')) {
         // ---- Recommendation (formula only) ----
         if (!$hasTurnover) {
             $tone = 'warning';
-            $headline = 'No recommendation — review manually';
+            $headline = 'No recommendation - review manually';
             $detail = 'The client did not declare turnover we can read, so the formula cannot be applied.';
         } elseif ($requested <= $formulaLimit) {
             $tone = 'success';
@@ -179,7 +179,7 @@ if (!function_exists('loan_assessment')) {
                 . '" is not in the scoring table, so the lowest score (' . LOAN_ASSESSMENT_DEFAULT_SCORE . ') was used.';
         }
         if ($savedScore === null || $savedScore <= 0) {
-            $warnings[] = 'Saved credit score is missing or 0 — it was never set or was cleared.';
+            $warnings[] = 'Saved credit score is missing or 0 - it was never set or was cleared.';
         } elseif ($savedScore > 10) {
             $warnings[] = 'Saved credit score (' . loan_assessment_num($savedScore) . ') is on a different scale and was entered by hand.';
         } elseif (abs($savedScore - $score) >= 0.5) {
@@ -188,7 +188,7 @@ if (!function_exists('loan_assessment')) {
         if ($hasTurnover && $savedLimit > 0) {
             $diff = $savedLimit - $formulaLimit;
             if ($diff > max(1000, $formulaLimit * 0.01)) {
-                $warnings[] = 'Saved loan limit ' . loan_assessment_money($savedLimit) . ' was set manually — '
+                $warnings[] = 'Saved loan limit ' . loan_assessment_money($savedLimit) . ' was set manually - '
                     . loan_assessment_money($diff) . ' above the formula.';
             } elseif (-$diff > max(1000, $formulaLimit * 0.01)) {
                 $warnings[] = 'Saved loan limit ' . loan_assessment_money($savedLimit) . ' is '
@@ -196,7 +196,7 @@ if (!function_exists('loan_assessment')) {
             }
         } elseif (!$hasTurnover && $savedLimit > 0) {
             $warnings[] = 'Saved loan limit ' . loan_assessment_money($savedLimit)
-                . ' cannot come from the formula (no turnover declared) — it was set manually.';
+                . ' cannot come from the formula (no turnover declared) - it was set manually.';
         }
 
         return [

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Nsimbi Books ledger API — loaded soft from api.php.
+ * Nsimbi Books ledger API - loaded soft from api.php.
  * Expects respond(), clean(), moneyValue(), requireAuth() to already exist.
  */
 
@@ -114,7 +114,7 @@ function booksIsValidEntryDate(string $value): bool
         $parsed = DateTimeImmutable::createFromFormat($format, $value);
         $errors = DateTimeImmutable::getLastErrors();
         // getLastErrors() returns false (no errors) on PHP 8.2+, or an array with
-        // zero counts on older versions — both mean the parse was clean.
+        // zero counts on older versions - both mean the parse was clean.
         $noErrors = $errors === false || ($errors["warning_count"] === 0 && $errors["error_count"] === 0);
         if ($parsed !== false && $noErrors) {
             return true;
@@ -125,7 +125,7 @@ function booksIsValidEntryDate(string $value): bool
 }
 
 /**
- * Canonicalize spoken unit variants (kg / kilos / kilograms → kg).
+ * Canonicalize spoken unit variants (kg / kilos / kilograms -> kg).
  * Unknown units keep cleaned lowercase original.
  */
 function booksNormalizeUnit(?string $unit): ?string
@@ -424,7 +424,7 @@ function booksEntrySelectColumns(): string
 /**
  * Maps the 2-letter code the app sends ("en"/"sw"/"lg") to a full language
  * name for the Gemini prompt. Raw ISO codes like "lg" are ambiguous to the
- * model on their own — spelling out the name makes the language hint (and
+ * model on their own - spelling out the name makes the language hint (and
  * the "don't translate" instruction below) unambiguous.
  */
 function booksLanguageName(string $language): string
@@ -707,7 +707,7 @@ Text:
 
 /**
  * Lightweight per-user cooldown so a client can't drive unlimited paid Gemini calls.
- * Reuses idx_book_inputs_user_created — no extra infra needed.
+ * Reuses idx_book_inputs_user_created - no extra infra needed.
  */
 function booksRateLimitExceeded(mysqli $conn, int $userId, int $maxRequests = 10, int $windowMinutes = 1): bool
 {
@@ -716,7 +716,7 @@ function booksRateLimitExceeded(mysqli $conn, int $userId, int $maxRequests = 10
     );
     if (!$stmt) {
         error_log("booksRateLimitExceeded: prepare failed: " . $conn->error);
-        // Fail open on infra error — don't block legitimate users because of a DB hiccup.
+        // Fail open on infra error - don't block legitimate users because of a DB hiccup.
         return false;
     }
 
@@ -793,7 +793,7 @@ function parse_book_input(mysqli $conn, array $user, array $input): void
     $bookInputId = (int)$stmt->insert_id;
     $stmt->close();
 
-    // Prefer the device's local clock — server UTC is often already "tomorrow" in the Americas.
+    // Prefer the device's local clock - server UTC is often already "tomorrow" in the Americas.
     $defaultEntryDate = booksResolveNow(clean($input["client_date"] ?? ""))->format("Y-m-d H:i:s");
 
     try {

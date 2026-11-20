@@ -169,7 +169,7 @@ $memberSql = "
 
 /*
  * FIX (confirmed): loan.client_id stores startups.startup_id, which
- * is itself a foreign key into user.id — same pattern as
+ * is itself a foreign key into user.id - same pattern as
  * customers.user_id / members.user_id. The previous join on st.id
  * matched zero rows, which is why cleared startup loans never
  * appeared here.
@@ -600,7 +600,7 @@ function pageUrl(int $p, string $type, string $search): string
                 <small class="text-muted">
                     Showing <?= number_format($stats['count']) ?> cleared loan<?= $stats['count'] === 1 ? '' : 's' ?>
                     <?php if ($totalLoans > 0): ?>
-                        — page <?= $page ?> of <?= $totalPages ?>
+                        - page <?= $page ?> of <?= $totalPages ?>
                     <?php endif; ?>
                 </small>
             </div>
@@ -744,7 +744,7 @@ function pageUrl(int $p, string $type, string $search): string
                         if ($start > 1) {
                             echo '<a href="' . h(pageUrl(1, $typeFilter, $search)) . '">1</a>';
                             if ($start > 2) {
-                                echo '<span>…</span>';
+                                echo '<span>...</span>';
                             }
                         }
 
@@ -758,7 +758,7 @@ function pageUrl(int $p, string $type, string $search): string
 
                         if ($end < $totalPages) {
                             if ($end < $totalPages - 1) {
-                                echo '<span>…</span>';
+                                echo '<span>...</span>';
                             }
                             echo '<a href="' . h(pageUrl($totalPages, $typeFilter, $search)) . '">' . $totalPages . '</a>';
                         }

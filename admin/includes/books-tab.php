@@ -78,7 +78,7 @@ function books_sort_icon(array $books, string $column): string
  * queries for one client, and returns everything the partial needs.
  *
  * When $forExport is true (or $_GET['export'] === 'pdf'), every matching row
- * is returned with no LIMIT — same convention as all_loans_report.php.
+ * is returned with no LIMIT - same convention as all_loans_report.php.
  */
 function books_tab_view_model(mysqli $conn, int $clientUserId, bool $forExport = false): array
 {

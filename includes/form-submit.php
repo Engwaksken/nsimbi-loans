@@ -12,7 +12,7 @@ if (!in_array($form_type, $allowed)) {
     echo json_encode(['success'=>false,'message'=>'Unknown form type.']); exit;
 }
 
-// Newsletter – only email needed
+// Newsletter - only email needed
 if ($form_type === 'newsletter') {
     $email = sanitize($conn, $_POST['email'] ?? '');
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -59,7 +59,7 @@ $conn->query("INSERT INTO form_submissions
 $messages = [
     'donor'   => 'Thank you for your interest in supporting Nsimbi Impact! We will be in touch soon.',
     'eso'     => 'Thank you for your partnership interest! Our team will review your application and contact you shortly.',
-    'loan'    => 'Your loan application has been received. We will review it and contact you within 3–5 business days.',
+    'loan'    => 'Your loan application has been received. We will review it and contact you within 3-5 business days.',
     'contact' => 'Thank you for reaching out! We will respond to your message within 48 hours.',
 ];
 

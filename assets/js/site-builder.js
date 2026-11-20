@@ -65,7 +65,7 @@
       var status = form.querySelector('.ef-status');
       var button = form.querySelector('button[type="submit"]');
       if (!form.checkValidity()) { form.reportValidity(); return; }
-      status.textContent = 'Sending…';
+      status.textContent = 'Sending...';
       status.className = 'ef-status';
       button.disabled = true;
       fetch('/includes/site_enquiry.php', { method: 'POST', body: new FormData(form) })

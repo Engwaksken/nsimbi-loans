@@ -198,10 +198,10 @@ $bank_account     = trim((string)($customer['bank_account'] ?? ''));
 if ($is_new_onboarded) {
     $period_options = [];
     foreach ([8, 9, 10, 11, 12] as $m) {
-        $period_options[$m] = "{$m} months · 3% per month";
+        $period_options[$m] = "{$m} months | 3% per month";
     }
 } else {
-    $period_options = [1 => '1 month · 10% interest', 2 => '2 months · 6.6% interest', 3 => '3 months · 6.6% interest', 6 => '6 months · 6.6% interest'];
+    $period_options = [1 => '1 month | 10% interest', 2 => '2 months | 6.6% interest', 3 => '3 months | 6.6% interest', 6 => '6 months | 6.6% interest'];
 }
 
 // requested_loan.php redirects back here with a message.

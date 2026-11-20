@@ -134,7 +134,7 @@ require __DIR__ . '/nav-head.php';
       <?= $thumb($slide['media_type'], $slide['media_url']) ?>
       <div class="cms-row-main">
         <div class="cms-row-title"><?= $e($slide['title'] !== '' ? $slide['title'] : 'Slide ' . ($i + 1)) ?></div>
-        <div class="cms-row-sub"><span class="badge badge-soft-primary"><?= $e(ucfirst($slide['media_type'])) ?></span> <?= $slide['is_active'] ? '' : '<span class="badge badge-muted">Hidden</span> ' ?><?= $e(mb_strimwidth($slide['caption'], 0, 90, '…')) ?></div>
+        <div class="cms-row-sub"><span class="badge badge-soft-primary"><?= $e(ucfirst($slide['media_type'])) ?></span> <?= $slide['is_active'] ? '' : '<span class="badge badge-muted">Hidden</span> ' ?><?= $e(mb_strimwidth($slide['caption'], 0, 90, '...')) ?></div>
       </div>
       <div class="cms-row-actions">
         <?= $rowActions('slide', $slide, $i, count($slides)) ?>
@@ -196,7 +196,7 @@ require __DIR__ . '/nav-head.php';
           <label class="form-label">Image or video</label>
           <div data-media-preview="media_url"></div>
           <input class="form-control mb-2" type="file" name="media_file" data-accept-image="image/jpeg,image/png,image/webp,image/gif" data-accept-video="video/mp4,video/webm" accept="image/jpeg,image/png,image/webp,image/gif">
-          <input class="form-control" name="media_url" placeholder="…or paste a link (https://…, YouTube or Vimeo for video)">
+          <input class="form-control" name="media_url" placeholder="...or paste a link (https://..., YouTube or Vimeo for video)">
           <div class="form-help">Images: JPG, PNG, WebP or GIF up to 8 MB, ideally 1920×900 or wider. Videos: MP4/WebM up to 100 MB (plays muted on loop), or a YouTube/Vimeo link.</div>
         </div>
         <div class="form-group"><label class="form-label" for="sl-title">Heading</label><input class="form-control" id="sl-title" name="title" maxlength="220"><div class="form-help">Leave empty on the first slide to use the page's hero heading.</div></div>
@@ -244,7 +244,7 @@ require __DIR__ . '/nav-head.php';
           <div class="form-group" data-field="label"><label class="form-label" for="sec-label">Small label</label><input class="form-control" id="sec-label" name="label" maxlength="120" placeholder="OUR VISION"><div class="form-help">Shown above the heading. Sections are numbered automatically.</div></div>
           <div class="grid-2">
             <div class="form-group" data-field="heading"><label class="form-label" for="sec-heading">Heading</label><input class="form-control" id="sec-heading" name="heading" maxlength="220"></div>
-            <div class="form-group" data-field="heading_accent"><label class="form-label" for="sec-accent">Heading — highlighted line</label><input class="form-control" id="sec-accent" name="heading_accent" maxlength="220"><div class="form-help">Optional second line in the accent colour.</div></div>
+            <div class="form-group" data-field="heading_accent"><label class="form-label" for="sec-accent">Heading - highlighted line</label><input class="form-control" id="sec-accent" name="heading_accent" maxlength="220"><div class="form-help">Optional second line in the accent colour.</div></div>
           </div>
           <div class="form-group" data-field="body"><label class="form-label" for="sec-body">Text</label><textarea class="form-control" id="sec-body" name="body" rows="4"></textarea><div class="form-help">Plain text. Leave a blank line between paragraphs.</div></div>
         </div>
@@ -267,7 +267,7 @@ require __DIR__ . '/nav-head.php';
             <div data-media-inputs>
               <div data-media-preview="media_url"></div>
               <input class="form-control mb-2" type="file" name="media_file" data-accept-image="image/jpeg,image/png,image/webp,image/gif" data-accept-video="video/mp4,video/webm">
-              <input class="form-control" name="media_url" placeholder="…or paste a link (https://…, YouTube or Vimeo for video)">
+              <input class="form-control" name="media_url" placeholder="...or paste a link (https://..., YouTube or Vimeo for video)">
             </div>
           </div>
           <div class="grid-2" data-field="button">

@@ -428,7 +428,7 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                                     <?php elseif ($latest && $state !== 'missing'): ?>
                                         Uploaded <?= esc(fmt_date($latest['created_at'], 'd M Y')); ?>
                                         <?php if ($state === 'rejected' && !empty($latest['review_note'])): ?>
-                                            &middot; <span class="text-danger"><?= esc($latest['review_note']); ?></span>
+                                            | <span class="text-danger"><?= esc($latest['review_note']); ?></span>
                                         <?php endif; ?>
                                     <?php else: ?>
                                         <?= esc($item['hint']); ?>
@@ -465,8 +465,8 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                                 <div class="pf-file-main">
                                     <div class="pf-file-name"><?= esc($doc['title']); ?></div>
                                     <div class="pf-file-meta">
-                                        <?= esc(fmt_date($doc['created_at'], 'd M Y')); ?> &middot; <?= number_format(max(1, (int)$doc['file_size'] / 1024)); ?> KB
-                                        <?php if ($doc['status'] === 'rejected' && !empty($doc['review_note'])): ?>&middot; <span class="text-danger"><?= esc($doc['review_note']); ?></span><?php endif; ?>
+                                        <?= esc(fmt_date($doc['created_at'], 'd M Y')); ?> | <?= number_format(max(1, (int)$doc['file_size'] / 1024)); ?> KB
+                                        <?php if ($doc['status'] === 'rejected' && !empty($doc['review_note'])): ?>| <span class="text-danger"><?= esc($doc['review_note']); ?></span><?php endif; ?>
                                     </div>
                                 </div>
                                 <span class="badge <?= $b; ?>"><?= esc(ucfirst($doc['status'])); ?></span>
@@ -674,14 +674,14 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
 
                 <div class="form-group" id="up_title_group">
                     <label class="form-label" for="up_title">Title</label>
-                    <input type="text" class="form-control" id="up_title" name="title" maxlength="150" placeholder="e.g. MTN statement Jan–Mar">
+                    <input type="text" class="form-control" id="up_title" name="title" maxlength="150" placeholder="e.g. MTN statement Jan-Mar">
                 </div>
 
                 <label class="pf-drop" for="up_file" id="up_drop">
                     <input type="file" id="up_file" name="document" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" required>
                     <i class="fas fa-cloud-upload-alt"></i>
                     <span class="pf-drop-text" id="up_file_text"><strong>Choose a file</strong> or drag it here</span>
-                    <span class="pf-drop-sub">JPG, PNG, WebP or PDF &middot; up to 5 MB</span>
+                    <span class="pf-drop-sub">JPG, PNG, WebP or PDF | up to 5 MB</span>
                 </label>
             </div>
 

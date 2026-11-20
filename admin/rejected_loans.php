@@ -722,7 +722,7 @@ foreach ($loans as $loan) {
                                     <?= money($loan['amount'] ?? 0) ?>
                                     <?php $aiAmount = ai_recommended_amount($loan); ?>
                                     <?php if ($aiAmount > 0): ?>
-                                        <div class="ai-recommend-sm"><i class="fas fa-robot"></i> AI recommended: <?= money($aiAmount) ?></div>
+                                        <div class="ai-recommend-sm">AI recommended: <?= money($aiAmount) ?></div>
                                     <?php endif; ?>
                                 </td>
 
@@ -813,7 +813,7 @@ foreach ($loans as $loan) {
 <!-- This re-approves a previously rejected loan. It posts to
      review_loan_action.php (the same reviewer action handler used on
      pending_loans.php), which moves the loan to APPROVED and hands it to
-     an accountant for disbursement — the same path as any fresh approval. -->
+     an accountant for disbursement - the same path as any fresh approval. -->
 <div class="modal fade"
      id="actionModal"
      tabindex="-1"

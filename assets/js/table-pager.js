@@ -1,5 +1,5 @@
 /*
- * table-pager.js — client-side pagination for every data table in the
+ * table-pager.js - client-side pagination for every data table in the
  * admin, staff and client portals.
  *
  * Loaded once from each portal's footer. It pages any <table> with more
@@ -194,7 +194,7 @@
 
         this.bar.hidden = false;
         this.bar.innerHTML =
-            '<div class="tp-info">Showing ' + (start + 1) + '–' + end + ' of ' + total + '</div>' +
+            '<div class="tp-info">Showing ' + (start + 1) + '-' + end + ' of ' + total + '</div>' +
             '<label class="tp-size">Rows <select aria-label="Rows per page">' + this.sizeOptions() + '</select></label>' +
             '<div class="tp-pages">' + this.pageButtons(pages) + '</div>';
     };
@@ -220,7 +220,7 @@
 
         var html = btn(cur - 1, '&lsaquo;', { disabled: cur === 1, aria: 'Previous page' });
 
-        // 1 … cur-1 cur cur+1 … last
+        // 1 ... cur-1 cur cur+1 ... last
         var list = [1];
         for (var p = cur - 1; p <= cur + 1; p++) {
             if (p > 1 && p < pages) list.push(p);
@@ -229,7 +229,7 @@
 
         var prev = 0;
         for (var i = 0; i < list.length; i++) {
-            if (list[i] - prev > 1) html += '<span class="tp-gap">…</span>';
+            if (list[i] - prev > 1) html += '<span class="tp-gap">...</span>';
             html += btn(list[i], String(list[i]), { current: list[i] === cur });
             prev = list[i];
         }

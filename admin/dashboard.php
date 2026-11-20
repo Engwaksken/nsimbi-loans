@@ -464,7 +464,7 @@ if ($es) {
 }
 </style>
 
-<!-- ══ MAIN STATS ══════════════════════════════════════ -->
+<!-- == MAIN STATS ====================================== -->
 <div class="stats-grid">
 
     <a href="loans.php" class="stat-card c-blue">
@@ -577,7 +577,7 @@ if ($es) {
 
 </div>
 
-<!-- ══ NEW LOAN ELIGIBILITY STATS ═════════════════════ -->
+<!-- == NEW LOAN ELIGIBILITY STATS ===================== -->
 <div class="stats-grid g3">
     <a href="add_loan.php?type=customer" class="stat-card c-blue">
         <div class="stat-head">
@@ -610,7 +610,7 @@ if ($es) {
     </a>
 </div>
 
-<!-- ══ MAIN CONTENT ROW ═══════════════════════════════ -->
+<!-- == MAIN CONTENT ROW =============================== -->
 <div class="dashboard-main-grid">
 
     <!-- Recent Loans Table -->

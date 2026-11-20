@@ -111,7 +111,7 @@ function sendPasswordResetEmail($toEmail, $resetLink) {
         <h3>Password Reset Request</h3>
         <p>We received a request to reset your password. Click below to set a new one:</p>
         <p><a href='{$resetLink}' style='padding:10px 20px; background-color:#28A745; color:white; text-decoration:none;'>Reset Password</a></p>
-        <p>If you didn’t request this, please ignore this email.</p>
+        <p>If you didn't request this, please ignore this email.</p>
     ";
 
     return sendEmail($toEmail, $subject, $body, strip_tags($body));

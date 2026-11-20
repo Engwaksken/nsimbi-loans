@@ -1038,7 +1038,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                             <?php endif; ?>
 
                             <?php if ($phone !== ''): ?>
-                                <?= $organization !== '' && $organization !== $clientName ? ' &middot; ' : '' ?>
+                                <?= $organization !== '' && $organization !== $clientName ? ' | ' : '' ?>
                                 <?= h($phone) ?>
                             <?php endif; ?>
 
@@ -1080,7 +1080,6 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
             <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
             <div class="ai-recommend">
-                <i class="fas fa-robot"></i>
                 AI recommended amount: <strong><?= money($assessment['limit']) ?></strong>
             </div>
             <?php endif; ?>
@@ -1115,7 +1114,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                 ?>
                                 <div class="audit-entry fs-sm">
                                     <span class="audit-action <?= h($entry['action']) ?>"><?= h(str_replace('_', ' ', $entry['action'])) ?></span>
-                                    <span class="text-muted"> &middot; <?= h($entryActor) ?> &middot; <?= h($entryWhen) ?></span>
+                                    <span class="text-muted"> | <?= h($entryActor) ?> | <?= h($entryWhen) ?></span>
                                     <?php if (!empty($entry['reason'])): ?>
                                         <div><strong>Reason:</strong> <?= nl2br(h($entry['reason'])) ?></div>
                                     <?php endif; ?>
@@ -1146,7 +1145,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         <i class="fas fa-reply"></i> Respond to Request
                     </a>
                 <?php elseif ($isOfficer): ?>
-                    <span class="fs-xs text-muted align-self-center">Read-only &mdash; not assigned to you</span>
+                    <span class="fs-xs text-muted align-self-center">Read-only - not assigned to you</span>
                 <?php else: ?>
                     <span class="fs-xs text-muted align-self-center">Read-only for your role</span>
                 <?php endif; ?>

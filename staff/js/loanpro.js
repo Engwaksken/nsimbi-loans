@@ -17,9 +17,9 @@
         responsive: true,
         language: {
           search: '',
-          searchPlaceholder: 'Search…',
+          searchPlaceholder: 'Search...',
           lengthMenu: 'Show _MENU_',
-          info: '_START_–_END_ of _TOTAL_'
+          info: '_START_-_END_ of _TOTAL_'
         }
       });
     });

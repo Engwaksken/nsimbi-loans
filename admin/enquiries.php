@@ -88,11 +88,11 @@ require __DIR__ . '/nav-head.php';
           'received' => date('j M Y, g:ia', strtotime((string)$row['created_at'])),
         ];
         unset($record['ip_hash']);
-        $summary = $row['form_type'] === 'donor' ? ($partnerTypes[$row['partner_type']] ?? '') : ($row['subject'] !== '' ? $row['subject'] : mb_strimwidth((string)$row['message'], 0, 60, '…'));
+        $summary = $row['form_type'] === 'donor' ? ($partnerTypes[$row['partner_type']] ?? '') : ($row['subject'] !== '' ? $row['subject'] : mb_strimwidth((string)$row['message'], 0, 60, '...'));
       ?>
         <tr<?= $row['status'] === 'new' ? ' style="font-weight:600"' : '' ?>>
           <td class="text-muted" style="white-space:nowrap"><?= $e(date('j M Y', strtotime((string)$row['created_at']))) ?></td>
-          <td><strong><?= $e($row['name']) ?></strong><div class="text-muted" style="font-size:.75rem"><?= $e($row['organisation'] !== '' ? $row['organisation'] . ' · ' : '') ?><?= $e($row['email']) ?></div></td>
+          <td><strong><?= $e($row['name']) ?></strong><div class="text-muted" style="font-size:.75rem"><?= $e($row['organisation'] !== '' ? $row['organisation'] . ' | ' : '') ?><?= $e($row['email']) ?></div></td>
           <td><span class="badge <?= $row['form_type'] === 'donor' ? 'badge-purple' : 'badge-primary' ?>"><?= $row['form_type'] === 'donor' ? 'Donor / ESO' : 'Contact' ?></span></td>
           <td><?= $e($summary) ?></td>
           <td><span class="badge <?= $statusBadge[$row['status']] ?>"><?= $e(ucfirst($row['status'])) ?></span></td>

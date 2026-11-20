@@ -37,7 +37,7 @@
 .client-registration-page .signature-status.empty { color: #6c757d; }
 @keyframes registrationFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ── DESIGN TOKENS ─────────────────────────────────────────── */
+/* -- DESIGN TOKENS ------------------------------------------- */
 :root {
   --primary:          #123299;
   --primary-dark:     #0d2475;
@@ -85,7 +85,7 @@
   --t: all .2s cubic-bezier(.4,0,.2,1);
 }
 
-/* ── RESET ─────────────────────────────────────────────────── */
+/* -- RESET --------------------------------------------------- */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:14px;scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--body-bg);color:var(--text-body);min-height:100vh;overflow-x:hidden;line-height:1.6;-webkit-font-smoothing:antialiased}
@@ -96,7 +96,7 @@ a{color:var(--primary);text-decoration:none;transition:var(--t)}
 a:hover{color:var(--primary-mid)}
 img{max-width:100%;display:block}
 
-/* ── SIDEBAR ───────────────────────────────────────────────── */
+/* -- SIDEBAR ------------------------------------------------- */
 .sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--sidebar-bg);display:flex;flex-direction:column;z-index:1000;overflow:hidden;transition:var(--t);box-shadow:4px 0 24px rgba(18,50,153,.2)}
 .sidebar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:180px;background:linear-gradient(0deg,rgba(0,0,0,.16),transparent);pointer-events:none;z-index:0}
 
@@ -128,10 +128,10 @@ img{max-width:100%;display:block}
 .sidebar-footer .nav-link{color:rgba(255,255,255,.48)}
 .sidebar-footer .nav-link:hover{background:rgba(220,38,38,.18);color:#fca5a5}
 
-/* ── LAYOUT ────────────────────────────────────────────────── */
+/* -- LAYOUT -------------------------------------------------- */
 .main-wrapper{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column;background:var(--body-bg)}
 
-/* ── TOPBAR ────────────────────────────────────────────────── */
+/* -- TOPBAR -------------------------------------------------- */
 .topbar{position:sticky;top:0;height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;z-index:900;box-shadow:var(--shadow-xs);gap:1rem}
 .topbar-left{display:flex;align-items:center;gap:.82rem;flex:1;min-width:0}
 .hamburger{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);display:none;align-items:center;justify-content:center;cursor:pointer;transition:var(--t);flex-shrink:0}
@@ -150,13 +150,13 @@ img{max-width:100%;display:block}
 .t-avatar{width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:.76rem;font-weight:800;cursor:pointer;border:2px solid var(--primary-light);transition:var(--t)}
 .t-avatar:hover{box-shadow:0 0 0 3px var(--primary-light)}
 
-/* ── PAGE ──────────────────────────────────────────────────── */
+/* -- PAGE ---------------------------------------------------- */
 .page-content{flex:1;padding:1.4rem 1.5rem}
 .page-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.4rem}
 .page-header .title{font-family:'Outfit',sans-serif;font-size:1.1rem;font-weight:800;color:var(--text-dark)}
 .page-header .sub{font-size:.74rem;color:var(--text-muted);margin-top:2px}
 
-/* ── STATS GRID — 4 PER ROW ────────────────────────────────── */
+/* -- STATS GRID - 4 PER ROW ---------------------------------- */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.4rem}
 .stats-grid.g3{grid-template-columns:repeat(3,1fr)}
 .stats-grid.g2{grid-template-columns:repeat(2,1fr)}
@@ -164,7 +164,7 @@ img{max-width:100%;display:block}
 @media(max-width:1000px){.stats-grid,.stats-grid.g3{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.stats-grid,.stats-grid.g3,.stats-grid.g2{grid-template-columns:1fr 1fr;gap:.65rem}}
 
-/* ── STAT CARD ─────────────────────────────────────────────── */
+/* -- STAT CARD ----------------------------------------------- */
 .stat-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.1rem .95rem;position:relative;overflow:hidden;transition:var(--t);text-decoration:none;display:flex;flex-direction:column;box-shadow:var(--shadow-xs)}
 .stat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--primary-light)}
 .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3.5px;border-radius:var(--r-lg) var(--r-lg) 0 0}
@@ -198,7 +198,7 @@ img{max-width:100%;display:block}
 .stat-label{font-size:.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.045em}
 .stat-foot{margin-top:.65rem;padding-top:.6rem;border-top:1px solid var(--border-light);font-size:.69rem;color:var(--text-muted);display:flex;align-items:center;gap:.3rem}
 
-/* ── CARD ──────────────────────────────────────────────────── */
+/* -- CARD ---------------------------------------------------- */
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-xs);overflow:hidden}
 .card-header{padding:.98rem 1.35rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.7rem;background:var(--white)}
 .card-title{font-family:'Outfit',sans-serif;font-size:.91rem;font-weight:800;color:var(--text-dark);display:flex;align-items:center;gap:.42rem}
@@ -208,7 +208,7 @@ img{max-width:100%;display:block}
 .card-body{padding:1.35rem}
 .card-body.no-pad{padding:0}
 
-/* ── TABLE ─────────────────────────────────────────────────── */
+/* -- TABLE --------------------------------------------------- */
 .table-wrap{overflow-x:auto}
 .table{width:100%;border-collapse:collapse;font-size:.842rem}
 .table thead tr{border-bottom:1.5px solid var(--border);background:var(--body-bg)}
@@ -223,7 +223,7 @@ img{max-width:100%;display:block}
 .cell-name{font-size:.842rem;font-weight:600;color:var(--text-dark)}
 .cell-sub{font-size:.72rem;color:var(--text-muted);margin-top:1px}
 
-/* ── PAGINATION ────────────────────────────────────────────── */
+/* -- PAGINATION ---------------------------------------------- */
 .pag-wrap{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.7rem;padding:.82rem 1.35rem;border-top:1px solid var(--border);background:var(--white)}
 .pag-info{font-size:.73rem;color:var(--text-muted)}
 .pagination{display:flex;align-items:center;gap:.26rem}
@@ -249,7 +249,7 @@ img{max-width:100%;display:block}
 .dataTables_wrapper .dataTables_info{padding:.82rem 1.35rem!important;font-size:.73rem!important;color:var(--text-muted)!important}
 .dt-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;padding:.88rem 1.35rem .3rem;border-bottom:1px solid var(--border-light)}
 
-/* ── BADGES ────────────────────────────────────────────────── */
+/* -- BADGES -------------------------------------------------- */
 .badge{display:inline-flex;align-items:center;gap:.22rem;padding:.22rem .62rem;border-radius:20px;font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
 .badge-success{background:var(--success-bg);color:var(--success)}
 .badge-danger {background:var(--danger-bg);color:var(--danger)}
@@ -260,7 +260,7 @@ img{max-width:100%;display:block}
 .badge-purple {background:var(--purple-bg);color:var(--purple)}
 .badge-muted  {background:var(--border-light);color:var(--text-muted)}
 
-/* ── FORMS ─────────────────────────────────────────────────── */
+/* -- FORMS --------------------------------------------------- */
 .form-group{margin-bottom:1.05rem}
 .form-label{display:block;font-size:.75rem;font-weight:600;color:var(--text-body);margin-bottom:.36rem;text-transform:uppercase;letter-spacing:.045em}
 .form-control,.form-select{width:100%;padding:.56rem .86rem;background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text-dark);font-family:'Plus Jakarta Sans',sans-serif;font-size:.872rem;transition:var(--t);outline:none;line-height:1.5}
@@ -272,7 +272,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .input-group-text{padding:0 .86rem;background:var(--body-bg);border:1.5px solid var(--border);border-radius:0 var(--r) var(--r) 0;color:var(--text-muted);font-size:.87rem;display:flex;align-items:center}
 .form-help{font-size:.71rem;color:var(--text-muted);margin-top:.27rem}
 
-/* ── BUTTONS ───────────────────────────────────────────────── */
+/* -- BUTTONS ------------------------------------------------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.53rem 1.08rem;border-radius:var(--r);font-family:'Plus Jakarta Sans',sans-serif;font-size:.84rem;font-weight:600;cursor:pointer;transition:var(--t);border:none;outline:none;white-space:nowrap;text-decoration:none;line-height:1.4;letter-spacing:.01em}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(18,50,153,.22)}
@@ -296,7 +296,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .btn-icon{width:31px;height:31px;padding:0;border-radius:var(--r-sm)}
 .btn-icon-sm{width:27px;height:27px;padding:0;border-radius:6px;font-size:.76rem}
 
-/* ── MODALS ────────────────────────────────────────────────── */
+/* -- MODALS -------------------------------------------------- */
 .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.52);backdrop-filter:blur(3px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
 .modal-overlay.open{opacity:1;pointer-events:all}
 .modal-box{background:var(--white);border:1px solid var(--border);border-radius:var(--r-xl);width:100%;max-width:620px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(14px) scale(.98);transition:transform .2s cubic-bezier(.4,0,.2,1)}
@@ -314,7 +314,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .spinner{width:20px;height:20px;border:2.5px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .62s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── TOASTS ────────────────────────────────────────────────── */
+/* -- TOASTS -------------------------------------------------- */
 .toast-container{position:fixed;top:1.2rem;right:1.2rem;z-index:9999;display:flex;flex-direction:column;gap:.42rem}
 .toast{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);padding:.76rem 1.02rem;display:flex;align-items:center;gap:.68rem;min-width:255px;max-width:380px;box-shadow:var(--shadow-md);animation:toastIn .26s ease,toastOut .26s ease 3.7s forwards}
 .toast.t-success{border-left:3.5px solid var(--secondary)}.toast.t-danger{border-left:3.5px solid var(--danger)}.toast.t-warning{border-left:3.5px solid var(--warning)}.toast.t-info{border-left:3.5px solid var(--primary)}
@@ -324,21 +324,21 @@ textarea.form-control{resize:vertical;min-height:80px}
 @keyframes toastIn{from{transform:translateX(50px);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes toastOut{from{opacity:1}to{opacity:0;pointer-events:none}}
 
-/* ── DETAIL GRID ───────────────────────────────────────────── */
+/* -- DETAIL GRID --------------------------------------------- */
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .detail-item{background:var(--body-bg);border:1px solid var(--border);border-radius:8px;padding:.63rem .86rem}
 .detail-item .lbl{font-size:.64rem;text-transform:uppercase;letter-spacing:.065em;color:var(--text-muted);margin-bottom:.18rem}
 .detail-item .val{font-size:.872rem;font-weight:600;color:var(--text-dark)}
 .detail-item.full{grid-column:1/-1}
 
-/* ── PROGRESS ──────────────────────────────────────────────── */
+/* -- PROGRESS ------------------------------------------------ */
 .progress-wrap{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .progress-fill{height:100%;border-radius:3px;transition:width .5s ease}
 .progress-fill.blue {background:linear-gradient(90deg,var(--primary),var(--primary-mid))}
 .progress-fill.green{background:linear-gradient(90deg,var(--secondary-dark),var(--secondary))}
 .progress-fill.red  {background:linear-gradient(90deg,var(--danger),#f87171)}
 
-/* ── TIMELINE ──────────────────────────────────────────────── */
+/* -- TIMELINE ------------------------------------------------ */
 .timeline{position:relative;padding-left:1.5rem}
 .timeline::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:var(--border)}
 .timeline-item{position:relative;padding-bottom:1rem}
@@ -346,7 +346,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .tl-date{font-size:.7rem;color:var(--text-muted);margin-bottom:.17rem}
 .tl-amount{font-size:.88rem;font-weight:700;color:var(--success)}
 
-/* ── NOTIFICATIONS ─────────────────────────────────────────── */
+/* -- NOTIFICATIONS ------------------------------------------- */
 .notif-panel{position:absolute;right:0;top:calc(100% + 8px);width:316px;background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-md);overflow:hidden;z-index:9999}
 .notif-head{padding:.8rem 1.08rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .notif-head-title{font-family:'Outfit',sans-serif;font-size:.87rem;font-weight:800;color:var(--text-dark)}
@@ -359,36 +359,36 @@ textarea.form-control{resize:vertical;min-height:80px}
 .notif-foot{padding:.6rem;text-align:center;border-top:1px solid var(--border)}
 .notif-foot a{font-size:.77rem;color:var(--primary);font-weight:600}
 
-/* ── PILLS ─────────────────────────────────────────────────── */
+/* -- PILLS --------------------------------------------------- */
 .pills{display:flex;gap:.33rem;flex-wrap:wrap}
 .pill{padding:.29rem .82rem;border-radius:20px;font-size:.74rem;font-weight:600;cursor:pointer;transition:var(--t);border:1.5px solid var(--border);background:var(--white);color:var(--text-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:.26rem}
 .pill:hover{border-color:var(--primary-light);color:var(--primary);background:var(--primary-xlight)}
 .pill.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 8px rgba(18,50,153,.17)}
 
-/* ── ACTION BTN ────────────────────────────────────────────── */
+/* -- ACTION BTN ---------------------------------------------- */
 .action-btn{display:flex;align-items:center;gap:.7rem;padding:.6rem .86rem;border-radius:9px;border:1.5px solid var(--border);background:var(--white);color:var(--text-body);font-size:.84rem;font-weight:500;cursor:pointer;transition:var(--t);text-decoration:none;width:100%}
 .action-btn:hover{background:var(--primary-xlight);border-color:var(--primary-light);color:var(--primary)}
 .action-btn .a-ico{width:32px;height:32px;border-radius:8px;background:var(--primary-xlight);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.82rem;flex-shrink:0;transition:var(--t)}
 .action-btn:hover .a-ico{background:var(--primary);color:#fff}
 
-/* ── PENDING CARD ──────────────────────────────────────────── */
+/* -- PENDING CARD -------------------------------------------- */
 .pending-card{background:var(--white);border:1px solid var(--border);border-left:4px solid var(--warning);border-radius:var(--r-lg);padding:1.02rem 1.28rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.72rem;box-shadow:var(--shadow-xs);transition:var(--t);margin-bottom:.68rem}
 .pending-card:hover{box-shadow:var(--shadow);border-left-color:var(--primary)}
 
-/* ── EMPTY STATE ───────────────────────────────────────────── */
+/* -- EMPTY STATE --------------------------------------------- */
 .empty-state{text-align:center;padding:3.2rem 1rem}
 .empty-state i{font-size:2.1rem;color:var(--text-muted);opacity:.28;display:block;margin-bottom:.82rem}
 .empty-state h3{font-size:.93rem;color:var(--text-secondary);margin-bottom:.28rem}
 .empty-state p{font-size:.81rem;color:var(--text-muted)}
 
-/* ── ALERT ─────────────────────────────────────────────────── */
+/* -- ALERT --------------------------------------------------- */
 .alert{padding:.75rem 1.08rem;border-radius:var(--r);display:flex;align-items:center;gap:.62rem;font-size:.842rem;font-weight:500;border:1px solid transparent;margin-bottom:1rem}
 .alert-danger {background:var(--danger-bg);color:var(--danger);border-color:rgba(220,38,38,.14)}
 .alert-success{background:var(--success-bg);color:var(--success);border-color:rgba(22,163,74,.14)}
 .alert-warning{background:var(--warning-bg);color:var(--warning);border-color:rgba(217,119,6,.14)}
 .alert-info   {background:var(--info-bg);color:var(--info);border-color:rgba(37,99,235,.14)}
 
-/* ── DROPDOWN ──────────────────────────────────────────────── */
+/* -- DROPDOWN ------------------------------------------------ */
 .dropdown{position:relative}
 .dropdown-menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);min-width:168px;padding:.33rem;box-shadow:var(--shadow-md);z-index:100;opacity:0;pointer-events:none;transform:translateY(-6px);transition:var(--t)}
 .dropdown.open .dropdown-menu{opacity:1;pointer-events:all;transform:translateY(0)}
@@ -397,7 +397,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .dropdown-item.danger:hover{background:var(--danger-bg);color:var(--danger)}
 .dropdown-divider{border:none;border-top:1px solid var(--border);margin:.28rem 0}
 
-/* ── LOGIN ─────────────────────────────────────────────────── */
+/* -- LOGIN --------------------------------------------------- */
 .login-page{min-height:100vh;display:grid;grid-template-columns:1fr 1fr}
 .login-brand{background:var(--primary);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem;position:relative;overflow:hidden}
 .login-brand::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 25%,rgba(255,255,255,.06) 0%,transparent 55%),radial-gradient(ellipse at 72% 82%,rgba(32,217,89,.08) 0%,transparent 50%);pointer-events:none}
@@ -417,7 +417,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .login-submit{width:100%;padding:.7rem;background:var(--primary);color:#fff;border:none;border-radius:var(--r);font-family:'Outfit',sans-serif;font-size:.97rem;font-weight:800;cursor:pointer;transition:var(--t);box-shadow:0 3px 12px rgba(18,50,153,.22)}
 .login-submit:hover{background:var(--primary-dark);box-shadow:0 5px 20px rgba(18,50,153,.32);transform:translateY(-1px)}
 
-/* ── UTILS ─────────────────────────────────────────────────── */
+/* -- UTILS --------------------------------------------------- */
 .text-primary {color:var(--primary)!important}
 .text-green   {color:var(--success)!important}
 .text-success {color:var(--success)!important}
@@ -441,7 +441,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
 
-/* ── RESPONSIVE ────────────────────────────────────────────── */
+/* -- RESPONSIVE ---------------------------------------------- */
 @media(max-width:1024px){.sidebar{transform:translateX(-100%);box-shadow:none}.sidebar.open{transform:translateX(0);box-shadow:var(--shadow-lg)}.main-wrapper{margin-left:0}.hamburger{display:flex}.grid-3{grid-template-columns:1fr 1fr}.login-page{grid-template-columns:1fr}.login-brand{display:none}}
 @media(max-width:640px){.page-content{padding:1rem}.stats-grid{grid-template-columns:1fr 1fr;gap:.65rem}.detail-grid{grid-template-columns:1fr}.grid-2,.grid-3{grid-template-columns:1fr}.modal-box{max-height:95vh}.topbar-search{display:none!important}}
 /* =========================================================
@@ -556,17 +556,17 @@ textarea.form-control{resize:vertical;min-height:80px}
     }
 }
 /* ================================================================
-   loanPro.css — Loan view page styles
+   loanPro.css - Loan view page styles
    Depends on the global design-token variables defined in main CSS
 ================================================================ */
 
-/* ── PAGE SHELL ─────────────────────────────────────────────── */
+/* -- PAGE SHELL ----------------------------------------------- */
 .loan-view-page {
     background: var(--body-bg);
     min-height: 100vh;
 }
 
-/* ── HERO BANNER ────────────────────────────────────────────── */
+/* -- HERO BANNER ---------------------------------------------- */
 .loan-hero {
     background: linear-gradient(135deg, #0f172a, #1e3a8a);
     color: #fff;
@@ -602,7 +602,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     letter-spacing: .02em;
 }
 
-/* ── TAB NAVIGATION ─────────────────────────────────────────── */
+/* -- TAB NAVIGATION ------------------------------------------- */
 .loan-tabs-wrapper {
     background: #fff;
     border: 1px solid var(--border);
@@ -656,7 +656,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     box-shadow: 0 10px 24px rgba(18, 50, 153, .25);
 }
 
-/* ── TAB CONTENT CARD ───────────────────────────────────────── */
+/* -- TAB CONTENT CARD ----------------------------------------- */
 .loan-tab-card {
     background: #fff;
     border: 1px solid var(--border);
@@ -688,7 +688,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-size: .82rem;
 }
 
-/* ── KPI GRID ───────────────────────────────────────────────── */
+/* -- KPI GRID ------------------------------------------------- */
 .loan-kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -729,7 +729,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-weight: 900;
 }
 
-/* ── INFO GRID ──────────────────────────────────────────────── */
+/* -- INFO GRID ------------------------------------------------ */
 .info-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -760,7 +760,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-weight: 700;
 }
 
-/* ── PAYMENT TABLE ──────────────────────────────────────────── */
+/* -- PAYMENT TABLE -------------------------------------------- */
 .loan-table {
     width: 100%;
     border-collapse: collapse;
@@ -795,7 +795,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     background: #f8fafc;
 }
 
-/* ── PAYMENT FORM ───────────────────────────────────────────── */
+/* -- PAYMENT FORM --------------------------------------------- */
 .payment-form-box {
     padding: 1.25rem 1.4rem;
 }
@@ -816,14 +816,14 @@ textarea.form-control{resize:vertical;min-height:80px}
     box-shadow: 0 0 0 3px var(--primary-xlight);
 }
 
-/* ── SOFT BADGES ────────────────────────────────────────────── */
+/* -- SOFT BADGES ---------------------------------------------- */
 .badge-soft-success   { background: #dcfce7; color: #166534; }
 .badge-soft-primary   { background: #dbeafe; color: #1e40af; }
 .badge-soft-warning   { background: #fef3c7; color: #92400e; }
 .badge-soft-danger    { background: #fee2e2; color: #991b1b; }
 .badge-soft-secondary { background: #f1f5f9; color: #475569; }
 
-/* ── EMPTY STATE ────────────────────────────────────────────── */
+/* -- EMPTY STATE ---------------------------------------------- */
 .loan-empty-state {
     padding: 2.5rem;
     text-align: center;
@@ -840,7 +840,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-size: .875rem;
 }
 
-/* ── RESPONSIVE ─────────────────────────────────────────────── */
+/* -- RESPONSIVE ----------------------------------------------- */
 @media (max-width: 1199px) {
     .loan-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1080,13 +1080,13 @@ textarea.form-control{resize:vertical;min-height:80px}
 .pagination .page-item.disabled .page-link {
     opacity: 0.5;
 }
-/* ── PAGE SHELL ─────────────────────────────────────────────── */
+/* -- PAGE SHELL ----------------------------------------------- */
 .loan-view-page {
     background: var(--body-bg);
     min-height: 100vh;
 }
  
-/* ── HERO BANNER ────────────────────────────────────────────── */
+/* -- HERO BANNER ---------------------------------------------- */
 .loan-hero {
     background: linear-gradient(135deg, #0f172a, #1e3a8a);
     color: #fff;
@@ -1122,7 +1122,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     letter-spacing: .02em;
 }
  
-/* ── TAB NAVIGATION ─────────────────────────────────────────── */
+/* -- TAB NAVIGATION ------------------------------------------- */
 .loan-tabs-wrapper {
     background: #fff;
     border: 1px solid var(--border);
@@ -1176,7 +1176,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     box-shadow: 0 10px 24px rgba(18, 50, 153, .25);
 }
  
-/* ── TAB PANE VISIBILITY (overrides any global display rules) ── */
+/* -- TAB PANE VISIBILITY (overrides any global display rules) -- */
 /*
    Bootstrap sets .tab-pane { display: block } and relies on
    .fade opacity + JS .show class. If the global stylesheet
@@ -1197,7 +1197,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     opacity: 1;
 }
  
-/* ── TAB CONTENT CARD ───────────────────────────────────────── */
+/* -- TAB CONTENT CARD ----------------------------------------- */
 .loan-tab-card {
     background: #fff;
     border: 1px solid var(--border);
@@ -1229,7 +1229,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-size: .82rem;
 }
  
-/* ── KPI GRID ───────────────────────────────────────────────── */
+/* -- KPI GRID ------------------------------------------------- */
 .loan-kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1270,7 +1270,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-weight: 900;
 }
  
-/* ── INFO GRID ──────────────────────────────────────────────── */
+/* -- INFO GRID ------------------------------------------------ */
 .info-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1301,7 +1301,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-weight: 700;
 }
  
-/* ── PAYMENT TABLE ──────────────────────────────────────────── */
+/* -- PAYMENT TABLE -------------------------------------------- */
 .loan-table {
     width: 100%;
     border-collapse: collapse;
@@ -1336,7 +1336,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     background: #f8fafc;
 }
  
-/* ── PAYMENT FORM ───────────────────────────────────────────── */
+/* -- PAYMENT FORM --------------------------------------------- */
 .payment-form-box {
     padding: 1.25rem 1.4rem;
 }
@@ -1357,14 +1357,14 @@ textarea.form-control{resize:vertical;min-height:80px}
     box-shadow: 0 0 0 3px var(--primary-xlight);
 }
  
-/* ── SOFT BADGES ────────────────────────────────────────────── */
+/* -- SOFT BADGES ---------------------------------------------- */
 .badge-soft-success   { background: #dcfce7; color: #166534; }
 .badge-soft-primary   { background: #dbeafe; color: #1e40af; }
 .badge-soft-warning   { background: #fef3c7; color: #92400e; }
 .badge-soft-danger    { background: #fee2e2; color: #991b1b; }
 .badge-soft-secondary { background: #f1f5f9; color: #475569; }
  
-/* ── EMPTY STATE ────────────────────────────────────────────── */
+/* -- EMPTY STATE ---------------------------------------------- */
 .loan-empty-state {
     padding: 2.5rem;
     text-align: center;
@@ -1381,7 +1381,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     font-size: .875rem;
 }
  
-/* ── RESPONSIVE ─────────────────────────────────────────────── */
+/* -- RESPONSIVE ----------------------------------------------- */
 @media (max-width: 1199px) {
     .loan-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2611,7 +2611,7 @@ textarea.form-control{resize:vertical;min-height:80px}
     }
 }
 
-/* ═══ BOOKS HISTORY TAB (view_client.php) ═════════════════════ */
+/* === BOOKS HISTORY TAB (view_client.php) ===================== */
 .books-sort-link{
     color:inherit;
     text-decoration:none;
@@ -2711,7 +2711,7 @@ textarea.form-control{resize:vertical;min-height:80px}
 /* The books tab control is a link, not a button, so it reloads with filters. */
 a.profile-tab-btn{text-decoration:none;}
 
-/* ═══ BOOKS HISTORY REPORT (books_history.php) ════════════════ */
+/* === BOOKS HISTORY REPORT (books_history.php) ================ */
 .report-page{padding:1rem;}
 .report-page .title{
     font-size:1.35rem;
@@ -2765,7 +2765,7 @@ a.profile-tab-btn{text-decoration:none;}
     color:#fff;
 }
 
-/* ═══ CLIENT BOOKS DASHBOARD (books.php) ═══════════════════════ */
+/* === CLIENT BOOKS DASHBOARD (books.php) ======================= */
 .cadence-bar{
     display:flex;
     align-items:center;
@@ -2868,7 +2868,7 @@ a.profile-tab-btn{text-decoration:none;}
     .surplus-card .stat-value{font-size:1.3rem;}
 }
 
-/* ── Collapsible sidebar groups ───────────────────────────── */
+/* -- Collapsible sidebar groups ----------------------------- */
 .nav-section{margin-bottom:2px}
 .nav-group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.5rem;background:none;border:0;border-radius:6px;cursor:pointer;font-family:inherit;text-align:left;transition:var(--t)}
 .nav-group-toggle:hover,.nav-group-toggle:focus-visible{color:rgba(255,255,255,.75);background:rgba(255,255,255,.05);outline:none}
@@ -2881,7 +2881,7 @@ a.profile-tab-btn{text-decoration:none;}
 .nav-section.open .nav-items{grid-template-rows:1fr}
 @media(prefers-reduced-motion:reduce){.nav-items,.nav-group-toggle .chev{transition:none}}
 
-/* ── Website CMS admin ────────────────────────────────────── */
+/* -- Website CMS admin -------------------------------------- */
 .cms-row{display:flex;align-items:center;gap:1rem;padding:.85rem 1.35rem;border-bottom:1px solid var(--border-light)}
 .cms-row:last-child{border-bottom:0}
 .cms-row.is-hidden{opacity:.55}
@@ -2913,7 +2913,7 @@ a.profile-tab-btn{text-decoration:none;}
 .cms-font-sample p{margin:0;font-size:.92rem}
 @media(max-width:640px){.cms-row{flex-wrap:wrap}.cms-row-actions{width:100%;justify-content:flex-end}}
 
-/* ── CMS tabs ─────────────────────────────────────────────── */
+/* -- CMS tabs ----------------------------------------------- */
 .cms-tabs{display:flex;gap:.25rem;border-bottom:1.5px solid var(--border);margin:-.35rem 0 1.1rem;overflow-x:auto;scrollbar-width:none}
 .cms-tabs::-webkit-scrollbar{display:none}
 .cms-tabs [role="tab"]{display:flex;align-items:center;gap:.4rem;padding:.6rem .95rem;border:0;background:none;border-bottom:2.5px solid transparent;margin-bottom:-1.5px;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap;transition:var(--t)}

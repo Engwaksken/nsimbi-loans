@@ -104,7 +104,7 @@ function books_roll_up(array $amountsByType): array
     ];
 }
 
-/* ═══ CADENCE PERIOD BOUNDARIES ═══════════════════════════════════════════ */
+/* === CADENCE PERIOD BOUNDARIES =========================================== */
 
 const BOOKS_CADENCES = ['weekly', 'biweekly', 'monthly', 'annual'];
 
@@ -114,8 +114,8 @@ const BOOKS_CADENCES = ['weekly', 'biweekly', 'monthly', 'annual'];
  * $offset is 0 for the current period, -1 for the previous, etc.
  * Positive offsets (future) are allowed but callers typically clamp at 0.
  *
- * Biweekly: pairs ISO weeks starting from W1 (W1-W2, W3-W4, …). Odd-count
- * years (53 weeks) make the last "pair" a single week — acceptable edge case.
+ * Biweekly: pairs ISO weeks starting from W1 (W1-W2, W3-W4, ...). Odd-count
+ * years (53 weeks) make the last "pair" a single week - acceptable edge case.
  */
 function books_cadence_range(string $cadence, int $offset = 0, string $weekStart = 'monday'): array
 {
@@ -170,22 +170,22 @@ function books_cadence_label(string $cadence, DateTimeImmutable $start, DateTime
         case 'weekly':
             $last = $end->modify('-1 day');
             if ($start->format('Y') !== $last->format('Y')) {
-                return $start->format('M j, Y') . ' – ' . $last->format('M j, Y');
+                return $start->format('M j, Y') . ' - ' . $last->format('M j, Y');
             }
             if ($start->format('M') !== $last->format('M')) {
-                return $start->format('M j') . ' – ' . $last->format('M j, Y');
+                return $start->format('M j') . ' - ' . $last->format('M j, Y');
             }
-            return $start->format('M j') . ' – ' . $last->format('j, Y');
+            return $start->format('M j') . ' - ' . $last->format('j, Y');
 
         case 'biweekly':
             $last = $end->modify('-1 day');
             if ($start->format('Y') !== $last->format('Y')) {
-                return $start->format('M j, Y') . ' – ' . $last->format('M j, Y');
+                return $start->format('M j, Y') . ' - ' . $last->format('M j, Y');
             }
             if ($start->format('M') !== $last->format('M')) {
-                return $start->format('M j') . ' – ' . $last->format('M j, Y');
+                return $start->format('M j') . ' - ' . $last->format('M j, Y');
             }
-            return $start->format('M j') . ' – ' . $last->format('j, Y');
+            return $start->format('M j') . ' - ' . $last->format('j, Y');
 
         case 'annual':
             return $start->format('Y');

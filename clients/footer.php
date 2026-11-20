@@ -20,9 +20,9 @@ $(function(){
           dom:'<"dt-top"lf>t<"pag-wrap"ip>',
           language:{
             search:'',
-            searchPlaceholder:'Search…',
+            searchPlaceholder:'Search...',
             lengthMenu:'Show _MENU_ records',
-            info:'Showing _START_–_END_ of _TOTAL_',
+            info:'Showing _START_-_END_ of _TOTAL_',
             paginate:{
               previous:'<i class="fas fa-chevron-left"></i>',
               next:'<i class="fas fa-chevron-right"></i>'

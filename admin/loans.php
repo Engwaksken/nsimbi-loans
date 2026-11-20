@@ -132,7 +132,7 @@ $memberSql = "
 
 /*
  * loan.client_id stores startups.startup_id (confirmed), which is
- * itself a foreign key into user.id — same pattern as
+ * itself a foreign key into user.id - same pattern as
  * customers.user_id / members.user_id.
  */
 $startupSql = "
@@ -539,7 +539,7 @@ function pageUrl(int $p, string $filter, string $search): string
             <span class="badge badge-muted">
                 <?= number_format($totalLoans) ?> records
                 <?php if ($totalLoans > 0): ?>
-                    — page <?= $page ?> of <?= $totalPages ?>
+                    - page <?= $page ?> of <?= $totalPages ?>
                 <?php endif; ?>
             </span>
         </div>

@@ -99,8 +99,8 @@ while ($row = $res->fetch_assoc()) {
         'has_outstanding' => ((int)$row['has_outstanding'] === 1),
         'sub' => trim(
             'Username: ' . ($row['username'] ?? 'N/A') .
-            ' — Email: ' . ($row['email'] ?? 'N/A') .
-            (((int)$row['has_outstanding'] === 1) ? ' — Has outstanding loan' : '')
+            ' - Email: ' . ($row['email'] ?? 'N/A') .
+            (((int)$row['has_outstanding'] === 1) ? ' - Has outstanding loan' : '')
         ),
     ];
 }

@@ -121,7 +121,7 @@ require __DIR__ . '/nav-head.php';
       <!-- Brand -->
       <div class="cms-tab-panel" role="tabpanel" data-tab-panel="brand">
         <div class="form-group"><label class="form-label" for="st-name">Platform name</label><input class="form-control" id="st-name" name="site_name" maxlength="80" value="<?= $e($s['site_name']) ?>"><div class="form-help">Used in the header wordmark, page titles and footer. The last word is highlighted.</div></div>
-        <div class="form-group"><label class="form-label" for="st-enquiry">Enquiry notification email</label><input class="form-control" type="email" id="st-enquiry" name="enquiry_email" maxlength="190" required value="<?= $e($s['enquiry_email']) ?>" placeholder="info@nsimbiimpact.com"><div class="form-help">Contact and Donor / ESO submissions are emailed here (uses the SMTP settings in the email_settings table) and always saved under Website → Enquiries.</div></div>
+        <div class="form-group"><label class="form-label" for="st-enquiry">Enquiry notification email</label><input class="form-control" type="email" id="st-enquiry" name="enquiry_email" maxlength="190" required value="<?= $e($s['enquiry_email']) ?>" placeholder="info@nsimbiimpact.com"><div class="form-help">Contact and Donor / ESO submissions are emailed here (uses the SMTP settings in the email_settings table) and always saved under Website > Enquiries.</div></div>
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label">Logo</label>
@@ -166,7 +166,7 @@ require __DIR__ . '/nav-head.php';
               <div class="tp-strip" style="background:var(--tp-color_primary)"></div>
               <div class="tp-hero" style="background:linear-gradient(110deg,var(--tp-color_primary),var(--tp-color_dark))">
                 <b>Capital that sees the potential in every woman.</b>
-                <span class="tp-btn" style="background:var(--tp-color_accent);color:var(--tp-color_dark)">Explore financing →</span>
+                <span class="tp-btn" style="background:var(--tp-color_accent);color:var(--tp-color_dark)">Explore financing</span>
               </div>
               <div class="tp-body">
                 <b style="color:var(--tp-color_primary)">Investing in the</b>
@@ -208,12 +208,12 @@ require __DIR__ . '/nav-head.php';
           <div class="hf-header" data-hf-preview="header" data-size-sample="header_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('header')) ?>">
             <span class="hf-logo" data-brand-preview="header" data-mode="<?= $e($s['header_brand']) ?>"><img src="<?= $e($s['logo']) ?>" alt=""><span><?= str_replace(['<b>', '</b>'], ['<b style="color:var(--hf-accent-text)">', '</b>'], site_wordmark_html()) ?></span></span>
             <span class="hf-links"><span>Overview</span><span>Our Vision</span><span>Impact</span></span>
-            <span class="hf-cta">Apply for a Loan →</span>
+            <span class="hf-cta">Apply for a Loan</span>
           </div>
           <div class="hf-footer" data-hf-preview="footer" data-size-sample="footer_size" data-body-stack="<?= $e(site_font_stack($s['body_font'])) ?>" data-heading-stack="<?= $e(site_font_stack($s['heading_font'])) ?>" style="<?= $e($previewStyle('footer')) ?>">
             <span class="hf-logo" data-brand-preview="footer" data-mode="<?= $e($s['footer_brand']) ?>"><img src="<?= $e($s['footer_logo'] !== '' ? $s['footer_logo'] : $s['logo']) ?>" alt=""><span><?= site_wordmark_html() ?></span></span>
             <span>Dignity for women, wrapped in capital.</span>
-            <span>© <?= date('Y') ?> <?= $e($s['site_name']) ?> · Client &amp; staff login →</span>
+            <span>© <?= date('Y') ?> <?= $e($s['site_name']) ?> | Client &amp; staff login</span>
           </div>
         </div>
       </div>
@@ -238,12 +238,12 @@ require __DIR__ . '/nav-head.php';
             <div class="form-group"><label class="form-label" for="st-panel">Dashboard font (admin, staff, client)</label><select class="form-select" id="st-panel" name="panel_font" data-font-preview="panel"><?= $fontOptions($s['panel_font']) ?></select></div>
             <?= $range('panel_text_size', 'Dashboard text size', 'px', 'Scales the whole dashboard layout, including tables and forms.') ?>
           </div>
-          <div class="cms-font-sample"><p data-font-sample="panel" data-size-sample="panel_text_size" data-base="14" style="font-family:<?= $e(site_font_stack($s['panel_font'])) ?>;font-size:<?= (int)$s['panel_text_size'] ?>px">Pending loans · 12 &nbsp; Outstanding · UGX 4,250,000</p></div>
+          <div class="cms-font-sample"><p data-font-sample="panel" data-size-sample="panel_text_size" data-base="14" style="font-family:<?= $e(site_font_stack($s['panel_font'])) ?>;font-size:<?= (int)$s['panel_text_size'] ?>px">Pending loans | 12 &nbsp; Outstanding | UGX 4,250,000</p></div>
         </div>
         <hr style="border:0;border-top:1px solid var(--border);margin:1.2rem 0">
         <div class="grid-2">
           <div>
-            <?= $range('sidebar_group_size', 'Sidebar group titles', 'px', 'Size of the collapsible group headings (Loans, People, Finance…).') ?>
+            <?= $range('sidebar_group_size', 'Sidebar group titles', 'px', 'Size of the collapsible group headings (Loans, People, Finance...).') ?>
             <?= $range('sidebar_link_size', 'Sidebar links', 'px', 'Size of the menu items inside each group.') ?>
           </div>
           <div class="cms-sidebar-sample">

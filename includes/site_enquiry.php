@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Receives the public Contact and Donor / ESO forms (JSON response).
- * Stores the enquiry for Website → Enquiries and emails a notification when SMTP is configured.
+ * Stores the enquiry for Website > Enquiries and emails a notification when SMTP is configured.
  */
 
 require_once __DIR__ . '/site_cms.php';
@@ -88,7 +88,7 @@ if (filter_var($notify, FILTER_VALIDATE_EMAIL)) {
         foreach ($rows as $label => $value) {
             if ($value !== '') $body .= '<tr><td><b>' . site_e($label) . '</b></td><td>' . site_e($value) . '</td></tr>';
         }
-        $body .= '</table>' . ($message !== '' ? '<p>' . nl2br(site_e($message)) . '</p>' : '') . '<p>View all enquiries in the admin dashboard under Website → Enquiries.</p>';
+        $body .= '</table>' . ($message !== '' ? '<p>' . nl2br(site_e($message)) . '</p>' : '') . '<p>View all enquiries in the admin dashboard under Website > Enquiries.</p>';
         $title = ($type === 'donor' ? 'New donor / ESO sign-up: ' : 'New contact message: ') . $name;
         if (function_exists('sendEmail')) sendEmail($notify, $title, $body);
     } catch (Throwable $e) {

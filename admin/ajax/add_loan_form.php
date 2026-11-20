@@ -465,7 +465,7 @@ if (addLoanTableHasColumn($conn, 'organisations', 'id')) {
         while ($row = $organisationResult->fetch_assoc()) {
             $organisations[] = [
                 'id' => (int)$row['id'],
-                'label' => trim((string)$row['company_name']) . ' — ' . trim((string)$row['ceo_name']) . ' — ' . trim((string)$row['phone']),
+                'label' => trim((string)$row['company_name']) . ' - ' . trim((string)$row['ceo_name']) . ' - ' . trim((string)$row['phone']),
             ];
         }
         $organisationResult->free();

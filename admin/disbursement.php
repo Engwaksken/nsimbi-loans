@@ -320,7 +320,7 @@ foreach ($pendingTopups as $topup) {
     </div>
 </div>
 
-<h5 class="mb-3">New Loans &mdash; Ready to Disburse</h5>
+<h5 class="mb-3">New Loans - Ready to Disburse</h5>
 
 <?php if (empty($pendingLoans)): ?>
 
@@ -360,7 +360,7 @@ foreach ($pendingTopups as $topup) {
                     <div class="cell-av"><?= h($initials ?: 'U') ?></div>
                     <div>
                         <div style="font-weight:700"><?= h($clientName) ?></div>
-                        <div class="fs-sm text-muted">Loan #<?= $loanId ?> &middot; Applied <?= h($appliedDate) ?></div>
+                        <div class="fs-sm text-muted">Loan #<?= $loanId ?> | Applied <?= h($appliedDate) ?></div>
                         <div class="mt-1">
                             <span class="badge badge-teal">APPROVED</span>
                             <span class="badge badge-secondary">Interest: <?= h((string)($loan['interest_rate'] ?? '')) ?>%</span>
@@ -385,7 +385,7 @@ foreach ($pendingTopups as $topup) {
                     Approved by <?= h(trim(($approvedEntry['fname'] ?? '') . ' ' . ($approvedEntry['lname'] ?? '')) ?: 'reviewer') ?>
                     on <?= h(date('M j, Y g:i A', strtotime((string)$approvedEntry['created_at']))) ?>
                     <?php if (!empty($approvedEntry['comments'])): ?>
-                        &mdash; "<?= h($approvedEntry['comments']) ?>"
+                        - "<?= h($approvedEntry['comments']) ?>"
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -440,7 +440,7 @@ foreach ($pendingTopups as $topup) {
 
 <?php endif; ?>
 
-<h5 class="mt-4 mb-3">Top-Ups &mdash; Ready to Disburse</h5>
+<h5 class="mt-4 mb-3">Top-Ups - Ready to Disburse</h5>
 
 <?php if (empty($pendingTopups)): ?>
 
@@ -481,7 +481,7 @@ foreach ($pendingTopups as $topup) {
                     <div class="cell-av" style="background:#7e22ce;"><?= h($initials ?: 'U') ?></div>
                     <div>
                         <div style="font-weight:700"><?= h($clientName) ?></div>
-                        <div class="fs-sm text-muted">Top-up on Loan #<?= $loanId ?> &middot; Requested <?= h($requestedDate) ?></div>
+                        <div class="fs-sm text-muted">Top-up on Loan #<?= $loanId ?> | Requested <?= h($requestedDate) ?></div>
                         <div class="mt-1">
                             <span class="badge badge-teal" style="background:#f3e8ff;color:#7e22ce;">APPROVED TOP-UP</span>
                         </div>
@@ -509,7 +509,7 @@ foreach ($pendingTopups as $topup) {
                     Approved by <?= h(trim(($approvedEntry['fname'] ?? '') . ' ' . ($approvedEntry['lname'] ?? '')) ?: 'reviewer') ?>
                     on <?= h(date('M j, Y g:i A', strtotime((string)$approvedEntry['created_at']))) ?>
                     <?php if (!empty($approvedEntry['comments'])): ?>
-                        &mdash; "<?= h($approvedEntry['comments']) ?>"
+                        - "<?= h($approvedEntry['comments']) ?>"
                     <?php endif; ?>
                 </div>
             <?php endif; ?>

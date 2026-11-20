@@ -768,7 +768,7 @@ require 'nav-head.php';
             <div class="col-lg-8">
                 <h4 class="loan-hero-title">Loan #<?= h($loan_id) ?></h4>
                 <p class="loan-hero-subtitle">
-                    <?= h($displayTitle) ?> &middot; <?= h($clientType) ?> &middot; <?= h($status) ?>
+                    <?= h($displayTitle) ?> | <?= h($clientType) ?> | <?= h($status) ?>
                 </p>
             </div>
 
@@ -905,7 +905,6 @@ require 'nav-head.php';
 
             <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
             <div class="ai-recommend mt-3">
-                <i class="fas fa-robot"></i>
                 AI recommended amount: <strong><?= money($assessment['limit']) ?></strong>
             </div>
             <?php endif; ?>

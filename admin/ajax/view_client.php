@@ -31,17 +31,17 @@ $in=strtoupper(substr($c['fname'],0,1).substr($c['lname'],0,1));
   </div>
 </div>
 <div class="detail-grid">
-  <div class="detail-item"><div class="lbl">Phone</div><div class="val"><?= htmlspecialchars($c['phone']??'—') ?></div></div>
-  <div class="detail-item"><div class="lbl">NIN</div><div class="val"><?= htmlspecialchars($c['nin']??'—') ?></div></div>
-  <div class="detail-item"><div class="lbl">Business</div><div class="val"><?= htmlspecialchars($c['business_name']??'—') ?></div></div>
-  <div class="detail-item"><div class="lbl">Business Type</div><div class="val"><?= htmlspecialchars($c['business_type']??'—') ?></div></div>
-  <div class="detail-item"><div class="lbl">District</div><div class="val"><?= htmlspecialchars($c['district']??'—') ?></div></div>
+  <div class="detail-item"><div class="lbl">Phone</div><div class="val"><?= htmlspecialchars($c['phone']??'N/A') ?></div></div>
+  <div class="detail-item"><div class="lbl">NIN</div><div class="val"><?= htmlspecialchars($c['nin']??'N/A') ?></div></div>
+  <div class="detail-item"><div class="lbl">Business</div><div class="val"><?= htmlspecialchars($c['business_name']??'N/A') ?></div></div>
+  <div class="detail-item"><div class="lbl">Business Type</div><div class="val"><?= htmlspecialchars($c['business_type']??'N/A') ?></div></div>
+  <div class="detail-item"><div class="lbl">District</div><div class="val"><?= htmlspecialchars($c['district']??'N/A') ?></div></div>
   <div class="detail-item"><div class="lbl">Loan Limit</div><div class="val text-primary">UGX <?= number_format($c['loan_limit']??0) ?></div></div>
   <div class="detail-item"><div class="lbl">Total Borrowed</div><div class="val">UGX <?= number_format($ls['amt']) ?></div></div>
   <div class="detail-item"><div class="lbl">Outstanding</div><div class="val text-warning">UGX <?= number_format($ls['bal']) ?></div></div>
   <?php if ($c['nok_name']): ?>
     <div class="detail-item"><div class="lbl">Next of Kin</div><div class="val"><?= htmlspecialchars($c['nok_name']) ?></div></div>
-    <div class="detail-item"><div class="lbl">NOK Contact</div><div class="val"><?= htmlspecialchars($c['nok_contact']??'—') ?></div></div>
+    <div class="detail-item"><div class="lbl">NOK Contact</div><div class="val"><?= htmlspecialchars($c['nok_contact']??'N/A') ?></div></div>
   <?php endif; ?>
 </div>
 <div class="d-flex gap-2 mt-5">

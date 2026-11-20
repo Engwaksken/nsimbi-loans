@@ -232,7 +232,7 @@ $memberSql = "
 
 /*
  * FIX (confirmed): loan.client_id stores startups.startup_id, which
- * is itself a foreign key into user.id — same pattern as
+ * is itself a foreign key into user.id - same pattern as
  * customers.user_id / members.user_id. The previous join on st.id
  * matched zero rows, which is why overdue startup loans never
  * appeared here.

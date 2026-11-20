@@ -62,7 +62,7 @@ function asset_url(string $relative): string {
 </head>
 <body>
 
-<!-- ═══ SIDEBAR ══════════════════════════════════════════════ -->
+<!-- === SIDEBAR ============================================== -->
 <aside class="sidebar" id="sidebar">
 
   <div class="sidebar-logo">
@@ -155,7 +155,7 @@ foreach ($navSections as $key => [$groupLabel, $links]):
   </div>
 </aside>
 
-<!-- ═══ MAIN ══════════════════════════════════════════════════ -->
+<!-- === MAIN ================================================== -->
 <div class="main-wrapper">
 
 <!-- TOPBAR -->

@@ -34,7 +34,7 @@ if (!$loan) { echo '<div class="alert alert-danger">Loan not found.</div>'; exit
   </div>
   <div class="form-group">
     <label class="form-label">Notes (Optional)</label>
-    <textarea name="notes" class="form-control" rows="2" placeholder="Any notes about this payment…"></textarea>
+    <textarea name="notes" class="form-control" rows="2" placeholder="Any notes about this payment..."></textarea>
   </div>
   <div class="d-flex gap-3 justify-end mt-4">
     <button type="button" class="btn btn-ghost" onclick="Modal.close('m-add-payment')">Cancel</button>

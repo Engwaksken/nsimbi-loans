@@ -22,11 +22,11 @@ function creditScore(string $type): int
 function parseAmountRange(string $str): float
 {
     $patterns = [
-        '/10,?000?\s*[-–]\s*50,?000?/i'         => 30_000,
-        '/50,?000?\s*[-–]\s*100,?000?/i'        => 75_000,
-        '/100,?000?\s*[-–]\s*500,?000?/i'       => 300_000,
-        '/500,?000?\s*[-–]\s*(1m|1,000,000)/i'  => 750_000,
-        '/1\s*[-–]\s*2\s*m/i'                   => 1_500_000,
+        '/10,?000?\s*[-\x{2013}\x{2014}]\s*50,?000?/iu'         => 30_000,
+        '/50,?000?\s*[-\x{2013}\x{2014}]\s*100,?000?/iu'        => 75_000,
+        '/100,?000?\s*[-\x{2013}\x{2014}]\s*500,?000?/iu'       => 300_000,
+        '/500,?000?\s*[-\x{2013}\x{2014}]\s*(1m|1,000,000)/iu'  => 750_000,
+        '/1\s*[-\x{2013}\x{2014}]\s*2\s*m/iu'                   => 1_500_000,
         '/(above|over|more than)\s*2\s*m/i'     => 2_500_000,
     ];
 
@@ -34,7 +34,7 @@ function parseAmountRange(string $str): float
         if (preg_match($pattern, $str)) return (float)$value;
     }
 
-    if (preg_match('/([\d,.]+)\s*([kKmM]?)\s*[-–]\s*([\d,.]+)\s*([kKmM]?)/', $str, $m)) {
+    if (preg_match('/([\d,.]+)\s*([kKmM]?)\s*[-\x{2013}\x{2014}]\s*([\d,.]+)\s*([kKmM]?)/u', $str, $m)) {
         $v1 = (float)str_replace(',', '', $m[1]) * match (strtolower($m[2])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
         $v2 = (float)str_replace(',', '', $m[3]) * match (strtolower($m[4])) { 'k' => 1_000, 'm' => 1_000_000, default => 1 };
         return ($v1 + $v2) / 2;

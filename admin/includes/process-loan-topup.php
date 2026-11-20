@@ -28,7 +28,7 @@ function cleanMoney($value): float
     return (float)$clean;
 }
 
-// Kept identical to the original logic — used here only to show the
+// Kept identical to the original logic - used here only to show the
 // reviewer a proposed rate/amount. The authoritative rate is recalculated
 // at disbursement time, since rates could change between request and
 // disbursement and the loan shouldn't be locked to a stale figure.

@@ -86,37 +86,37 @@ if ($action === 'view') {
 
         <div class="detail-item">
             <div class="lbl">Email</div>
-            <div class="val"><?= e($staff['email'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['email'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Phone</div>
-            <div class="val"><?= e($staff['phone'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['phone'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Home Address</div>
-            <div class="val"><?= e($staff['home_address'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['home_address'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Employer</div>
-            <div class="val"><?= e($staff['employer'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['employer'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Employment Status</div>
-            <div class="val"><?= e($staff['employment_status'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['employment_status'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Bank Name</div>
-            <div class="val"><?= e($staff['bank_name'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['bank_name'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Bank Account</div>
-            <div class="val"><?= e($staff['bank_account'] ?? '—') ?></div>
+            <div class="val"><?= e($staff['bank_account'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
@@ -281,10 +281,10 @@ if ($action === 'loans') {
                             <td>UGX <?= number_format((float)($loan['loan_balance'] ?? 0)) ?></td>
                             <td>
                                 <span class="badge badge-primary">
-                                    <?= e($loan['status'] ?? '—') ?>
+                                    <?= e($loan['status'] ?? 'N/A') ?>
                                 </span>
                             </td>
-                            <td><?= e($loan['created_at'] ?? $loan['date_created'] ?? '—') ?></td>
+                            <td><?= e($loan['created_at'] ?? $loan['date_created'] ?? 'N/A') ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>

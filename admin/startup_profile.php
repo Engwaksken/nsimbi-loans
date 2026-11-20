@@ -131,7 +131,7 @@ if ($export === 'pdf') {
     </td>
     <td class="title-cell">
       <h1><?= h($startup['company_name'] ?? 'N/A') ?></h1>
-      <p class="sub">Startup Profile Report &mdash; Generated <?= date('d M Y H:i') ?></p>
+      <p class="sub">Startup Profile Report - Generated <?= date('d M Y H:i') ?></p>
     </td>
   </tr></table>
 </div>
@@ -169,7 +169,7 @@ if ($export === 'pdf') {
   </table>
 </div>
 
-<div class="footer">Confidential &mdash; <?= h($startup['company_name'] ?? '') ?> Startup Profile</div>
+<div class="footer">Confidential - <?= h($startup['company_name'] ?? '') ?> Startup Profile</div>
 </body></html>
 <?php
         $html = ob_get_clean();

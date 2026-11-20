@@ -40,13 +40,13 @@ function money($amount): string {
 }
 
 function fmt_date(?string $value): string {
-    if (!$value) return '—';
+    if (!$value) return 'N/A';
     $ts = strtotime($value);
     return $ts ? date('d M Y', $ts) : h($value);
 }
 
 function fmt_datetime(?string $value): string {
-    if (!$value) return '—';
+    if (!$value) return 'N/A';
     $ts = strtotime($value);
     return $ts ? date('d M Y, H:i') : h($value);
 }
@@ -203,8 +203,8 @@ if ($wantsPdf) {
                     <td>' . ($i + 1) . '</td>
                     <td>' . h($p['reference'] ?? $p['transaction_id'] ?? ('#' . $p['id'])) . '</td>
                     <td>' . money($p['amount'] ?? 0) . '</td>
-                    <td>' . h($p['method'] ?? '—') . '</td>
-                    <td>' . h($p['status'] ?? '—') . '</td>
+                    <td>' . h($p['method'] ?? 'N/A') . '</td>
+                    <td>' . h($p['status'] ?? 'N/A') . '</td>
                     <td>' . fmt_datetime($p['datetime'] ?? null) . '</td>
                 </tr>
             ';
@@ -231,18 +231,18 @@ if ($wantsPdf) {
         </style>
     </head>
     <body>
-        <h1>Loan Statement — #' . h($loan_id) . '</h1>
+        <h1>Loan Statement - #' . h($loan_id) . '</h1>
         <div class="sub">Generated ' . h($generatedAt) . '</div>
 
         <div class="section-title">Client</div>
         <table class="grid">
             <tr>
                 <td class="lbl">Name</td><td class="val">' . h($clientName) . '</td>
-                <td class="lbl">Phone</td><td class="val">' . h($client['phone'] ?? '—') . '</td>
+                <td class="lbl">Phone</td><td class="val">' . h($client['phone'] ?? 'N/A') . '</td>
             </tr>
             <tr>
-                <td class="lbl">Business</td><td class="val">' . h($client['business_name'] ?? '—') . '</td>
-                <td class="lbl">District</td><td class="val">' . h($client['district'] ?? '—') . '</td>
+                <td class="lbl">Business</td><td class="val">' . h($client['business_name'] ?? 'N/A') . '</td>
+                <td class="lbl">District</td><td class="val">' . h($client['district'] ?? 'N/A') . '</td>
             </tr>
         </table>
 
@@ -328,7 +328,7 @@ $pdfUrl = 'client_loan_details.php?loan_id=' . (int)$loan_id . '&export=pdf';
         </div>
         <div>
             <div class="cell-name fs-lg"><?= h($clientName) ?></div>
-            <div class="cell-sub"><?= h($client['business_name'] ?? '—') ?> &nbsp;•&nbsp; <?= h($client['phone'] ?? '—') ?></div>
+            <div class="cell-sub"><?= h($client['business_name'] ?? 'N/A') ?> &nbsp;|&nbsp; <?= h($client['phone'] ?? 'N/A') ?></div>
         </div>
         <div class="ms-auto">
             <a href="view_client.php?user_id=<?= (int)$client_id ?>" class="btn btn-sm btn-outline">
@@ -417,7 +417,7 @@ $pdfUrl = 'client_loan_details.php?loan_id=' . (int)$loan_id . '&export=pdf';
                                 <td><?= $i + 1 ?></td>
                                 <td><?= h($p['reference'] ?? $p['transaction_id'] ?? ('#' . $p['id'])) ?></td>
                                 <td class="<?= $p['_counted'] ? 'text-success fw-700' : '' ?>"><?= money($p['amount'] ?? 0) ?></td>
-                                <td><?= h($p['method'] ?? '—') ?></td>
+                                <td><?= h($p['method'] ?? 'N/A') ?></td>
                                 <td>
                                     <span class="badge <?= $p['_counted'] ? 'badge-success' : 'badge-muted' ?>">
                                         <?= h($p['status'] ?: 'N/A') ?>

@@ -182,7 +182,7 @@ TXT;
                 'body' => 'Send us a message and our team will get back to you. Existing clients can also reach their loan officer through the client portal.',
                 'items' => "fa-location-dot | Plot 12, Corporation Rise, Bukoto, Kampala, Uganda | https://www.google.com/maps/search/?api=1&query=Corporation+Rise+Bukoto+Kampala
 fa-envelope | info@nsimbiimpact.com | mailto:info@nsimbiimpact.com
-fa-clock | Monday – Friday, 8:30am – 5:00pm",
+fa-clock | Monday - Friday, 8:30am - 5:00pm",
             ]],
         ],
         [
@@ -707,14 +707,14 @@ function site_section_types(): array
         'cta' => ['name' => 'Call to action', 'icon' => 'bullhorn', 'help' => 'A bold band with a heading, a sentence and a button.', 'fields' => ['heading', 'heading_accent', 'body', 'button']],
         'newsletter' => ['name' => 'Newsletter signup', 'icon' => 'envelope-open-text', 'help' => 'Email signup form. The text field becomes the form label.', 'fields' => ['label', 'heading', 'heading_accent', 'body']],
         'prose' => ['name' => 'Long text / article', 'icon' => 'file-lines', 'help' => 'Single-column text for policies and articles. Use "## " for a sub-heading and "- " for bullet points.', 'fields' => ['label', 'heading', 'heading_accent', 'body']],
-        'contact_form' => ['name' => 'Contact form', 'icon' => 'address-card', 'help' => 'Contact details beside a message form. Messages arrive in Website → Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
-        'donor_form' => ['name' => 'Donor / ESO form', 'icon' => 'hand-holding-heart', 'help' => 'Ways to get involved beside a donor, ESO and partner sign-up form. Sign-ups arrive in Website → Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
+        'contact_form' => ['name' => 'Contact form', 'icon' => 'address-card', 'help' => 'Contact details beside a message form. Messages arrive in Website > Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
+        'donor_form' => ['name' => 'Donor / ESO form', 'icon' => 'hand-holding-heart', 'help' => 'Ways to get involved beside a donor, ESO and partner sign-up form. Sign-ups arrive in Website > Enquiries.', 'fields' => ['label', 'heading', 'heading_accent', 'body', 'items']],
     ];
 }
 
 function site_default_home_sections(string $overviewBody = ''): array
 {
-    $overviewBody = $overviewBody !== '' ? $overviewBody : "Nsimbi Impact is a data-driven, female-led investment platform transforming financial access for women-led businesses across Sub-Saharan Africa, starting in Uganda.\n\nWe combine flexible capital with trusted community partnerships and practical business support—because talent is everywhere, but access to finance is not.";
+    $overviewBody = $overviewBody !== '' ? $overviewBody : "Nsimbi Impact is a data-driven, female-led investment platform transforming financial access for women-led businesses across Sub-Saharan Africa, starting in Uganda.\n\nWe combine flexible capital with trusted community partnerships and practical business support-because talent is everywhere, but access to finance is not.";
     $base = ['label' => '', 'heading' => '', 'heading_accent' => '', 'body' => '', 'items' => '', 'media_type' => 'none', 'media_url' => '', 'button_label' => '', 'button_url' => '', 'anchor' => '', 'menu_label' => '', 'is_active' => 1];
     return array_map(static fn(array $s): array => $s + $base, [
         ['section_type' => 'text', 'anchor' => 'story', 'menu_label' => 'Overview', 'label' => 'AN OVERVIEW', 'heading' => 'Investing in the', 'heading_accent' => 'power of women.', 'body' => $overviewBody, 'button_label' => 'Already a client? Sign in', 'button_url' => '/login'],
@@ -1046,7 +1046,7 @@ function site_prose_html(string $text): string
         $trim = trim($line);
         if ($trim === '') { $flushPara(); $flushList(); continue; }
         if (str_starts_with($trim, '## ')) { $flushPara(); $flushList(); $html .= '<h3>' . site_e(substr($trim, 3)) . '</h3>'; continue; }
-        if (preg_match('/^[-*•]\s+(.*)$/u', $trim, $m)) { $flushPara(); $list[] = $m[1]; continue; }
+        if (preg_match('/^[-*\x{2022}]\s+(.*)$/u', $trim, $m)) { $flushPara(); $list[] = $m[1]; continue; }
         $flushList(); $para[] = $trim;
     }
     $flushPara(); $flushList();
@@ -1111,7 +1111,7 @@ function site_donor_form_html(): string
         $interests .= '<label class="check"><input type="checkbox" name="interests[]" value="' . site_e($value) . '"> ' . site_e($label) . '</label>';
     }
     return '<form class="enquiry-form" data-enquiry-form novalidate>' . site_form_guard_fields('donor')
-        . '<label>I am joining as *<select name="partner_type" required><option value="">Choose one…</option>' . $types . '</select></label>'
+        . '<label>I am joining as *<select name="partner_type" required><option value="">Choose one...</option>' . $types . '</select></label>'
         . '<div class="ef-grid"><label>Full name *<input name="name" required maxlength="150" autocomplete="name"></label>'
         . '<label>Organisation<input name="organisation" maxlength="200" autocomplete="organization"></label></div>'
         . '<div class="ef-grid"><label>Email *<input type="email" name="email" required maxlength="190" autocomplete="email"></label>'

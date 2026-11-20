@@ -272,27 +272,27 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 
                                         <div>
                                             <div class="cell-name"><?= e($fullName ?: 'Unnamed Client') ?></div>
-                                            <div class="cell-sub"><?= e($c['email'] ?? '—') ?></div>
+                                            <div class="cell-sub"><?= e($c['email'] ?? 'N/A') ?></div>
                                         </div>
                                     </div>
                                 </td>
 
                                 <td class="text-muted fs-sm">
-                                    <?= e($c['phone'] ?: '—') ?>
+                                    <?= e($c['phone'] ?: 'N/A') ?>
                                 </td>
 
                                 <td class="td-dark text-truncate-cell">
-                                    <?= e($c['business_name'] ?: '—') ?>
+                                    <?= e($c['business_name'] ?: 'N/A') ?>
                                 </td>
 
                                 <td>
                                     <span class="badge badge-muted">
-                                        <?= e($c['business_type'] ?: '—') ?>
+                                        <?= e($c['business_type'] ?: 'N/A') ?>
                                     </span>
                                 </td>
 
                                 <td class="text-muted fs-sm">
-                                    <?= e($c['district'] ?: ($c['location'] ?: '—')) ?>
+                                    <?= e($c['district'] ?: ($c['location'] ?: 'N/A')) ?>
                                 </td>
 
                                 <td class="td-dark">

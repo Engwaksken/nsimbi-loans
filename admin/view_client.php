@@ -460,7 +460,7 @@ $docTypes = client_doc_types();
                         <?php foreach ($overview as $label => $value): ?>
                             <div class="detail-item">
                                 <div class="lbl"><?= h($label) ?></div>
-                                <div class="val"><?= $value ? h($value) : '&mdash;' ?></div>
+                                <div class="val"><?= $value ? h($value) : 'N/A' ?></div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -494,7 +494,7 @@ $docTypes = client_doc_types();
                                 <div>
                                     <h4><i class="fas fa-chart-line"></i> Loan limit review requested</h4>
                                     <p>
-                                        <?= h(date('d M Y, H:i', strtotime((string)$pendingLimit['created_at']))) ?> &middot;
+                                        <?= h(date('d M Y, H:i', strtotime((string)$pendingLimit['created_at']))) ?> |
                                         from <strong><?= money($pendingLimit['current_limit']) ?></strong>
                                         to <strong><?= money($pendingLimit['requested_limit']) ?></strong>
                                     </p>
@@ -550,9 +550,9 @@ $docTypes = client_doc_types();
                                     <div class="rv-main">
                                         <div class="rv-title"><?= h($doc['title']) ?> <span class="badge <?= $statusBadge ?>"><?= h(ucfirst($doc['status'])) ?></span></div>
                                         <div class="rv-meta">
-                                            <?= h($typeLabel) ?> &middot; <?= h(date('d M Y, H:i', strtotime((string)$doc['created_at']))) ?>
-                                            &middot; <?= number_format(max(1, (int)$doc['file_size'] / 1024)) ?> KB
-                                            <?php if (!empty($doc['review_note'])): ?>&middot; <em><?= h($doc['review_note']) ?></em><?php endif; ?>
+                                            <?= h($typeLabel) ?> | <?= h(date('d M Y, H:i', strtotime((string)$doc['created_at']))) ?>
+                                            | <?= number_format(max(1, (int)$doc['file_size'] / 1024)) ?> KB
+                                            <?php if (!empty($doc['review_note'])): ?>| <em><?= h($doc['review_note']) ?></em><?php endif; ?>
                                         </div>
                                     </div>
                                     <a href="client_document.php?id=<?= (int)$doc['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline"><i class="fas fa-eye"></i> View</a>
@@ -595,7 +595,7 @@ $docTypes = client_doc_types();
                                             <td><?= money($r['current_limit']) ?></td>
                                             <td><?= money($r['requested_limit']) ?></td>
                                             <td><span class="badge <?= $r['status'] === 'approved' ? 'badge-success' : 'badge-danger' ?>"><?= h(ucfirst($r['status'])) ?></span></td>
-                                            <td><?= $r['approved_limit'] !== null ? money($r['approved_limit']) : '&mdash;' ?></td>
+                                            <td><?= $r['approved_limit'] !== null ? money($r['approved_limit']) : 'N/A' ?></td>
                                             <td><?= h($r['staff_note'] ?? '') ?></td>
                                         </tr>
                                     <?php endforeach; ?>

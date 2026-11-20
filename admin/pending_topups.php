@@ -226,7 +226,7 @@ foreach ($topups as $t) {
                     <div>
                         <div style="font-weight:700"><?= h($clientName) ?></div>
                         <div class="fs-sm text-muted">
-                            Top-up on Loan #<?= $loanId ?> &middot; Requested <?= h($requestedDate) ?>
+                            Top-up on Loan #<?= $loanId ?> | Requested <?= h($requestedDate) ?>
                         </div>
                         <div class="mt-1">
                             <span class="badge badge-primary">Top-Up</span>
@@ -253,7 +253,7 @@ foreach ($topups as $t) {
 
             <?php $aiAmount = ai_recommended_amount($topup); ?>
             <?php if ($aiAmount > 0): ?>
-                <div class="ai-recommend"><i class="fas fa-robot"></i> AI recommended amount: <strong><?= money($aiAmount) ?></strong></div>
+                <div class="ai-recommend">AI recommended amount: <strong><?= money($aiAmount) ?></strong></div>
             <?php endif; ?>
 
             <?php if (!empty($topup['request_notes'])): ?>
@@ -290,7 +290,7 @@ foreach ($topups as $t) {
                                 ?>
                                 <div class="audit-entry fs-sm">
                                     <span class="audit-action <?= h($entry['action']) ?>"><?= h(str_replace('_', ' ', $entry['action'])) ?></span>
-                                    <span class="text-muted"> &middot; <?= h($entryActor) ?> &middot; <?= h($entryWhen) ?></span>
+                                    <span class="text-muted"> | <?= h($entryActor) ?> | <?= h($entryWhen) ?></span>
                                     <?php if (!empty($entry['reason'])): ?>
                                         <div><strong>Reason:</strong> <?= nl2br(h($entry['reason'])) ?></div>
                                     <?php endif; ?>

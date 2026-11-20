@@ -409,7 +409,7 @@ $dompdf->render();
 $canvas = $dompdf->getCanvas();
 $font   = $dompdf->getFontMetrics()->getFont("Helvetica", "normal");
 
-// A4 portrait (points) ˜ 595 x 842
+// A4 portrait (points) - 595 x 842
 // Footer line (left)
 $canvas->page_text(
     40, 820,

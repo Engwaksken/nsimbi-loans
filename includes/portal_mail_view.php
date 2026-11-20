@@ -203,7 +203,7 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
                 </form>
             </div>
             <div class="pm-list-head">
-                <span><?= pm_e(PM_FOLDERS[$folder]) ?><?= $search !== '' ? ' · results for "' . pm_e($search) . '"' : '' ?></span>
+                <span><?= pm_e(PM_FOLDERS[$folder]) ?><?= $search !== '' ? ' | results for "' . pm_e($search) . '"' : '' ?></span>
                 <?php if ($page > 1 || $list['has_more']): ?><span>Page <?= $page ?></span><?php endif; ?>
             </div>
 
@@ -291,7 +291,7 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
                 </div>
                 <div class="pm-chips">
                     <?php foreach ($thread['others'] as $other): ?>
-                        <span class="pm-chip"><?= pm_e(pm_name($other)) ?> · <?= pm_e(pm_role_label((int)$other['role'])) ?></span>
+                        <span class="pm-chip"><?= pm_e(pm_name($other)) ?> | <?= pm_e(pm_role_label((int)$other['role'])) ?></span>
                     <?php endforeach; ?>
                 </div>
                 <div class="pm-msgs" id="pmMsgs">
@@ -313,9 +313,9 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
                     <?= $hidden ?>
                     <input type="hidden" name="action" value="reply">
                     <div class="pm-reply-box">
-                        <textarea name="body" rows="3" maxlength="10000" placeholder="Reply to <?= pm_e(implode(', ', array_map('pm_name', $thread['others']))) ?>…" required><?= pm_e($old['body'] ?? '') ?></textarea>
+                        <textarea name="body" rows="3" maxlength="10000" placeholder="Reply to <?= pm_e(implode(', ', array_map('pm_name', $thread['others']))) ?>..." required><?= pm_e($old['body'] ?? '') ?></textarea>
                         <div class="pm-reply-foot">
-                            <span>Ctrl + Enter to send · also emailed</span>
+                            <span>Ctrl + Enter to send | also emailed</span>
                             <button type="submit" class="pm-send"><i class="fas fa-paper-plane"></i> Send</button>
                         </div>
                     </div>
@@ -340,17 +340,17 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
             <div class="pm-field">
                 <label for="pmTo">To</label>
                 <select name="recipient_id" id="pmTo" required>
-                    <option value="">Choose <?= $isBorrower ? 'your loan officer' : 'a client' ?>…</option>
+                    <option value="">Choose <?= $isBorrower ? 'your loan officer' : 'a client' ?>...</option>
                     <?php if ($isBorrower): ?>
                         <?php foreach ($recipients as $r): ?>
                             <option value="<?= $r['id'] ?>" <?= ($presetTo === $r['id'] || (!$presetTo && $r['assigned'])) ? 'selected' : '' ?>>
-                                <?= pm_e($r['name']) ?> — <?= pm_e($r['assigned'] ? 'Your loan officer' : $r['label']) ?>
+                                <?= pm_e($r['name']) ?> - <?= pm_e($r['assigned'] ? 'Your loan officer' : $r['label']) ?>
                             </option>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <?php foreach ($recipients as $r): ?>
                             <option value="<?= $r['id'] ?>" data-search="<?= pm_e(strtolower($r['name'] . ' ' . $r['email'])) ?>" <?= $presetTo === $r['id'] ? 'selected' : '' ?>>
-                                <?= pm_e($r['name']) ?> (<?= pm_e($r['label']) ?>)<?= $r['email'] ? ' — ' . pm_e($r['email']) : '' ?>
+                                <?= pm_e($r['name']) ?> (<?= pm_e($r['label']) ?>)<?= $r['email'] ? ' - ' . pm_e($r['email']) : '' ?>
                             </option>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -361,7 +361,7 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
                 <input type="text" name="subject" id="pmSubject" maxlength="200" value="<?= pm_e($old['subject'] ?? '') ?>" required>
             </div>
             <div class="pm-modal-body">
-                <textarea name="body" id="pmBody" maxlength="10000" placeholder="Write your message…" required><?= pm_e(!empty($old['compose']) ? ($old['body'] ?? '') : '') ?></textarea>
+                <textarea name="body" id="pmBody" maxlength="10000" placeholder="Write your message..." required><?= pm_e(!empty($old['compose']) ? ($old['body'] ?? '') : '') ?></textarea>
             </div>
             <div class="pm-modal-foot">
                 <button type="submit" class="pm-send"><i class="fas fa-paper-plane"></i> Send</button>
@@ -422,7 +422,7 @@ function pm_render(mysqli $conn, array $me, string $selfUrl): void
                 }
                 var btn = form.querySelector('.pm-send');
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
             });
         });
 

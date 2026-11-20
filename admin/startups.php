@@ -219,19 +219,19 @@ require "nav-head.php";
                                 </td>
 
                                 <td>
-                                    <span class="su-text-main"><?= h($row['ceo_name'] ?? '—') ?></span>
+                                    <span class="su-text-main"><?= h($row['ceo_name'] ?? 'N/A') ?></span>
                                 </td>
 
                                 <td>
-                                    <span class="su-mono"><?= h($row['phone'] ?? '—') ?></span>
+                                    <span class="su-mono"><?= h($row['phone'] ?? 'N/A') ?></span>
                                 </td>
 
                                 <td>
-                                    <span class="su-text-muted"><?= h($row['email'] ?? '—') ?></span>
+                                    <span class="su-text-muted"><?= h($row['email'] ?? 'N/A') ?></span>
                                 </td>
 
                                 <td>
-                                    <span class="su-mono"><?= h($row['username'] ?? '—') ?></span>
+                                    <span class="su-mono"><?= h($row['username'] ?? 'N/A') ?></span>
                                 </td>
 
                                 <td>

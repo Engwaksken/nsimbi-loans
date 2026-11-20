@@ -145,7 +145,7 @@ $stmt->close();
         <div class="request-card <?= $isDone ? 'done' : '' ?>">
             <div class="d-flex justify-content-between flex-wrap gap-2">
                 <div>
-                    <div style="font-weight:700"><?= h($clientName) ?> &mdash; Top-Up on Loan #<?= (int)$topup['loan_id'] ?></div>
+                    <div style="font-weight:700"><?= h($clientName) ?> - Top-Up on Loan #<?= (int)$topup['loan_id'] ?></div>
                     <div class="fs-sm text-muted"><?= money($topup['amount'] ?? 0) ?> requested</div>
                 </div>
                 <span class="badge <?= $isDone ? 'badge-purple' : 'badge-info' ?>">

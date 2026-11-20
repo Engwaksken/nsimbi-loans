@@ -208,7 +208,7 @@ function loan_badge(string $status): string
         </div>
         <div class="stat-note">
             <?= $last_payment ? esc(fmt_date($last_payment['paid_at'], 'd M Y')) : 'No payments yet'; ?>
-            &middot; <?= money($this_month_paid); ?> this month
+            | <?= money($this_month_paid); ?> this month
         </div>
     </div>
 </div>

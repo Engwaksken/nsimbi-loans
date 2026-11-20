@@ -206,12 +206,12 @@ if ($action === 'view') {
 
         <div class="detail-item">
             <div class="lbl">Username</div>
-            <div class="val"><?= e($user['username'] ?? '—') ?></div>
+            <div class="val"><?= e($user['username'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
             <div class="lbl">Email</div>
-            <div class="val"><?= e($user['email'] ?? '—') ?></div>
+            <div class="val"><?= e($user['email'] ?? 'N/A') ?></div>
         </div>
 
         <div class="detail-item">
@@ -226,7 +226,7 @@ if ($action === 'view') {
 
         <div class="detail-item">
             <div class="lbl">Added On</div>
-            <div class="val"><?= e($user['datetime'] ?? '—') ?></div>
+            <div class="val"><?= e($user['datetime'] ?? 'N/A') ?></div>
         </div>
     </div>
     <?php

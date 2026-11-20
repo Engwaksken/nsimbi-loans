@@ -167,33 +167,33 @@ $staff = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
                                 </td>
 
                                 <td class="text-muted fs-sm text-truncate-cell">
-                                    <?= e($row['home_address'] ?? '—') ?>
+                                    <?= e($row['home_address'] ?? 'N/A') ?>
                                 </td>
 
                                 <td class="text-muted fs-sm">
-                                    <?= e($row['phone'] ?? '—') ?>
+                                    <?= e($row['phone'] ?? 'N/A') ?>
                                 </td>
 
                                 <td class="text-muted fs-sm">
-                                    <?= e($row['email'] ?? '—') ?>
+                                    <?= e($row['email'] ?? 'N/A') ?>
                                 </td>
 
                                 <td class="td-dark text-truncate-cell">
-                                    <?= e($row['employer'] ?? '—') ?>
+                                    <?= e($row['employer'] ?? 'N/A') ?>
                                 </td>
 
                                 <td>
                                     <span class="badge badge-muted">
-                                        <?= e($row['employment_status'] ?? '—') ?>
+                                        <?= e($row['employment_status'] ?? 'N/A') ?>
                                     </span>
                                 </td>
 
                                 <td class="td-dark text-truncate-cell">
-                                    <?= e($row['bank_name'] ?? '—') ?>
+                                    <?= e($row['bank_name'] ?? 'N/A') ?>
                                 </td>
 
                                 <td class="text-muted fs-sm">
-                                    <?= e($row['bank_account'] ?? '—') ?>
+                                    <?= e($row['bank_account'] ?? 'N/A') ?>
                                 </td>
 
                                 <td class="td-dark">

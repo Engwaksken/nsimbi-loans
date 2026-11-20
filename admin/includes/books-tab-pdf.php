@@ -82,10 +82,10 @@ $clientEmail = (string)($client['email'] ?? '');
         (<?= h($clientEmail) ?>)
     <?php endif; ?><br>
     Month: <?= h($books['month_label']) ?>
-    &middot; Status: <?= h($statusLabel) ?>
-    &middot; Type: <?= h($typeLabel) ?><br>
+    | Status: <?= h($statusLabel) ?>
+    | Type: <?= h($typeLabel) ?><br>
     Generated: <?= h($generatedAt) ?>
-    &middot; <?= number_format((int)$books['total_rows']) ?> record<?= (int)$books['total_rows'] === 1 ? '' : 's' ?>
+    | <?= number_format((int)$books['total_rows']) ?> record<?= (int)$books['total_rows'] === 1 ? '' : 's' ?>
 </div>
 
 <table class="summary">

@@ -21,9 +21,9 @@ $(function() {
           dom: '<"dt-top"lf>t<"pag-wrap"ip>',
           language: {
             search: '',
-            searchPlaceholder: 'Search records…',
+            searchPlaceholder: 'Search records...',
             lengthMenu: 'Show _MENU_ records',
-            info: 'Showing _START_–_END_ of _TOTAL_ records',
+            info: 'Showing _START_-_END_ of _TOTAL_ records',
             paginate: {
               previous: '<i class="fas fa-chevron-left"></i>',
               next: '<i class="fas fa-chevron-right"></i>'

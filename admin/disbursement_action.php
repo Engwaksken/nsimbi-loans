@@ -11,7 +11,7 @@ if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }
 
-// Assumption: role = 5 is "Accountant" — the only role allowed to disburse funds.
+// Assumption: role = 5 is "Accountant" - the only role allowed to disburse funds.
 $role    = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
 $actorId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
@@ -83,7 +83,7 @@ $stmtClient->close();
 $clientName  = $client ? trim($client['fname'] . ' ' . $client['lname']) : 'Client';
 $clientEmail = $client['email'] ?? '';
 
-// The loan term starts now — funds are actually moving today.
+// The loan term starts now - funds are actually moving today.
 $disbursedAt = new DateTime('now');
 $dueDate = (clone $disbursedAt)->add(new DateInterval('P' . $loanPeriod . 'M'))->format('Y-m-d H:i:s');
 $disbursedAtStr = $disbursedAt->format('Y-m-d H:i:s');

@@ -108,7 +108,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
 <div class="page-header">
     <div>
         <div class="title">Loan #<?= (int)$loan['id']; ?> <span class="badge <?= $badge; ?>"><?= esc($status); ?></span></div>
-        <div class="sub">Requested <?= esc(fmt_date($loan['datetime'] ?? null)); ?> &middot; Due <?= esc(fmt_date($loan['due_date'] ?? null)); ?></div>
+        <div class="sub">Requested <?= esc(fmt_date($loan['datetime'] ?? null)); ?> | Due <?= esc(fmt_date($loan['due_date'] ?? null)); ?></div>
     </div>
     <a href="my_loans" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> My Loans</a>
 </div>
@@ -117,7 +117,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
     <div class="stat-card c-blue">
         <div class="stat-label">Loan Amount</div>
         <div class="stat-value sm"><?= money($loan['amount']); ?></div>
-        <div class="stat-note"><?= (int)$loan['loan_period']; ?> month(s) &middot; <?= esc($loan['loan_method'] ?: '-'); ?></div>
+        <div class="stat-note"><?= (int)$loan['loan_period']; ?> month(s) | <?= esc($loan['loan_method'] ?: '-'); ?></div>
     </div>
     <div class="stat-card c-purple">
         <div class="stat-label">Total Repayable</div>
@@ -127,7 +127,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
     <div class="stat-card c-green">
         <div class="stat-label">Paid</div>
         <div class="stat-value sm"><?= money($paid); ?></div>
-        <div class="stat-note"><?= $progress; ?>% repaid<?= $pending_claims ? ' &middot; ' . $pending_claims . ' awaiting confirmation' : ''; ?></div>
+        <div class="stat-note"><?= $progress; ?>% repaid<?= $pending_claims ? ' | ' . $pending_claims . ' awaiting confirmation' : ''; ?></div>
     </div>
     <div class="stat-card c-orange">
         <div class="stat-label">Balance</div>

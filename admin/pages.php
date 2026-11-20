@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . ($existing ? 'pages' : 'page_builder?page=' . $newId)); exit;
         } catch (mysqli_sql_exception $e) {
             if ($heroImage && (!$existing || $existing['hero_image'] !== $heroImage)) site_discard_media($conn, $heroImage);
-            site_flash('error', $e->getCode() === 1062 ? 'Another page already uses the URL “' . $slug . '”. Choose a different slug.' : 'Could not save the page.');
+            site_flash('error', $e->getCode() === 1062 ? 'Another page already uses the URL "' . $slug . '". Choose a different slug.' : 'Could not save the page.');
         }
     }
     header('Location: pages'); exit;
@@ -109,7 +109,7 @@ require __DIR__ . '/nav-head.php';
               <a class="btn btn-sm btn-primary" href="page_builder?page=<?= (int)$item['id'] ?>"><i class="fas fa-layer-group"></i> Build</a>
               <button type="button" class="btn btn-sm btn-outline" data-modal-open="pageModal" data-modal-title="Edit page" data-record="<?= $e(json_encode(array_intersect_key($item, array_flip($recordFields)))) ?>"><i class="fas fa-pen"></i> Edit</button>
               <?php if ($item['slug'] !== 'home'): ?>
-              <form method="post" onsubmit="return confirm('Delete “<?= $e(addslashes($item['title'])) ?>” with all its sections and slides?')">
+              <form method="post" onsubmit="return confirm('Delete &quot;<?= $e(addslashes($item['title'])) ?>&quot; with all its sections and slides?')">
                 <input type="hidden" name="csrf" value="<?= $e(site_csrf_token()) ?>"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
                 <button class="btn btn-sm btn-danger" name="action" value="delete" title="Delete page"><i class="fas fa-trash"></i></button>
               </form>
@@ -145,7 +145,7 @@ require __DIR__ . '/nav-head.php';
             <div class="form-group"><label class="form-label" for="pg-title">Page name</label><input class="form-control" id="pg-title" name="title" required data-slug-source></div>
             <div class="form-group"><label class="form-label" for="pg-slug">URL slug</label><input class="form-control" id="pg-slug" name="slug" placeholder="about-us" required pattern="[A-Za-z0-9-]+" data-slug-target><div class="form-help">Page address: /<span data-slug-preview>about-us</span></div></div>
           </div>
-          <div class="form-group"><label class="form-label" for="pg-body">Intro text</label><textarea class="form-control" id="pg-body" name="body_content" rows="7"></textarea><div class="form-help">Plain text, blank line between paragraphs. On the homepage, content lives in sections instead — use <b>Build</b>.</div></div>
+          <div class="form-group"><label class="form-label" for="pg-body">Intro text</label><textarea class="form-control" id="pg-body" name="body_content" rows="7"></textarea><div class="form-help">Plain text, blank line between paragraphs. On the homepage, content lives in sections instead - use <b>Build</b>.</div></div>
         </div>
 
         <div class="cms-tab-panel" role="tabpanel" data-tab-panel="page-hero" hidden>
@@ -160,7 +160,7 @@ require __DIR__ . '/nav-head.php';
             <div data-media-preview="hero_image"></div>
             <div class="grid-2">
               <input class="form-control" type="file" name="hero_image_file" accept="image/jpeg,image/png,image/webp,image/gif">
-              <input class="form-control" name="hero_image" placeholder="…or paste https:// link">
+              <input class="form-control" name="hero_image" placeholder="...or paste https:// link">
             </div>
             <div class="form-help">Used when the page has no slides. Clear the link to remove it. Max 8 MB.</div>
           </div>
