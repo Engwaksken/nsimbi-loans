@@ -1095,6 +1095,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                 </div>
             </div>
 
+            <?php if ($assessment['show']): ?>
             <div class="assess-strip tone-<?= h($assessment['tone']) ?>">
                 <i class="fas fa-robot"></i>
                 <div>
@@ -1108,6 +1109,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     <?php endforeach; ?>
                 </div>
             </div>
+            <?php endif; ?>
 
             <?php if ($status === 'INFO_PROVIDED'): ?>
                 <div class="workflow-note">

@@ -92,6 +92,7 @@ if (!function_exists('loan_assessment')) {
         if ($customer === null) {
             return [
                 'available' => false,
+                'show'      => true,
                 'tone'      => 'secondary',
                 'headline'  => 'No automated assessment',
                 'detail'    => 'Automatic scoring only runs for customers who registered through the website or app.',
@@ -172,6 +173,8 @@ if (!function_exists('loan_assessment')) {
 
         return [
             'available'       => true,
+            // Nothing useful to say without turnover, so reviewers don't see it.
+            'show'            => $hasTurnover,
             'tone'            => $tone,
             'headline'        => $headline,
             'detail'          => $detail,

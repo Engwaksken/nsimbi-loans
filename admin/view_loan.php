@@ -402,6 +402,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
         <tr><td>Due Date</td><td><?= h(safeDate($dueDate)) ?></td></tr>
     </table>
 
+    <?php if ($assessment['show']): ?>
     <div class="section">Automated Assessment</div>
     <table>
         <tr><td>Recommendation</td><td><?= h($assessment['headline']) ?><br><?= h($assessment['detail']) ?></td></tr>
@@ -416,6 +417,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
             <tr><td>Turnover (last / this month)</td><td><?= h(loan_assessment_turnover($assessment['amount_last'])) ?> / <?= h(loan_assessment_turnover($assessment['amount_this'])) ?></td></tr>
         <?php endif; ?>
     </table>
+
+    <?php endif; ?>
 
     <div class="section">Payment History</div>
     <table>
@@ -924,6 +927,7 @@ require 'nav-head.php';
                 </div>
             </div>
 
+            <?php if ($assessment['show']): ?>
             <div class="loan-tab-card mt-3 assessment-card tone-<?= h($assessment['tone']) ?>">
                 <div class="loan-tab-header">
                     <div>
@@ -993,6 +997,7 @@ require 'nav-head.php';
                     </p>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </div>
 
         <div class="tab-pane fade"
