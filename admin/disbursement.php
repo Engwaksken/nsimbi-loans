@@ -5,6 +5,8 @@ $phead = 'Loan Disbursement';
 require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
+require_once __DIR__ . "/../includes/loan_offers.php";
+loan_offers_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -369,13 +371,24 @@ foreach ($pendingTopups as $topup) {
                 </div>
 
                 <div class="disb-meta">
+                    <?php
+                    $disbFee = $loan['processing_fee'] !== null ? (float)$loan['processing_fee'] : 0.0;
+                    $disbNet = $loan['net_disbursement'] !== null ? (float)$loan['net_disbursement'] : (float)($loan['amount'] ?? 0) - $disbFee;
+                    ?>
                     <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Amount</div>
+                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Approved</div>
                         <div style="font-weight:800;color:var(--primary)"><?= money($loan['amount'] ?? 0) ?></div>
                     </div>
                     <div>
+                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Send to client</div>
+                        <div style="font-weight:800;color:#0d9488"><?= money($disbNet) ?></div>
+                        <?php if ($disbFee > 0): ?>
+                            <div class="fs-xs text-muted">after <?= money($disbFee) ?> processing fee</div>
+                        <?php endif; ?>
+                    </div>
+                    <div>
                         <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Loan Period</div>
-                        <div class="fs-sm text-muted"><?= (int)($loan['loan_period'] ?? 0) ?> month(s)</div>
+                        <div class="fs-sm text-muted"><?= h(loan_term_label((int)($loan['loan_period'] ?? 0), (string)($loan['loan_period_unit'] ?? 'month'))) ?></div>
                     </div>
                 </div>
             </div>

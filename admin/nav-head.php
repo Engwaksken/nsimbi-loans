@@ -136,6 +136,7 @@ $navSections = [
     ['rejected_loans.php', 'fa-times-circle', 'Rejected'],
     ['credit_evidence.php', 'fa-file-invoice-dollar', 'Credit Documents', $credit_docs_pending, 'red', ['credit_evidence_file.php']],
     ['loan_products.php', 'fa-box-open', 'Loan Products'],
+    ['loan_settings.php', 'fa-sliders-h', 'Loan Settings'],
   ]],
   'people' => ['People', [
     ['clients.php', 'fa-users', 'Clients'],

@@ -4,6 +4,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require "db.php";
+require_once dirname(__DIR__) . '/includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
 
 function h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -83,6 +85,7 @@ $clientSql = "
         c.id_back,
         c.license,
         c.stock,
+        c.stock_inside,
         c.applicant_signature
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
@@ -170,7 +173,8 @@ $documents = [
     'National ID Front'         => $client['id_front'] ?? '',
     'National ID Back'          => $client['id_back'] ?? '',
     'License / Certificate'     => $client['license'] ?? '',
-    'Business Photo / Stock'    => $client['stock'] ?? '',
+    'Business Photo (front)'    => $client['stock'] ?? '',
+    'Business Photo (inside)'   => $client['stock_inside'] ?? '',
     'Applicant Signature'       => $client['applicant_signature'] ?? '',
 ];
 

@@ -54,6 +54,7 @@ require "jwt.php";
 require_once __DIR__ . '/includes/loan_workflow.php';
 require_once __DIR__ . '/includes/auth_lookup.php';
 require_once __DIR__ . '/includes/loan_assessment.php';
+require_once __DIR__ . '/includes/loan_offers.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -208,6 +209,11 @@ function parseMoneyPart(string $part, bool $forceMillion = false): float
         return (float)$m[1] * 1000000;
     }
 
+    // "20k" / "20thousand" (spaces are already removed above)
+    if (preg_match("/^([0-9]+(?:\.[0-9]+)?)(k|thousand)$/", $part, $m)) {
+        return (float)$m[1] * 1000;
+    }
+
     if (preg_match("/^([0-9]+(?:\.[0-9]+)?)$/", $part, $m)) {
         $number = (float)$m[1];
         return $forceMillion ? ($number * 1000000) : $number;
@@ -220,6 +226,22 @@ function parseMoneyPart(string $part, bool $forceMillion = false): float
     }
 
     return (float)$digits;
+}
+
+
+/**
+ * The app shows dates of birth as DD-MM-YYYY (older versions sent DD/MM/YYYY
+ * or YYYY-MM-DD). Store them as YYYY-MM-DD; anything else is kept as typed.
+ */
+function normalizeDob(string $dob): string
+{
+    if (preg_match('~^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$~', $dob, $m) && checkdate((int)$m[2], (int)$m[1], (int)$m[3])) {
+        return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+    }
+    if (preg_match('~^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$~', $dob, $m) && checkdate((int)$m[2], (int)$m[3], (int)$m[1])) {
+        return sprintf('%04d-%02d-%02d', (int)$m[1], (int)$m[2], (int)$m[3]);
+    }
+    return $dob;
 }
 
 
@@ -395,7 +417,7 @@ function addClient(mysqli $conn, array $input): void
     $lname           = clean($input["lname"] ?? "");
     $username        = clean($input["username"] ?? "");
     $gender          = clean($input["gender"] ?? "");
-    $dob             = clean($input["dob"] ?? "");
+    $dob             = normalizeDob(clean($input["dob"] ?? ""));
     $phone           = clean($input["phone"] ?? "");
     $email           = clean($input["email"] ?? "");
     $business_name   = clean($input["business_name"] ?? "");
@@ -465,18 +487,41 @@ function addClient(mysqli $conn, array $input): void
     $credit_score = $assessment["score"];
     $loan_limit = $assessment["limit"];
 
-    $requiredImages = ["id_front", "id_back", "image_url", "license"];
+    // Required: ID front/back, the selfie (image_url) and the two business
+    // photos (in front of the business, and inside). The trading licence is
+    // optional. Older app versions send no business photos, so those are only
+    // required when the app says it collects them (business_photos=1).
+    $required = ["id_front", "id_back", "image_url"];
+    if (clean($input["business_photos"] ?? "") === "1") {
+        $required[] = "business_front";
+        $required[] = "business_inside";
+    }
+    $imageLabels = [
+        "id_front" => "National ID (front)",
+        "id_back" => "National ID (back)",
+        "image_url" => "profile selfie",
+        "business_front" => "photo in front of your business",
+        "business_inside" => "photo inside your business",
+    ];
     $imagePaths = [];
 
-    foreach ($requiredImages as $field) {
+    foreach (["id_front", "id_back", "image_url", "license", "business_front", "business_inside"] as $field) {
         $imageData = clean($input[$field] ?? "");
 
         if ($imageData === "") {
-            respond(["status" => "error", "message" => "Missing image: {$field}"], 422);
+            if (in_array($field, $required, true)) {
+                foreach ($imagePaths as $saved) {
+                    @unlink($saved);
+                }
+                respond(["status" => "error", "message" => "Please add the " . ($imageLabels[$field] ?? $field)], 422);
+            }
+            $imagePaths[$field] = "";
+            continue;
         }
 
         $imagePaths[$field] = saveBase64Image($imageData, $field);
     }
+    loan_offers_ensure_schema($conn);
 
     $password = password_hash($password_raw, PASSWORD_DEFAULT);
 
@@ -524,10 +569,11 @@ function addClient(mysqli $conn, array $input): void
                     district, business_name, business_type, location,
                     amount_last, amount_this, license,
                     nok_name, nok_tel, nok_rel, business_period,
-                    loan_limit, password, credit_score, active
+                    loan_limit, password, credit_score, active,
+                    stock, stock_inside
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         if (!$stmt) {
@@ -535,7 +581,7 @@ function addClient(mysqli $conn, array $input): void
         }
 
         $stmt->bind_param(
-            "isssssssssssddsssssdsii",
+            "isssssssssssddsssssdsdiss",
             $user_id,
             $gender,
             $dob,
@@ -558,7 +604,9 @@ function addClient(mysqli $conn, array $input): void
             $loan_limit,
             $password,
             $credit_score,
-            $active
+            $active,
+            $imagePaths["business_front"],
+            $imagePaths["business_inside"]
         );
 
         if (!$stmt->execute()) {
@@ -602,6 +650,7 @@ function addClient(mysqli $conn, array $input): void
 
 function getClient(mysqli $conn, array $user): void
 {
+    loan_offers_ensure_schema($conn);
     $client_id = (int)$user["sub"];
 
     $sql = "
@@ -671,10 +720,16 @@ function getClient(mysqli $conn, array $user): void
             COALESCE(l.bank_account, '') AS loan_bank_account,
             COALESCE(l.phone, '') AS loan_phone,
             COALESCE(l.status, 'NONE') AS db_loan_status,
+            COALESCE(l.requested_amount, l.amount, 0) AS requested_amount,
+            COALESCE(l.offer_amount, 0) AS offer_amount,
+            l.processing_fee AS processing_fee,
+            l.net_disbursement AS net_disbursement,
+            COALESCE(l.loan_period_unit, 'month') AS loan_period_unit,
+            l.offered_at AS offered_at,
 
             CASE
                 WHEN l.id IS NULL THEN 'NONE'
-                WHEN UPPER(COALESCE(l.status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED') THEN UPPER(l.status)
+                WHEN UPPER(COALESCE(l.status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED', 'OFFERED', 'APPROVED', 'DECLINED') THEN UPPER(l.status)
                 WHEN UPPER(COALESCE(l.status, '')) = 'CLEARED' THEN 'CLEARED'
                 WHEN COALESCE(l.loan_balance, 0) <= 0 THEN 'CLEARED'
                 WHEN l.due_date IS NOT NULL AND COALESCE(l.loan_balance, 0) > 0 AND l.due_date < NOW() THEN 'OVERDUE'
@@ -689,7 +744,7 @@ function getClient(mysqli $conn, array $user): void
             WHERE lx.client_id = c.user_id
             ORDER BY
                 CASE
-                    WHEN UPPER(COALESCE(lx.status, '')) NOT IN ('CLEARED', 'REJECTED')
+                    WHEN UPPER(COALESCE(lx.status, '')) NOT IN ('CLEARED', 'REJECTED', 'DECLINED', 'DELETED')
                          AND COALESCE(lx.loan_balance, 0) > 0 THEN 0
                     ELSE 1
                 END,
@@ -725,6 +780,27 @@ function getClient(mysqli $conn, array $user): void
     $row["due_date_formatted"] = formatDateOnly($row["due_date_formatted"] ?? $row["due_date"] ?? "");
     $row["next_payment"] = formatDateOnly($row["next_payment"] ?? $row["due_date"] ?? "");
 
+    // Offer waiting for the client: everything the accept/reject screen shows.
+    $row["offer"] = null;
+    if (strtoupper((string)($row["loan_status"] ?? "")) === "OFFERED" && !empty($row["loan_id"])) {
+        $principal = (float)$row["offer_amount"] ?: (float)$row["loan_amount"];
+        $quote = loan_quote($conn, $principal, (int)$row["loan_period"], (string)$row["loan_period_unit"]);
+        if ($row["processing_fee"] !== null) {
+            $quote["processing_fee"] = (float)$row["processing_fee"];
+            $quote["net_disbursement"] = max(0.0, $principal - (float)$row["processing_fee"]);
+        }
+        $row["offer"] = $quote + [
+            "loan_id" => (int)$row["loan_id"],
+            "requested_amount" => (float)$row["requested_amount"],
+            "approved_amount" => $principal,
+            "loan_period" => (int)$row["loan_period"],
+            "loan_period_unit" => (string)$row["loan_period_unit"],
+        ];
+    }
+    $row["term_label"] = !empty($row["loan_id"])
+        ? loan_term_label((int)$row["loan_period"], (string)$row["loan_period_unit"])
+        : "";
+
     respond(["status" => "success", "data" => $row]);
 }
 
@@ -733,6 +809,7 @@ function getClient(mysqli $conn, array $user): void
  */
 function getLoans(mysqli $conn, array $user): void
 {
+    loan_offers_ensure_schema($conn);
     $client_id = (int)$user["sub"];
 
     $stmt = $conn->prepare("
@@ -758,8 +835,12 @@ function getLoans(mysqli $conn, array $user): void
             COALESCE(bank_account, '') AS bank_account,
             COALESCE(phone, '') AS loan_phone,
             COALESCE(status, '') AS db_loan_status,
+            COALESCE(requested_amount, amount, 0) AS requested_amount,
+            COALESCE(loan_period_unit, 'month') AS loan_period_unit,
+            processing_fee,
+            net_disbursement,
             CASE
-                WHEN UPPER(COALESCE(status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED') THEN UPPER(status)
+                WHEN UPPER(COALESCE(status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'REJECTED', 'OFFERED', 'APPROVED', 'DECLINED') THEN UPPER(status)
                 WHEN UPPER(COALESCE(status, '')) = 'CLEARED' THEN 'CLEARED'
                 WHEN COALESCE(loan_balance, 0) <= 0 THEN 'CLEARED'
                 WHEN due_date IS NOT NULL AND COALESCE(loan_balance, 0) > 0 AND due_date < NOW() THEN 'OVERDUE'
@@ -808,7 +889,7 @@ function updateClient(mysqli $conn, array $user, array $input): void
     $lname = clean($input["lname"] ?? "");
     $username = clean($input["username"] ?? "");
     $gender = clean($input["gender"] ?? "");
-    $dob = clean($input["dob"] ?? "");
+    $dob = normalizeDob(clean($input["dob"] ?? ""));
     $phone = clean($input["phone"] ?? "");
     $email = clean($input["email"] ?? "");
     $nin = clean($input["nin"] ?? "");
@@ -968,109 +1049,117 @@ function getCreditScore(mysqli $conn, array $user): void
 }
 
 /**
- * Request loan.
- * Inserts proper balances and due_date into the loan table.
+ * Loan terms for the application screen: the repayment periods, the interest
+ * rate for each, and the processing fee. The app shows these instead of
+ * hard-coding a rate.
+ */
+function getLoanTerms(mysqli $conn, array $user): void
+{
+    loan_offers_ensure_schema($conn);
+    $terms = [];
+    foreach (loan_term_options() as $opt) {
+        $terms[] = $opt + ["interest_rate" => loan_interest_rate($opt["count"], $opt["unit"])];
+    }
+    $fee = loan_processing_fee($conn);
+    respond([
+        "status" => "success",
+        "data" => [
+            "terms" => $terms,
+            "processing_fee" => $fee,
+            "fee_note" => "A processing fee of " . loan_money($fee) . " is taken from the amount sent to you. You repay the full approved amount plus interest.",
+        ],
+    ]);
+}
+
+/**
+ * Loan application. The client asks for the amount they want; staff decide
+ * the amount to offer (see admin/review_loan_action.php).
  */
 function requestLoan(mysqli $conn, array $user, array $input): void
 {
+    loan_offers_ensure_schema($conn);
+
     $client_id = (int)$user["sub"];
     $amount = moneyValue($input["amount"] ?? 0);
     $loan_period = (int)clean($input["loan_period"] ?? $input["period"] ?? 1);
+    $period_unit = loan_term_unit(clean($input["loan_period_unit"] ?? $input["period_unit"] ?? "month"));
     $loan_method = clean($input["loan_method"] ?? "");
     $bank_name = clean($input["bank_name"] ?? "");
     $bank_account = clean($input["bank_account"] ?? "");
     $phone = clean($input["phone"] ?? "");
 
     if ($amount <= 0) {
-        respond(["status" => "error", "message" => "Invalid amount"], 422);
+        respond(["status" => "error", "message" => "Please enter the amount you want to borrow"], 422);
     }
-
-    if ($loan_period <= 0) {
-        $loan_period = 1;
+    if ($amount < 10000) {
+        respond(["status" => "error", "message" => "The smallest loan is UGX 10,000"], 422);
+    }
+    if (!loan_term_is_valid($loan_period, $period_unit)) {
+        respond(["status" => "error", "message" => "Please choose a repayment period between 2 weeks and 6 months"], 422);
     }
 
     $stmt = $conn->prepare("SELECT loan_limit FROM customers WHERE user_id = ? LIMIT 1");
-
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Query preparation failed: " . $conn->error], 500);
-    }
-
     $stmt->bind_param("i", $client_id);
     $stmt->execute();
-
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-
-    $limit = (float)($row["loan_limit"] ?? 0);
-
-    if ($amount > $limit) {
-        respond(["status" => "error", "message" => "Amount exceeds your loan limit"], 422);
+    if (!$row) {
+        respond(["status" => "error", "message" => "Client not found"], 404);
     }
+    // The system limit is kept for staff to compare; it does not cap the request.
+    $system_amount = (float)($row["loan_limit"] ?? 0);
 
+    // One application or loan at a time.
     $stmt = $conn->prepare("
-        SELECT id
+        SELECT id, UPPER(COALESCE(status, '')) AS status
         FROM loan
         WHERE client_id = ?
-          AND UPPER(COALESCE(status, '')) NOT IN ('CLEARED', 'REJECTED')
-          AND COALESCE(loan_balance, 0) > 0
+          AND (
+                UPPER(COALESCE(status, '')) IN ('PENDING', 'INFO_REQUESTED', 'INFO_PROVIDED', 'OFFERED', 'APPROVED')
+             OR (UPPER(COALESCE(status, '')) NOT IN ('CLEARED', 'REJECTED', 'DECLINED', 'DELETED') AND COALESCE(loan_balance, 0) > 0)
+          )
         LIMIT 1
     ");
-
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Active loan check failed: " . $conn->error], 500);
-    }
-
     $stmt->bind_param("i", $client_id);
     $stmt->execute();
-
-    if ($stmt->get_result()->num_rows > 0) {
-        $stmt->close();
-        respond(["status" => "error", "message" => "You already have an active loan"], 422);
+    $open = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if ($open) {
+        $message = match ($open["status"]) {
+            "OFFERED" => "You have a loan offer waiting. Please accept or reject it first.",
+            "PENDING", "INFO_REQUESTED", "INFO_PROVIDED" => "Your loan application is still being reviewed.",
+            "APPROVED" => "Your accepted loan is being sent to you.",
+            default => "You already have an active loan",
+        };
+        respond(["status" => "error", "message" => $message], 422);
     }
 
-    $stmt->close();
-
-    // Match the web application: 10% for one month, 6.6% for longer periods.
-    $interest_rate = $loan_period === 1 ? 10.0 : 6.6;
-    $interest = round($amount * ($interest_rate / 100), 2);
+    // Provisional figures for the requested amount; recalculated on the offer.
+    $quote = loan_quote($conn, $amount, $loan_period, $period_unit);
+    $interest_rate = $quote["interest_rate"];
+    $interest = $quote["interest"];
     $sur_charge = 0.0;
-    $balance = $amount + $interest + $sur_charge;
-    $due_date = date("Y-m-d H:i:s", strtotime("+{$loan_period} month"));
+    $balance = $quote["total_repayment"];
+    $due_date = loan_term_due_date($loan_period, $period_unit);
     $status = "PENDING";
 
     $stmt = $conn->prepare("
         INSERT INTO loan
             (
-                amount,
-                principal_balance,
-                interest_balance,
-                outstanding_balance,
-                interest_rate,
-                client_id,
-                status,
-                datetime,
-                updated_at,
-                due_date,
-                loan_balance,
-                sur_charge,
-                interest,
-                loan_period,
-                loan_method,
-                bank_name,
-                bank_account,
-                phone
+                amount, principal_balance, interest_balance, outstanding_balance,
+                interest_rate, client_id, status, datetime, updated_at, due_date,
+                loan_balance, sur_charge, interest, loan_period,
+                loan_method, bank_name, bank_account, phone,
+                requested_amount, system_amount, loan_period_unit
             )
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
-    if (!$stmt) {
-        respond(["status" => "error", "message" => "Loan prepare failed: " . $conn->error], 500);
-    }
-
-
+    // 19 placeholders. The previous version had one type letter too many,
+    // which made bind_param throw and every request return HTTP 500.
     $stmt->bind_param(
-        "dddddisssdddissss",
+        "dddddissdddissssdds",
         $amount,
         $amount,
         $interest,
@@ -1086,74 +1175,72 @@ function requestLoan(mysqli $conn, array $user, array $input): void
         $loan_method,
         $bank_name,
         $bank_account,
-        $phone
+        $phone,
+        $amount,
+        $system_amount,
+        $period_unit
     );
-
-    if (!$stmt->execute()) {
-        respond(["status" => "error", "message" => "Failed to create loan: " . $stmt->error], 500);
-    }
-
+    $stmt->execute();
     $loan_id = (int)$stmt->insert_id;
     $stmt->close();
 
-    // Tag the request correctly and auto-assign it to a loan officer so it
-    // appears in the reviewer's Pending Loans queue immediately.
+    // Tag the request and assign a loan officer so it shows in Pending Loans.
     $assignedOfficerId = loan_finalize_new_request($conn, $loan_id, "customer");
 
-    // Give the applicant a visible request message and alert admins through
-    // the same message stream used by the web portal.
     try {
         $nameStmt = $conn->prepare("SELECT fname, lname, username FROM user WHERE id = ? LIMIT 1");
-        $senderName = "Client";
-
-        if ($nameStmt) {
-            $nameStmt->bind_param("i", $client_id);
-            $nameStmt->execute();
-            $clientRow = $nameStmt->get_result()->fetch_assoc();
-            $nameStmt->close();
-
-            if ($clientRow) {
-                $senderName = trim(($clientRow["fname"] ?? "") . " " . ($clientRow["lname"] ?? ""));
-                if ($senderName === "") {
-                    $senderName = (string)($clientRow["username"] ?? "Client");
-                }
-            }
+        $nameStmt->bind_param("i", $client_id);
+        $nameStmt->execute();
+        $clientRow = $nameStmt->get_result()->fetch_assoc();
+        $nameStmt->close();
+        $senderName = trim(($clientRow["fname"] ?? "") . " " . ($clientRow["lname"] ?? ""));
+        if ($senderName === "") {
+            $senderName = (string)($clientRow["username"] ?? "Client");
         }
 
         $msgStmt = $conn->prepare("
-            INSERT INTO loan_messages
-                (user_id, loan_id, sender_name, message_type, is_read, created_at)
+            INSERT INTO loan_messages (user_id, loan_id, sender_name, message_type, is_read, created_at)
             VALUES (?, ?, ?, 'loan_request', 0, NOW())
         ");
-
-        if ($msgStmt) {
-            $msgStmt->bind_param("iis", $client_id, $loan_id, $senderName);
-            $msgStmt->execute();
-            $msgStmt->close();
-        }
+        $msgStmt->bind_param("iis", $client_id, $loan_id, $senderName);
+        $msgStmt->execute();
+        $msgStmt->close();
     } catch (Throwable $e) {
         error_log("Loan request message failed: " . $e->getMessage());
     }
 
     respond([
         "status" => "success",
-        "message" => "Loan request submitted for approval",
+        "message" => "Application sent. We will review it and send you an offer.",
         "data" => [
             "loan_id" => $loan_id,
-            "amount" => $amount,
-            "principal_balance" => $amount,
-            "interest_balance" => $interest,
-            "outstanding_balance" => $balance,
-            "interest" => $interest,
-            "interest_rate" => $interest_rate,
-            "loan_balance" => $balance,
+            "requested_amount" => $amount,
             "loan_period" => $loan_period,
-            "due_date" => $due_date,
-            "due_date_formatted" => formatDateOnly($due_date),
+            "loan_period_unit" => $period_unit,
+            "term_label" => loan_term_label($loan_period, $period_unit),
             "loan_status" => "PENDING",
             "assigned_officer_id" => $assignedOfficerId,
         ],
     ]);
+}
+
+/**
+ * Client accepts or rejects the amount staff offered
+ * (logic in includes/loan_offers.php, shared with the web portal).
+ */
+function respondLoanOffer(mysqli $conn, array $user, array $input): void
+{
+    $result = loan_offer_respond(
+        $conn,
+        (int)$user["sub"],
+        (int)clean($input["loan_id"] ?? 0),
+        clean($input["decision"] ?? "")
+    );
+    respond([
+        "status" => $result["ok"] ? "success" : "error",
+        "message" => $result["message"],
+        "data" => $result["data"],
+    ], $result["code"]);
 }
 
 /**
@@ -1461,8 +1548,16 @@ switch ($action) {
         getCreditEvidence($conn, requireAuth());
         break;
 
+    case "get_loan_terms":
+        getLoanTerms($conn, requireAuth());
+        break;
+
     case "request_loan":
         requestLoan($conn, requireAuth(), $input);
+        break;
+
+    case "respond_loan_offer":
+        respondLoanOffer($conn, requireAuth(), $input);
         break;
 
     case "pay_loan":

@@ -1,6 +1,8 @@
 <?php
 require "nav-head.php";
 require "services_check.php";
+require_once dirname(__DIR__) . '/includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
 
 if (!isset($_SESSION['logged_in'])) {
     exit("User not logged in.");
@@ -55,10 +57,13 @@ $full_name = (!empty($cfect['fname']) && !empty($cfect['lname']))
 
 $amount = (float)$loan['amount'];
 $interest_rate = (float)$loan['interest_rate'];
-$loan_period = (int)$loan['loan_period'];
+$loan_period = max(1, (int)$loan['loan_period']);
+// Weekly terms (2 or 4 weeks) are paid weekly; month terms monthly.
+$is_weekly = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month')) === 'week';
+$step_label = $is_weekly ? 'Week' : 'Month';
 
-// ? Limit loan period to a maximum of 3 months
-if ($loan_period > 3) {
+// ? Limit loan period to a maximum of 3 months (month terms only)
+if (!$is_weekly && $loan_period > 3) {
     $loan_period = 3;
     $loan_period_capped = true;
 } else {
@@ -72,7 +77,8 @@ $monthly_payment = $total_repayable / $loan_period;
 $monthly_interest = $total_interest / $loan_period;
 $monthly_principal = $amount / $loan_period;
 
-$start_date = new DateTime($loan['datetime']);
+// The term starts when the money is sent; older loans fall back to the request date.
+$start_date = new DateTime(!empty($loan['disbursed_at']) ? $loan['disbursed_at'] : $loan['datetime']);
 $loanTitle = "Repayment Plan for $full_name";
 ?>
 
@@ -106,9 +112,9 @@ $loanTitle = "Repayment Plan for $full_name";
                         <table class="table align-items-center mb-0" id="report">
                             <thead>
                                 <tr>
-                                    <th>Month</th>
+                                    <th><?= $step_label ?></th>
                                     <th>Payment Date</th>
-                                    <th>Monthly Payment</th>
+                                    <th><?= $is_weekly ? 'Weekly' : 'Monthly' ?> Payment</th>
                                     <th>Principal</th>
                                     <th>Interest</th>
                                     <th>Balance</th>
@@ -119,7 +125,7 @@ $loanTitle = "Repayment Plan for $full_name";
                                 $balance = $amount;
                                 for ($i = 1; $i <= $loan_period; $i++) {
                                     $balance -= $monthly_principal;
-                                    $repayment_date = (clone $start_date)->modify("+$i month");
+                                    $repayment_date = (clone $start_date)->modify($is_weekly ? "+$i week" : "+$i month");
 
                                     echo "<tr>
                                             <td>$i</td>

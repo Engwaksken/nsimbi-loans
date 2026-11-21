@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../php/db.php';
 require_once __DIR__ . '/../includes/loan_workflow.php';
+require_once __DIR__ . '/../includes/loan_offers.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection error.');
@@ -204,6 +205,26 @@ if ($is_new_onboarded) {
     $period_options = [1 => '1 month | 10% interest', 2 => '2 months | 6.6% interest', 3 => '3 months | 6.6% interest', 6 => '6 months | 6.6% interest'];
 }
 
+// An offer from staff waiting for the client's answer.
+loan_offers_ensure_schema($conn);
+$pending_offer = null;
+$stmt = $conn->prepare("SELECT * FROM loan WHERE client_id = ? AND UPPER(status) = 'OFFERED' ORDER BY id DESC LIMIT 1");
+$stmt->bind_param('i', $client_id);
+$stmt->execute();
+$pending_offer = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+if ($pending_offer) {
+    $offer_principal = (float)($pending_offer['offer_amount'] ?? 0) ?: (float)$pending_offer['amount'];
+    $offer_quote = loan_quote($conn, $offer_principal, (int)$pending_offer['loan_period'], (string)($pending_offer['loan_period_unit'] ?? 'month'));
+    if ($pending_offer['processing_fee'] !== null) {
+        $offer_quote['processing_fee'] = (float)$pending_offer['processing_fee'];
+        $offer_quote['net_disbursement'] = max(0.0, $offer_principal - (float)$pending_offer['processing_fee']);
+    }
+    if (empty($_SESSION['loan_offer_csrf'])) {
+        $_SESSION['loan_offer_csrf'] = bin2hex(random_bytes(32));
+    }
+}
+
 // requested_loan.php redirects back here with a message.
 $flash_message = (string)($_SESSION['message'] ?? '');
 $flash_type    = (string)($_SESSION['message_type'] ?? 'info');
@@ -227,6 +248,7 @@ $loanStmt = $conn->prepare("
         interest,
         loan_balance,
         loan_period,
+        loan_period_unit,
         loan_method,
         phone,
         bank_name,
@@ -549,6 +571,28 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
 <div class="my-loans-page">
 
+<?php if ($pending_offer): ?>
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem">
+        <h5 style="margin:0 0 .4rem;font-weight:800">Your loan offer is ready</h5>
+        <p style="margin:0 0 .6rem">
+            You asked for <?= money((float)($pending_offer['requested_amount'] ?? 0) ?: $offer_principal); ?>.
+            We can offer you <strong><?= money($offer_principal); ?></strong> for <?= esc($offer_quote['term_label']); ?>.
+        </p>
+        <ul style="margin:0 0 .8rem;padding-left:1.1rem;font-size:.9rem">
+            <li>You repay <strong><?= money($offer_quote['total_repayment']); ?></strong> (including <?= esc(rtrim(rtrim(number_format($offer_quote['interest_rate'], 2), '0'), '.')); ?>% interest)</li>
+            <li>Processing fee: <?= money($offer_quote['processing_fee']); ?>, taken from the payout</li>
+            <li>You receive <strong><?= money($offer_quote['net_disbursement']); ?></strong></li>
+        </ul>
+        <form method="POST" action="loan_offer_action.php" style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <input type="hidden" name="csrf_token" value="<?= esc($_SESSION['loan_offer_csrf']); ?>">
+            <input type="hidden" name="loan_id" value="<?= (int)$pending_offer['id']; ?>">
+            <button type="submit" name="decision" value="accept" class="btn btn-primary">Accept offer</button>
+            <button type="submit" name="decision" value="reject" class="btn btn-outline-secondary"
+                    onclick="return confirm('Reject this offer? You can apply again later.')">Reject</button>
+        </form>
+    </div>
+<?php endif; ?>
+
     <div class="loan-page-hero">
         <div class="loan-hero-inner">
             <div>
@@ -703,7 +747,7 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                                 <td class="td-dark"><?= money($loan['amount']); ?></td>
                                 <td><?= money($loan['interest']); ?></td>
                                 <td><?= money($loan['loan_balance']); ?></td>
-                                <td><?= (int)$loan['loan_period']; ?> Month<?= (int)$loan['loan_period'] === 1 ? '' : 's'; ?></td>
+                                <td><?= esc(loan_term_label((int)$loan['loan_period'], (string)($loan['loan_period_unit'] ?? 'month'))); ?></td>
                                 <td><?= esc($loan['loan_method'] ?? '-'); ?></td>
 
                                 <td class="text-center">

@@ -5,6 +5,8 @@ require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
 require_once __DIR__ . "/../includes/loan_assessment.php";
+require_once __DIR__ . "/../includes/loan_offers.php";
+loan_offers_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -729,7 +731,7 @@ foreach ($loans as $loan) {
                                 <td><?= money($loan['interest'] ?? 0) ?></td>
 
                                 <td>
-                                    <?= h($loan['loan_period'] ?? 0) ?> Months
+                                    <?= h(loan_term_label((int)($loan['loan_period'] ?? 0), (string)($loan['loan_period_unit'] ?? 'month'))) ?>
                                 </td>
 
                                 <td class="text-center">

@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require 'db.php';
 require_once __DIR__ . '/loan_audit.php';
 require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/loan_offers.php';
 
 function finishReview(string $message): never {
     $_SESSION['loan_action_feedback'] = $message;
@@ -52,6 +53,19 @@ $reason = postText('reason');
 $infoDetails = postText('info_details');
 $deleteReason = postText('delete_reason');
 $officerId = filter_var($_POST['officer_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
+
+// Approve = send the client an offer. The reviewer picks the applicant's
+// requested amount, the system-calculated amount or a custom amount. Bulk
+// approval offers each applicant the amount they asked for.
+$offerChoice = $bulk ? 'requested' : postText('offer_choice', 20);
+$customAmount = (float)preg_replace('/[^0-9.]/', '', postText('custom_amount', 30));
+$ninVerified = ($_POST['nin_verified'] ?? '') === '1';
+$ninRef = postText('nin_reference', 100);
+if ($action === 'approve') {
+    if (!in_array($offerChoice, ['requested', 'system', 'custom'], true)) finishReview('Choose the amount to offer.');
+    if ($offerChoice === 'custom' && $customAmount < 10000) finishReview('Enter the amount to offer (at least UGX 10,000).');
+    loan_offers_ensure_schema($conn);
+}
 if ($action === 'reject' && $reason === '') finishReview('A rejection reason is required.');
 if ($action === 'delete' && $deleteReason === '') finishReview('A deletion reason is required.');
 if ($action === 'request_info' && ($infoDetails === '' || $officerId <= 0)) {
@@ -113,7 +127,75 @@ foreach ($ids as $id) {
         $clientEmail = (string)($client['email'] ?? '');
         $notification = null;
         $officerNotification = null;
-        if ($action === 'approve') {
+        $offerEvent = null;
+        if ($action === 'approve' && $clientType === 'customer') {
+            // Mobile/web customers: send an offer the client accepts or rejects.
+            $requested = (float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0);
+            $system = (float)($loan['system_amount'] ?? 0);
+            if ($system <= 0) {
+                $s = $conn->prepare('SELECT loan_limit FROM customers WHERE user_id = ? LIMIT 1');
+                $s->bind_param('i', $clientId); $s->execute();
+                $system = (float)($s->get_result()->fetch_assoc()['loan_limit'] ?? 0); $s->close();
+            }
+            $offer = match ($offerChoice) {
+                'system' => $system,
+                'custom' => $customAmount,
+                default  => $requested,
+            };
+            if ($offer < 10000) {
+                throw new RuntimeException("offer amount {$offer} too small ({$offerChoice})");
+            }
+
+            // NIN must be checked (Laboremus STREAMLINE Flex) once per client.
+            $s = $conn->prepare('SELECT nin, nin_verified_at FROM customers WHERE user_id = ? LIMIT 1');
+            $s->bind_param('i', $clientId); $s->execute();
+            $cust = $s->get_result()->fetch_assoc() ?: []; $s->close();
+            if (empty($cust['nin_verified_at'])) {
+                if (!$ninVerified) {
+                    $conn->rollback(); $skipped++;
+                    if (count($errors) < 5) $errors[] = '#'.$id.' (NIN not verified)';
+                    continue;
+                }
+                $s = $conn->prepare('UPDATE customers SET nin_verified_at = NOW(), nin_verified_by = ?, nin_verification_ref = ? WHERE user_id = ?');
+                $s->bind_param('isi', $actorId, $ninRef, $clientId); $s->execute(); $s->close();
+            }
+
+            $period = max(1, (int)($loan['loan_period'] ?? 1));
+            $unit = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month'));
+            $quote = loan_quote($conn, $offer, $period, $unit);
+            $rate = $quote['interest_rate'];
+            $interest = $quote['interest'];
+            $total = $quote['total_repayment'];
+            $fee = min($quote['processing_fee'], $offer);
+            $dueDate = loan_term_due_date($period, $unit);
+            $newStatus = 'OFFERED';
+            $s = $conn->prepare("
+                UPDATE loan
+                SET status = ?, amount = ?, offer_amount = ?, offer_choice = ?, offered_by = ?, offered_at = NOW(),
+                    requested_amount = COALESCE(requested_amount, ?), system_amount = COALESCE(system_amount, ?),
+                    principal_balance = ?, interest = ?, interest_balance = ?, interest_rate = ?,
+                    outstanding_balance = ?, loan_balance = ?, processing_fee = ?, due_date = ?, updated_at = NOW()
+                WHERE id = ? AND UPPER(TRIM(status)) IN ('PENDING','INFO_PROVIDED')
+            ");
+            $s->bind_param('sddsidddddddddsi',
+                $newStatus, $offer, $offer, $offerChoice, $actorId,
+                $requested, $system,
+                $offer, $interest, $interest, $rate,
+                $total, $total, $fee, $dueDate, $id);
+            $auditAction = 'approved';
+            $auditReason = 'Offer ' . loan_money($offer) . ' (' . $offerChoice . '; requested ' . loan_money($requested)
+                . ', system ' . loan_money($system) . ')' . ($ninRef !== '' ? '; NIN ref ' . $ninRef : '');
+            $offerEvent = [
+                'title' => 'Your loan offer is ready - Nsimbi Impact',
+                'body'  => "Dear {$clientName}, we can offer you a loan of " . loan_money($offer)
+                    . ' for ' . $quote['term_label'] . '. You will repay ' . loan_money($total)
+                    . ' (including ' . rtrim(rtrim(number_format($rate, 2), '0'), '.') . '% interest).'
+                    . ' A processing fee of ' . loan_money($fee) . ' is taken from the payout, so you will receive '
+                    . loan_money($offer - $fee) . '. Open the Nsimbi app to accept or reject this offer.'
+                    . ($comments !== '' ? "\n\n" . $comments : ''),
+            ];
+        } elseif ($action === 'approve') {
+            // Members and startups keep the previous direct approval.
             $period = max(1, min(120, (int)($loan['loan_period'] ?? 1)));
             $rate = $period === 1 ? 10.0 : 6.6;
             $dueDate = (new DateTimeImmutable('now'))->add(new DateInterval('P' . $period . 'M'))->format('Y-m-d H:i:s');
@@ -162,6 +244,9 @@ foreach ($ids as $id) {
         }
         $conn->commit();
         $success++;
+        if ($offerEvent) {
+            loan_notify_client($conn, $clientId, $id, 'loan_offer', $offerEvent['title'], $offerEvent['body']);
+        }
         if ($notification) {
             $destination = $action === 'request_info' ? (string)($officer['email'] ?? '') : $clientEmail;
             safeMail($destination, $notification[0], $notification[1]);

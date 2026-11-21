@@ -97,6 +97,8 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
 require "nav-head.php";
 require_once __DIR__ . '/includes/books-tab.php';
 require_once dirname(__DIR__) . '/includes/client_documents.php';
+require_once dirname(__DIR__) . '/includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
 
 function h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -155,6 +157,8 @@ $clientSql = "
         c.id_back,
         c.license,
         c.stock,
+        c.stock_inside,
+        c.nin_verified_at,
         c.applicant_signature
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
@@ -444,7 +448,8 @@ $docTypes = client_doc_types();
                         <?= client_doc_card('National ID Front', $client['id_front'] ?? '') ?>
                         <?= client_doc_card('National ID Back', $client['id_back'] ?? '') ?>
                         <?= client_doc_card('License / Certificate', $client['license'] ?? '') ?>
-                        <?= client_doc_card('Business Photo / Stock', $client['stock'] ?? '') ?>
+                        <?= client_doc_card('Business Photo (front)', $client['stock'] ?? '') ?>
+                        <?= client_doc_card('Business Photo (inside)', $client['stock_inside'] ?? '') ?>
                         <?= client_doc_card('Applicant Signature', $client['applicant_signature'] ?? '') ?>
                     </div>
 

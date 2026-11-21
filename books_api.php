@@ -272,16 +272,8 @@ function booksHeuristicDraftEntries(string $rawText, ?string $defaultEntryDate =
         return [];
     }
 
-    $words = [
-        "zero" => 0, "one" => 1, "two" => 2, "three" => 3, "four" => 4,
-        "five" => 5, "six" => 6, "seven" => 7, "eight" => 8, "nine" => 9,
-        "ten" => 10, "eleven" => 11, "twelve" => 12, "fifteen" => 15,
-        "twenty" => 20, "thirty" => 30, "forty" => 40, "fifty" => 50,
-        "hundred" => 100,
-    ];
-    foreach ($words as $word => $num) {
-        $text = preg_replace('/\b' . preg_quote($word, '/') . '\b/', (string)$num, $text) ?? $text;
-    }
+    // "twenty thousand", "20,000", "20k" -> 20000
+    $text = booksNormalizeSpokenNumbers($text);
 
     $type = null;
     if (preg_match('/\b(sold|sell|sale|earned)\b/', $text)) {
@@ -298,6 +290,16 @@ function booksHeuristicDraftEntries(string $rawText, ?string $defaultEntryDate =
     $unit = null;
     $itemName = "";
     $amount = 0.0;
+
+    // Take the price off the end first ("for 20000", "at 2000 each",
+    // "ugx 3000", "3000 shillings") so the patterns below see the rest.
+    $priceEach = false;
+    if (preg_match('/\s*\b(?:for|at|worth|ugx|shs?|shillings?)\s+(\d+(?:\.\d+)?)(?:\s*(?:ugx|shs?|shillings?|\/=))?(\s+each)?\s*$/u', $text, $pm)
+        || preg_match('/\s*\b(\d+(?:\.\d+)?)\s*(?:ugx|shs?|shillings?|\/=)(\s+each)?\s*$/u', $text, $pm)) {
+        $amount = (float)$pm[1];
+        $priceEach = !empty($pm[2]);
+        $text = trim(substr($text, 0, -strlen($pm[0])));
+    }
 
     // "5 kg of tomatoes" / "5 kilograms of tomatoes"
     if (preg_match(
@@ -329,6 +331,18 @@ function booksHeuristicDraftEntries(string $rawText, ?string $defaultEntryDate =
         }
     }
 
+    // "spent 5000 on transport" / "paid 20000 for rent": the number is money.
+    if ($type === "expense" && $amount <= 0 && $quantity !== null && $unit === null) {
+        $amount = $quantity;
+        $quantity = null;
+        $itemName = trim(preg_replace('/^(?:on|for)\s+/', '', $itemName) ?? $itemName);
+    }
+
+    // "3 sodas at 2000 each" -> 6000
+    if ($priceEach && $quantity !== null && $quantity > 0 && $amount > 0) {
+        $amount *= $quantity;
+    }
+
     // Strip leading filler verbs left in item_name
     $itemName = trim(preg_replace(
         '/^(?:sold|sell|bought|buy|spent|paid|purchase|purchased)\s+/',
@@ -350,6 +364,79 @@ function booksHeuristicDraftEntries(string $rawText, ?string $defaultEntryDate =
     ], $defaultEntryDate);
 
     return $normalized !== null ? [$normalized] : [];
+}
+
+/**
+ * Turns spoken and formatted amounts into plain digits:
+ * "twenty five thousand" -> 25000, "20,000" -> 20000, "20k" -> 20000,
+ * "1.5 million" -> 1500000, "5 thousand" -> 5000, "shs 5000/=" stays 5000.
+ */
+function booksNormalizeSpokenNumbers(string $text): string
+{
+    $small = [
+        "zero" => 0, "one" => 1, "two" => 2, "three" => 3, "four" => 4, "five" => 5,
+        "six" => 6, "seven" => 7, "eight" => 8, "nine" => 9, "ten" => 10,
+        "eleven" => 11, "twelve" => 12, "thirteen" => 13, "fourteen" => 14,
+        "fifteen" => 15, "sixteen" => 16, "seventeen" => 17, "eighteen" => 18,
+        "nineteen" => 19, "twenty" => 20, "thirty" => 30, "forty" => 40,
+        "fourty" => 40, "fifty" => 50, "sixty" => 60, "seventy" => 70,
+        "eighty" => 80, "ninety" => 90,
+    ];
+    $scales = ["hundred" => 100, "thousand" => 1000, "thousands" => 1000, "million" => 1000000, "millions" => 1000000];
+
+    $text = str_replace("/=", " ugx", $text);
+    // Grouped digits: 20,000 / 20.000 / 1,500,000 -> 20000
+    $text = preg_replace_callback('/\b\d{1,3}(?:[,.]\d{3})+\b/', static fn($m) => str_replace([",", "."], "", $m[0]), $text) ?? $text;
+
+    // Number words -> digits, keeping digits that are followed by a scale word
+    // ("5 thousand") for the next step.
+    $out = [];
+    $total = 0;
+    $current = 0;
+    $inNumber = false;
+    $flush = static function () use (&$out, &$total, &$current, &$inNumber): void {
+        if ($inNumber) {
+            $out[] = (string)($total + $current);
+        }
+        $total = 0;
+        $current = 0;
+        $inNumber = false;
+    };
+    foreach (preg_split('/\s+/', trim($text)) ?: [] as $word) {
+        if ($word === "") {
+            continue;
+        }
+        if (isset($small[$word])) {
+            $current += $small[$word];
+            $inNumber = true;
+        } elseif ($inNumber && isset($scales[$word])) {
+            if ($scales[$word] === 100) {
+                $current = ($current ?: 1) * 100;
+            } else {
+                $total += ($current ?: 1) * $scales[$word];
+                $current = 0;
+            }
+        } elseif ($inNumber && $word === "and") {
+            // "one hundred and fifty"
+        } else {
+            $flush();
+            $out[] = $word;
+        }
+    }
+    $flush();
+    $text = implode(" ", $out);
+
+    // Digits with a scale: 20k, 20 k, 5 thousand, 1.5 million, 1.5m
+    $text = preg_replace_callback(
+        '/\b(\d+(?:\.\d+)?)\s*(k|thousands?|m|millions?)\b/',
+        static function (array $m): string {
+            $factor = in_array($m[2], ["m", "million", "millions"], true) ? 1000000 : 1000;
+            return (string)round((float)$m[1] * $factor);
+        },
+        $text
+    ) ?? $text;
+
+    return $text;
 }
 
 /**
@@ -491,6 +578,14 @@ function booksCallGemini(string $rawText, string $language): array
         . " sold, sell, bought, buy, spent, or paid, return at least one entry"
         . " even when the price is missing."
         . " Convert spoken numbers such as five to digits when possible."
+        . " amount is the total money for that transaction in UGX, as a plain number"
+        . " with no commas, words or currency: 'twenty thousand' = 20000,"
+        . " '20k' = 20000, '20,000' = 20000, 'one point five million' = 1500000."
+        . " Speech-to-text may write amounts as digits, words or a mix"
+        . " ('5 thousand', 'shs 5000', '5000/='); read them all."
+        . " When a quantity and a price are both spoken ('2 kg of sugar for 10,000'),"
+        . " the price is the amount and the other number is the quantity."
+        . " A price per item ('3 sodas at 2000 each') means amount = quantity x price."
         . "
 
 Text:

@@ -7,6 +7,8 @@ session_start();
 require "db.php";
 require_once __DIR__ . "/loan_audit.php";
 require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
 
 if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
@@ -74,6 +76,10 @@ $client_id  = (int)$fetch_loan['client_id'];
 $loanPeriod = max(1, (int)$fetch_loan['loan_period']);
 $amountRaw  = (float)$fetch_loan['amount'];
 $loanAmount = number_format($amountRaw, 2);
+// The processing fee is kept from the payout; repayments stay on the full amount.
+$processingFee = $fetch_loan['processing_fee'] !== null ? (float)$fetch_loan['processing_fee'] : 0.0;
+$netPayout = $fetch_loan['net_disbursement'] !== null ? (float)$fetch_loan['net_disbursement'] : max(0.0, $amountRaw - $processingFee);
+$periodUnit = loan_term_unit((string)($fetch_loan['loan_period_unit'] ?? 'month'));
 
 $stmtClient = $conn->prepare("SELECT fname, lname, email FROM user WHERE id = ? LIMIT 1");
 $stmtClient->bind_param("i", $client_id);
@@ -86,7 +92,7 @@ $clientEmail = $client['email'] ?? '';
 
 // The loan term starts now - funds are actually moving today.
 $disbursedAt = new DateTime('now');
-$dueDate = (clone $disbursedAt)->add(new DateInterval('P' . $loanPeriod . 'M'))->format('Y-m-d H:i:s');
+$dueDate = (clone $disbursedAt)->add(loan_term_interval($loanPeriod, $periodUnit))->format('Y-m-d H:i:s');
 $disbursedAtStr = $disbursedAt->format('Y-m-d H:i:s');
 
 if ($reference === '') {
@@ -148,6 +154,7 @@ if (!empty($clientEmail)) {
     $body = "
         <h3>Dear " . htmlspecialchars($clientName, ENT_QUOTES, 'UTF-8') . ",</h3>
         <p>Your loan of <strong>UGX {$loanAmount}</strong> has been <strong>DISBURSED</strong>.</p>
+        " . ($processingFee > 0 ? "<p>Amount sent to you: <strong>UGX " . number_format($netPayout, 2) . "</strong> (after the UGX " . number_format($processingFee, 2) . " processing fee). You repay the full loan amount plus interest.</p>" : "") . "
         <p><strong>Method:</strong> {$methodLabel}</p>
         <p><strong>Reference:</strong> " . htmlspecialchars($reference, ENT_QUOTES, 'UTF-8') . "</p>
         <p><strong>Due Date:</strong> {$dueDate}</p>

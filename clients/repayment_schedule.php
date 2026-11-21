@@ -9,7 +9,9 @@ if (!isset($_SESSION['logged_in'])) {
 $client_id = mysqli_real_escape_string($conn, $_SESSION['logged_in']);
 $phead = "Repayment Schedule";
 
-$query = "SELECT amount, interest, interest_rate, loan_period, datetime FROM loan WHERE client_id='$client_id' AND status = 'OUTSTANDING' ORDER BY id DESC";
+require_once dirname(__DIR__) . '/includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
+$query = "SELECT amount, interest, interest_rate, loan_period, loan_period_unit, datetime, disbursed_at FROM loan WHERE client_id='$client_id' AND status = 'OUTSTANDING' ORDER BY id DESC";
 $loan_results = mysqli_query($conn, $query);
 ?>
 
@@ -30,8 +32,8 @@ $loan_results = mysqli_query($conn, $query);
                                 <tr>
                                     <th>Amount</th>
                                     <th>Interest</th>
-                                    <th>Loan Period (Months)</th>
-                                    <th>Monthly Payment</th>
+                                    <th>Loan Period</th>
+                                    <th>Payment</th>
                                     <th>Repayment Date</th>
                                 </tr>
                             </thead>
@@ -41,21 +43,22 @@ $loan_results = mysqli_query($conn, $query);
                                     while ($loan = mysqli_fetch_assoc($loan_results)) {
                                         $amount = (float)$loan['amount'];
                                         $interest_rate = (float)$loan['interest_rate'];
-                                        $loan_period = (int)$loan['loan_period'];
+                                        $loan_period = max(1, (int)$loan['loan_period']);
+                                        $is_weekly = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month')) === 'week';
 
                                         $interest = ($amount * $interest_rate) / 100;
                                         $total_repayable = $amount + $interest;
                                         $monthly_payment = $total_repayable / $loan_period;
 
-                                        $start_date = new DateTime($loan['datetime']);
+                                        $start_date = new DateTime(!empty($loan['disbursed_at']) ? $loan['disbursed_at'] : $loan['datetime']);
 for ($i = 0; $i < $loan_period; $i++) {
-    $repayment_date = (clone $start_date)->modify('+' . ($i * 30) . ' days')->format('d M Y');
+    $repayment_date = (clone $start_date)->modify('+' . (($i + 1) * ($is_weekly ? 7 : 30)) . ' days')->format('d M Y');
     echo "<tr>";
 
     if ($i == 0) {
         echo "<td rowspan='{$loan_period}'>" . number_format($amount) . "</td>";
         echo "<td rowspan='{$loan_period}'>" . number_format($interest, 2) . "</td>";
-        echo "<td rowspan='{$loan_period}'>" . $loan_period . "</td>";
+        echo "<td rowspan='{$loan_period}'>" . htmlspecialchars(loan_term_label($loan_period, $is_weekly ? 'week' : 'month')) . "</td>";
     }
     echo "<td>" . number_format($monthly_payment, 2) . "</td>";
     echo "<td>" . $repayment_date . "</td>";

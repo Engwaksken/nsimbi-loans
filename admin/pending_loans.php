@@ -7,6 +7,7 @@ require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
 require_once __DIR__ . "/../includes/loan_workflow.php";
 require_once __DIR__ . "/../includes/loan_assessment.php";
+require_once __DIR__ . "/../includes/loan_offers.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -15,6 +16,7 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($conn) || !$conn instanceof mysqli) {
     die("Database connection not established.");
 }
+loan_offers_ensure_schema($conn);
 
 
 $currentRole   = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
@@ -355,6 +357,10 @@ $sql = "
         c.business_period AS assess_business_period,
         c.amount_last AS assess_amount_last,
         c.amount_this AS assess_amount_this,
+
+        c.nin AS assess_nin,
+        c.nin_verified_at AS assess_nin_verified_at,
+        c.nin_verification_ref AS assess_nin_ref,
 
         c.id AS customer_table_id,
         c.user_id AS customer_user_id,
@@ -894,7 +900,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
             <label class="mb-0" for="bulkLoanAction"><strong>Bulk action</strong></label>
             <select name="action" id="bulkLoanAction" class="form-select form-select-sm" required style="min-width:190px">
                 <option value="">Choose action...</option>
-                <option value="approve">Approve selected</option>
+                <option value="approve">Approve selected (offer the requested amount)</option>
                 <option value="reject">Reject selected</option>
                 <option value="request_info">Request review / more info</option>
                 <option value="delete">Delete selected (soft delete)</option>
@@ -920,6 +926,11 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         <option value="<?= (int)$officer['id'] ?>"><?= h(trim($officer['fname'].' '.$officer['lname'])) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="wide" data-bulk-field="nin" hidden>
+                <label><input type="checkbox" id="bulkNinVerified" name="nin_verified" value="1" disabled>
+                    I checked the NIN of every selected applicant on Laboremus STREAMLINE Flex (UGX 1,000 per check).</label>
+                <div class="fs-xs text-muted">Applicants whose NIN is not yet verified are skipped unless this is ticked.</div>
             </div>
             <div class="wide" data-bulk-field="delete_reason" hidden>
                 <label for="bulkDeleteReason">Reason for deletion (required; applications will be retained for audit)</label>
@@ -1061,10 +1072,11 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
                 <div class="pending-meta">
                     <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Amount</div>
+                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Requested</div>
                         <div style="font-weight:800;color:var(--primary);font-family:'Outfit',sans-serif">
-                            <?= money($loan['amount'] ?? 0) ?>
+                            <?= money((float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0)) ?>
                         </div>
+                        <div class="fs-xs text-muted"><?= h(loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'))) ?></div>
                     </div>
 
                     <div>
@@ -1167,10 +1179,46 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     </div>
 
                     <div class="review-tab-content" data-tab-content="approve-<?= $loanId ?>">
-                        <form method="POST" action="review_loan_action.php">
+                        <form method="POST" action="review_loan_action.php" class="offer-form">
                             <input type="hidden" name="csrf_token" value="<?= h($reviewCsrf) ?>">
                             <input type="hidden" name="id" value="<?= $loanId ?>">
                             <input type="hidden" name="action" value="approve">
+
+                            <?php if ($clientType === 'customer'):
+                                $reqAmount = (float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0);
+                                $sysAmount = (float)($loan['system_amount'] ?? 0) ?: (float)($loan['assess_loan_limit'] ?? 0);
+                                $termLabel = loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'));
+                                $ninDone = !empty($loan['assess_nin_verified_at']);
+                            ?>
+                            <label class="form-label fs-sm">Amount to offer <span class="text-muted">(term: <?= h($termLabel) ?>)</span></label>
+                            <div class="mb-2">
+                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="requested" checked
+                                    data-amount="<?= (int)$reqAmount ?>"> Applicant's request: <strong><?= money($reqAmount) ?></strong></label>
+                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="system"
+                                    data-amount="<?= (int)$sysAmount ?>" <?= $sysAmount <= 0 ? 'disabled' : '' ?>> System-calculated: <strong><?= money($sysAmount) ?></strong></label>
+                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="custom"> Custom amount:</label>
+                                <input type="number" name="custom_amount" class="form-control form-control-sm mt-1" min="10000" step="1000"
+                                       placeholder="e.g. 300000" style="max-width:220px">
+                            </div>
+                            <div class="fs-xs text-muted mb-3">
+                                The client sees this offer in the app and accepts or rejects it. A processing fee of
+                                <?= money(loan_processing_fee($conn)) ?> is taken from the payout; repayments are on the full amount.
+                            </div>
+
+                            <?php if ($ninDone): ?>
+                                <div class="fs-sm mb-3 text-success"><i class="fas fa-id-card"></i>
+                                    NIN <?= h($loan['assess_nin'] ?? '') ?> verified <?= h(date('j M Y', strtotime((string)$loan['assess_nin_verified_at']))) ?><?= !empty($loan['assess_nin_ref']) ? ' (ref ' . h($loan['assess_nin_ref']) . ')' : '' ?>.
+                                </div>
+                            <?php else: ?>
+                                <div class="mb-3 p-2" style="background:#fff8e6;border-radius:8px">
+                                    <label class="fs-sm d-block"><input type="checkbox" name="nin_verified" value="1" required>
+                                        I checked NIN <strong><?= h($loan['assess_nin'] ?? '-') ?></strong> on Laboremus STREAMLINE Flex and it matches this applicant.</label>
+                                    <input type="text" name="nin_reference" class="form-control form-control-sm mt-1" maxlength="100"
+                                           placeholder="Check reference (optional)" style="max-width:260px">
+                                    <div class="fs-xs text-muted mt-1">Each check costs UGX 1,000. It is only needed once per client.</div>
+                                </div>
+                            <?php endif; ?>
+                            <?php endif; ?>
 
                             <label class="form-label fs-sm">Reviewer comments (optional)</label>
                             <textarea name="comments" class="form-control mb-3" rows="3"
@@ -1178,8 +1226,8 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
                             <div class="d-flex justify-content-end">
                                 <button type="submit" class="btn btn-success btn-sm"
-                                        onclick="return confirm('Approve this loan application?')">
-                                    Confirm Approval
+                                        onclick="return confirm('<?= $clientType === 'customer' ? 'Send this offer to the applicant?' : 'Approve this loan application?' ?>')">
+                                    <?= $clientType === 'customer' ? 'Send Offer' : 'Confirm Approval' ?>
                                 </button>
                             </div>
                         </form>
@@ -1298,6 +1346,12 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 <?php endif; ?>
 
 <script>
+document.querySelectorAll('.offer-form input[name="custom_amount"]').forEach(input => {
+    input.addEventListener('input', () => {
+        const radio = input.form.querySelector('input[name="offer_choice"][value="custom"]');
+        if (radio) radio.checked = true;
+    });
+});
 document.addEventListener('click', function (e) {
     var toggleBtn = e.target.closest('.review-toggle-btn');
     if (toggleBtn) {
@@ -1353,7 +1407,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function updateAction() {
         const val = action.value;
-        const enabled = {reason: val === 'reject', info: val === 'request_info', officer: val === 'request_info', delete_reason: val === 'delete'};
+        const enabled = {reason: val === 'reject', info: val === 'request_info', officer: val === 'request_info', delete_reason: val === 'delete', nin: val === 'approve'};
         fields.hidden = !val;
         Object.entries(enabled).forEach(([name, active]) => {
             const group = fields.querySelector(`[data-bulk-field="${name}"]`);
@@ -1361,7 +1415,7 @@ document.addEventListener('DOMContentLoaded', function () {
             group.hidden = !active;
             group.querySelectorAll('textarea,select,input').forEach(control => {
                 control.disabled = !active;
-                control.required = active;
+                control.required = active && name !== 'nin';
             });
         });
         updateSelection();

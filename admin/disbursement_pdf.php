@@ -11,6 +11,8 @@ require "db.php";
 // masterminds/html5, thecodingmachine/safe - can be added as local "path"
 // repositories in composer.json instead of pulling from packagist.org.)
 require_once __DIR__ . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/includes/loan_offers.php';
+loan_offers_ensure_schema($conn);
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -184,13 +186,16 @@ $html = '
         ' . rowHtml('Loan ID:', '#' . (int)$loan['id']) . '
         ' . rowHtml('Principal Amount:', moneyPdf($loan['amount'] ?? 0)) . '
         ' . rowHtml('Interest Rate:', (string)($loan['interest_rate'] ?? 'N/A') . '%') . '
-        ' . rowHtml('Loan Period:', (int)($loan['loan_period'] ?? 0) . ' month(s)') . '
+        ' . rowHtml('Loan Period:', loan_term_label((int)($loan['loan_period'] ?? 0), (string)($loan['loan_period_unit'] ?? 'month'))) . '
         ' . rowHtml('Due Date:', $dueDateLabel) . '
     </table>
 
     <div class="section-title">Disbursement Details</div>
     <table class="info">
         ' . rowHtml('Disbursed On:', $disbursedOnLabel) . '
+        ' . ($loan['processing_fee'] !== null && (float)$loan['processing_fee'] > 0
+            ? rowHtml('Processing Fee:', moneyPdf($loan['processing_fee'])) . rowHtml('Amount Sent:', moneyPdf($loan['net_disbursement'] ?? ((float)$loan['amount'] - (float)$loan['processing_fee'])))
+            : '') . '
         ' . rowHtml('Method:', methodLabelPdf($loan['disbursement_method'] ?? null)) . '
         ' . rowHtml('Reference #:', (string)($loan['disbursement_reference'] ?? 'N/A')) . '
         ' . rowHtml('Disbursed By:', $disbursedByName) . '
