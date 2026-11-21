@@ -11,6 +11,7 @@ uploads/
 **/signatures/
 # Client supporting documents (served via clients/document.php, admin/client_document.php)
 storage/client_documents/
+storage/staff_documents/
 
 # Quarantined legacy/malicious PHP artifacts found under static-content paths
 **/cgi-bin/

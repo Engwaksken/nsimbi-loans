@@ -95,6 +95,30 @@ try {
 } catch (Throwable $ignored) {
   // Table appears with the first credit document upload.
 }
+// Staff HR: admins review; everyone with a staff profile submits monthly.
+$hr_review_count = 0;
+$hr_my_due = 0;
+try {
+  require_once dirname(__DIR__) . '/includes/staff_hr.php';
+  if ((int)$role === 1) {
+    $hr_review_count = hr_pending_review_count($conn);
+  }
+  $hr_my_profile = $admin_id ? hr_profile_for_user($conn, (int)$admin_id) : null;
+  if ($hr_my_profile) {
+    $hr_my_due = hr_my_due_count($conn, $hr_my_profile);
+  }
+} catch (Throwable $ignored) {
+  // Staff HR tables are created on first use.
+}
+$hrLinks = (int)$role === 1
+  ? [
+      ['hr_staff.php', 'fa-id-badge', 'Staff Profiles', 0, '', ['hr_staff_profile.php']],
+      ['hr_submissions.php', 'fa-calendar-check', 'Monthly Submissions', $hr_review_count, 'red', ['hr_review.php']],
+      ['my_staff_portal.php', 'fa-clipboard-list', 'My Staff Portal', $hr_my_due, 'red'],
+    ]
+  : [
+      ['my_staff_portal.php', 'fa-clipboard-list', 'My Staff Portal', $hr_my_due, 'red'],
+    ];
 // [label, [[href, icon, text, badge, badge class, other pages that mark it active]]]
 $navSections = [
   'loans' => ['Loans', [
@@ -113,6 +137,7 @@ $navSections = [
     ['startups.php', 'fa-building', 'Startups'],
     ['users.php', 'fa-user-shield', 'Users'],
   ]],
+  'staffhr' => ['Staff HR', $hrLinks],
   'finance' => ['Finance', [
     ['loan_payments.php', 'fa-money-bill-wave', 'Payments'],
     ['income_expenses.php', 'fa-chart-bar', 'Income & Expenses'],
