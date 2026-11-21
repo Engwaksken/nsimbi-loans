@@ -1383,7 +1383,7 @@ function uploadCreditEvidence(mysqli $conn, array $user, array $input): void
     ]);
 }
 
-/** The client's credit documents and how their score is made up. */
+/** The client's credit documents, score and loan limit. */
 function getCreditEvidence(mysqli $conn, array $user): void
 {
     $userId = (int)$user["sub"];
@@ -1412,11 +1412,9 @@ function getCreditEvidence(mysqli $conn, array $user): void
                 : "",
             "document_types" => $types,
             "documents" => $docs,
-            "components" => $profile ? array_values(array_map(
-                static fn($k, $v) => ["key" => $k, "label" => $v["label"], "score" => $v["score"], "weight" => round($v["weight"], 2), "from_document" => $v["from_evidence"], "note" => (string)($v["note"] ?? "")],
-                array_keys($profile["components"]),
-                $profile["components"]
-            )) : [],
+            // The score breakdown (components and weights) is for staff only.
+            // Kept as an empty list so older app versions still parse the response.
+            "components" => [],
         ],
     ]);
 }
