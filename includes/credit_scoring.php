@@ -805,7 +805,9 @@ function credit_documentation_assess(mysqli $conn, int $userId): array
         $c = $stmt->get_result()->fetch_assoc() ?: [];
         $stmt->close();
         foreach ($items as $key => [, , $col]) {
-            if (trim((string)($c[$col] ?? '')) !== '') {
+            // "0" was saved by an old admin add/import bug when there was no file.
+            $file = trim((string)($c[$col] ?? ''));
+            if ($file !== '' && $file !== '0') {
                 $have[$key] = true;
             }
         }

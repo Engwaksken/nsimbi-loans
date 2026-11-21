@@ -95,6 +95,12 @@ try {
 } catch (Throwable $ignored) {
   // Table appears with the first credit document upload.
 }
+$bt_unscored = 0;
+try {
+  require_once dirname(__DIR__) . '/includes/business_types.php';
+  $bt_unscored = bt_unscored_count($conn);
+} catch (Throwable $ignored) {
+}
 // Staff HR: admins review; everyone with a staff profile submits monthly.
 $hr_review_count = 0;
 $hr_my_due = 0;
@@ -157,6 +163,7 @@ $navSections = [
     ['ai_settings.php', 'fa-microchip', 'AI Settings'],
     ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
     ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
+    ['business_types.php', 'fa-tags', 'Business Types', $bt_unscored, ''],
     ['profile.php', 'fa-user-circle', 'My Profile'],
   ]],
 ];

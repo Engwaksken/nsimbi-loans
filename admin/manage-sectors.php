@@ -1,6 +1,62 @@
 <?php
 declare(strict_types=1);
 
+/*
+ * System > Manage Sectors: the business sector scores used in credit scoring
+ * (0-10, higher = a safer business to lend to). Credit scoring uses this
+ * table only after an admin switches it on below; until then it uses the
+ * built-in list in includes/loan_assessment.php. See includes/sector_scores.php.
+ */
+
+require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+require_once dirname(__DIR__) . '/includes/sector_scores.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$canEditSectors = (int)($_SESSION['role'] ?? 0) === 1;
+if (empty($_SESSION['sector_csrf'])) {
+    $_SESSION['sector_csrf'] = bin2hex(random_bytes(32));
+}
+$sectorCsrf = (string)$_SESSION['sector_csrf'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sector_source'])) {
+    $msg = ['', 'success'];
+    if (!$canEditSectors) {
+        $msg = ['Only reviewers can change where sector scores come from.', 'error'];
+    } elseif (!hash_equals($sectorCsrf, (string)($_POST['csrf_token'] ?? ''))) {
+        $msg = ['Your session expired. Please try again.', 'error'];
+    } else {
+        try {
+            switch ((string)$_POST['sector_source']) {
+                case 'copy_and_use':
+                    $n = sector_copy_builtin($conn);
+                    sector_set_use_table($conn, true);
+                    $msg = ['Credit scoring now uses this table. ' . $n . " sector(s) were added or set to the scores in use, so no client's score changed.", 'success'];
+                    break;
+                case 'use_as_is':
+                    sector_set_use_table($conn, true);
+                    $msg = ['Credit scoring now uses this table as it is. Use Recalculate Loan Limits to update saved scores and limits.', 'success'];
+                    break;
+                case 'stop':
+                    sector_set_use_table($conn, false);
+                    $msg = ['Credit scoring is back on the built-in list.', 'success'];
+                    break;
+            }
+        } catch (Throwable $e) {
+            error_log('Sector source: ' . $e->getMessage());
+            $msg = ['Could not change it: ' . $e->getMessage(), 'error'];
+        }
+    }
+    $_SESSION['sector_flash'] = $msg;
+    header('Location: manage-sectors.php', true, 303);
+    exit;
+}
+$sectorFromTable = sector_use_table($conn);
+$sectorDiffs = sector_differences($conn);
+[$sectorFlash, $sectorFlashType] = $_SESSION['sector_flash'] ?? ['', ''];
+unset($_SESSION['sector_flash']);
+
 require "nav-head.php";
 
 if (!isset($conn)) {
@@ -14,10 +70,10 @@ function h($value): string
 
 function riskBadgeClass(float $score): string
 {
-    if ($score >= 8) return 'badge-danger';
+    // Higher = a safer business to lend to.
+    if ($score >= 7) return 'badge-success';
     if ($score >= 5) return 'badge-warning';
-    if ($score >= 1) return 'badge-primary';
-    return 'badge-muted';
+    return 'badge-danger';
 }
 
 $sectors = [];
@@ -51,7 +107,7 @@ foreach ($sectors as $sector) {
     $score = (float)($sector['score'] ?? 0);
     $totalScore += $score;
 
-    if ($score >= 8) {
+    if ($score >= 7) {
         $highRisk++;
     } elseif ($score >= 5) {
         $mediumRisk++;
@@ -376,6 +432,12 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
         width: 100%;
     }
 }
+.sector-source { border-radius: 12px; padding: .85rem 1rem; margin-bottom: 1rem; font-size: .88rem; }
+.sector-source.off { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+.sector-source.on { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; }
+.sector-source-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .7rem; }
+.sector-diff table { font-size: .82rem; border-collapse: collapse; }
+.sector-diff th, .sector-diff td { padding: .2rem .8rem .2rem 0; text-align: left; }
 </style>
 
 <div class="container-fluid py-4 sector-page">
@@ -389,6 +451,55 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
         <button class="btn btn-primary" type="button" id="addSectorBtn">
             <i class="fas fa-plus me-1"></i> Add Sector
         </button>
+    </div>
+
+    <?php if ($sectorFlash !== ''): ?>
+        <div class="sector-source <?= $sectorFlashType === 'error' ? 'off' : 'on' ?>" role="status"><?= h($sectorFlash) ?></div>
+    <?php endif; ?>
+
+    <div class="sector-source <?= $sectorFromTable ? 'on' : 'off' ?>">
+        <?php if ($sectorFromTable): ?>
+            <strong><i class="fas fa-check-circle me-1"></i>Credit scoring uses this table.</strong>
+            Changes here change clients' scores and loan recommendations straight away. Saved scores and limits update the next time they are recalculated (Recalculate Loan Limits).
+        <?php else: ?>
+            <strong><i class="fas fa-info-circle me-1"></i>Credit scoring does not use this table yet.</strong>
+            It uses a built-in list of <?= count(LOAN_ASSESSMENT_SCORES) ?> sectors, so editing here has no effect until you switch it on.
+            <?php if ($sectorDiffs): ?>
+                <div class="sector-diff">
+                    <div class="mt-2 mb-1">Where this table and the scores in use differ:</div>
+                    <table>
+                        <thead><tr><th>Sector</th><th>In this table</th><th>In use now</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($sectorDiffs as $d): ?>
+                            <tr>
+                                <td><?= h($d['name']) ?></td>
+                                <td><?= $d['table'] !== null ? h(number_format($d['table'], 1)) : '<em>missing</em>' ?></td>
+                                <td><?= $d['builtin'] !== null ? h(number_format($d['builtin'], 1)) : '<em>not used (scores ' . (int)LOAN_ASSESSMENT_DEFAULT_SCORE . ')</em>' ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="mt-1">This table matches the scores in use.</div>
+            <?php endif; ?>
+        <?php endif; ?>
+        <?php if ($canEditSectors): ?>
+            <form method="post" class="sector-source-actions">
+                <input type="hidden" name="csrf_token" value="<?= h($sectorCsrf) ?>">
+                <?php if ($sectorFromTable): ?>
+                    <button class="btn btn-sm btn-secondary" name="sector_source" value="stop" type="submit"
+                        onclick="return confirm('Go back to the built-in list? Scores from this table will stop counting.');">Stop using this table</button>
+                <?php else: ?>
+                    <button class="btn btn-sm btn-primary" name="sector_source" value="copy_and_use" type="submit"
+                        onclick="return confirm('Copy the scores in use into this table and start using it? No client score changes.');"><i class="fas fa-copy me-1"></i>Copy the scores in use here and switch on</button>
+                    <?php if ($sectorDiffs): ?>
+                        <button class="btn btn-sm btn-secondary" name="sector_source" value="use_as_is" type="submit"
+                            onclick="return confirm('Use this table as it is? Clients in the sectors listed above will get different scores.');">Use this table as it is</button>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </form>
+        <?php endif; ?>
     </div>
 
     <div class="sector-stats-grid">
@@ -407,7 +518,7 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
         <div class="sector-stat-card danger">
             <div class="sector-stat-flex">
                 <div>
-                    <p class="sector-stat-label">High Risk</p>
+                    <p class="sector-stat-label">Strong (7+)</p>
                     <h4 class="sector-stat-value"><?= number_format($highRisk) ?></h4>
                 </div>
                 <div class="sector-stat-icon">
@@ -419,7 +530,7 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
         <div class="sector-stat-card warning">
             <div class="sector-stat-flex">
                 <div>
-                    <p class="sector-stat-label">Medium Risk</p>
+                    <p class="sector-stat-label">Average (5-6.9)</p>
                     <h4 class="sector-stat-value"><?= number_format($mediumRisk) ?></h4>
                 </div>
                 <div class="sector-stat-icon">
@@ -444,8 +555,8 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
     <div class="sector-card">
         <div class="sector-card-header">
             <div>
-                <h5 class="sector-card-title">Sector Risk Scores</h5>
-                <p class="sector-card-sub">Create, edit, and delete sector scoring values.</p>
+                <h5 class="sector-card-title">Sector Scores</h5>
+                <p class="sector-card-sub">Higher means a safer business to lend to. A client's business type is matched to these names; anything else scores <?= (int)LOAN_ASSESSMENT_DEFAULT_SCORE ?>.</p>
             </div>
 
             <div class="sector-toolbar">
@@ -463,8 +574,8 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
                 <tr>
                     <th>#</th>
                     <th>Sector Name</th>
-                    <th>Risk Score</th>
-                    <th>Risk Level</th>
+                    <th>Score</th>
+                    <th>Rating</th>
                     <th class="text-center">Actions</th>
                 </tr>
                 </thead>
@@ -478,8 +589,8 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
                         $score = (float)($sector['score'] ?? 0);
                         $scorePercent = max(0, min(100, $score * 10));
                         $riskClass = riskBadgeClass($score);
-                        $barClass = $score >= 8 ? 'danger' : ($score >= 5 ? 'warning' : '');
-                        $riskLabel = $score >= 8 ? 'High' : ($score >= 5 ? 'Medium' : 'Low');
+                        $barClass = $score >= 7 ? '' : ($score >= 5 ? 'warning' : 'danger');
+                        $riskLabel = $score >= 7 ? 'Strong' : ($score >= 5 ? 'Average' : 'Weak');
                         ?>
                         <tr>
                             <td><?= number_format($index + 1) ?></td>
@@ -500,7 +611,7 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
 
                             <td>
                                 <span class="badge <?= h($riskClass) ?>">
-                                    <?= h($riskLabel) ?> Risk
+                                    <?= h($riskLabel) ?>
                                 </span>
                             </td>
 
@@ -561,7 +672,7 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
                 </div>
 
                 <div class="mb-3">
-                    <label class="sector-form-label">Risk Score</label>
+                    <label class="sector-form-label">Score</label>
                     <input type="number"
                            class="sector-form-control"
                            id="sectorScore"
@@ -569,7 +680,7 @@ $avgScore = $totalSectors > 0 ? $totalScore / $totalSectors : 0;
                            min="0"
                            max="10"
                            required>
-                    <small class="text-muted">Enter value from 0 to 10.</small>
+                    <small class="text-muted">0 to 10. Higher means a safer business to lend to.</small>
                 </div>
             </form>
         </div>
@@ -706,7 +817,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (Number.isNaN(score) || score < 0 || score > 10) {
-            showAlert(sectorFormAlert, 'Risk score must be between 0 and 10.');
+            showAlert(sectorFormAlert, 'Score must be between 0 and 10.');
             return;
         }
 

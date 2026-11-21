@@ -733,7 +733,11 @@ $docTypes = client_doc_types();
 
                             <div class="form-group">
                                 <label class="form-label">Business Type</label>
-                                <input type="text" class="form-control" name="business_type" value="<?= h($client['business_type'] ?? '') ?>">
+                                <input type="text" class="form-control" name="business_type" list="btScored" value="<?= h($client['business_type'] ?? '') ?>">
+                                <?php require_once dirname(__DIR__) . '/includes/business_types.php'; ?>
+                                <datalist id="btScored"><?php foreach (array_keys(loan_assessment_scores()) as $btName): ?><option value="<?= h($btName) ?>"><?php endforeach; ?></datalist>
+                                <?php $btNote = bt_warning((string)($client['business_type'] ?? '')); ?>
+                                <?php if ($btNote !== ''): ?><small style="color:#b45309;display:block;margin-top:.25rem"><?= h(str_replace(' Fix it under System > Business Types.', '', $btNote)) ?></small><?php endif; ?>
                             </div>
 
                             <div class="form-group">

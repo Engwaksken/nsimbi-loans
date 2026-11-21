@@ -11,12 +11,12 @@ function formatPhone(string $phone): string
     return $phone;
 }
 
-function creditScore(string $type): int
+function creditScore(string $type): float
 {
     // One scoring table for website, admin, import and the loan pages.
     // Business types not in the table get the default score of 3.
     require_once dirname(__DIR__) . '/includes/loan_assessment.php';
-    return loan_assessment_business_score($type)[0];
+    return (float)loan_assessment_business_score($type)[0];
 }
 
 function parseAmountRange(string $str): float

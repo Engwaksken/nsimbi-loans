@@ -41,15 +41,40 @@ if (!function_exists('loan_assessment')) {
     /** Score for anything not in the table ("Other", blank, free text). Conservative. */
     define('LOAN_ASSESSMENT_DEFAULT_SCORE', 3);
 
+    /**
+     * Sector scores in use: the Manage Sectors table once an admin has switched
+     * it on there (includes/sector_scores.php), otherwise the built-in list.
+     * @return array<string, int|float>
+     */
+    function loan_assessment_scores(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        $cache = LOAN_ASSESSMENT_SCORES;
+        if (function_exists('credit_db') && ($db = credit_db()) !== null) {
+            require_once __DIR__ . '/sector_scores.php';
+            if (sector_use_table($db)) {
+                $table = sector_table_scores($db);
+                if ($table) {
+                    $cache = $table;
+                }
+            }
+        }
+        return $cache;
+    }
+
     function loan_assessment_business_score(string $type): array
     {
+        $scores = loan_assessment_scores();
         $type = trim($type);
         if ($type === '') {
             return [LOAN_ASSESSMENT_DEFAULT_SCORE, null];
         }
 
         // 1. Exact name (any case).
-        foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
+        foreach ($scores as $name => $score) {
             if (strcasecmp($type, $name) === 0) {
                 return [$score, $name];
             }
@@ -58,14 +83,14 @@ if (!function_exists('loan_assessment')) {
         // 2. Longest table name found inside the type, so "Poultry Farming"
         //    matches "Poultry" (4), not "Farming" (5).
         $best = null;
-        foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
+        foreach ($scores as $name => $score) {
             if (stripos($type, $name) !== false && ($best === null || strlen($name) > strlen($best))) {
                 $best = $name;
             }
         }
         if ($best === null && strlen($type) >= 4) {
             // 3. A shortened type such as "Retail" or "Healthc".
-            foreach (LOAN_ASSESSMENT_SCORES as $name => $score) {
+            foreach ($scores as $name => $score) {
                 if (stripos($name, $type) !== false) {
                     $best = $name;
                     break;
@@ -73,7 +98,7 @@ if (!function_exists('loan_assessment')) {
             }
         }
         if ($best !== null) {
-            return [LOAN_ASSESSMENT_SCORES[$best], $best];
+            return [$scores[$best], $best];
         }
 
         // Not in the table: default score.

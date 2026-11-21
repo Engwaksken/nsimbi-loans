@@ -294,7 +294,9 @@ function importClientRow(mysqli $conn, array $data, array $requiredCols): string
         if (!$stmt) throw new RuntimeException('Prepare customer: ' . $conn->error);
 
         $stmt->bind_param(
-            'isssssssssssssddssssssdiss',
+            // user_id | text columns up to stock | amount_last, amount_this | license, next of kin, period
+        // | loan_limit, password, credit_score, signature
+        'i' . str_repeat('s', 14) . 'dd' . 'sssss' . 'dsds',
             $user_id,
             $gender, $dob, $nin,
             $id_front, $id_back,
@@ -313,6 +315,9 @@ function importClientRow(mysqli $conn, array $data, array $requiredCols): string
         $extras = [];
         if ($generatedUsername) $extras[] = "username: {$username}";
         if ($generatedPassword) $extras[] = "temp password: {$password}";
+        require_once dirname(__DIR__) . '/includes/business_types.php';
+        $typeWarning = bt_warning((string)$business_type);
+        if ($typeWarning !== '') $extras[] = $typeWarning;
         $extraNote = $extras ? ' (' . implode(', ', $extras) . ')' : '';
 
         return 'Imported - loan limit UGX ' . number_format($loan_limit) . ', credit score ' . $credit_score . '.' . $extraNote;
