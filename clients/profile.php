@@ -595,17 +595,7 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
             </div>
 
             <?php if ($credit_profile): ?>
-                <h4 class="pf-subhead"><i class="fas fa-balance-scale"></i> What makes up your score</h4>
-                <div class="cr-parts">
-                    <?php foreach ($credit_profile['components'] as $comp): ?>
-                        <?php if ($comp['weight'] <= 0) continue; ?>
-                        <div class="cr-part">
-                            <div class="cr-part-top"><span><?= esc($comp['label']); ?></span><strong><?= esc(number_format($comp['score'], 1)); ?></strong></div>
-                            <div class="cr-bar"><div style="width:<?= (int)round($comp['score'] * 10); ?>%"></div></div>
-                            <div class="cr-part-sub">Counts for <?= (int)round($comp['weight'] * 100); ?>%<?= ($comp['note'] ?? '') !== '' ? ' | ' . esc($comp['note']) : ''; ?></div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
+                <?php // The score breakdown (components and weights) is for staff only. ?>
                 <?php if (($credit_profile['repayment_factor'] ?? 1) < 1): ?>
                     <div class="cr-part-sub" style="margin-top:.6rem">
                         Your loan limit is lower than usual because of late or missed repayments.

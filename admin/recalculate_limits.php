@@ -153,6 +153,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!hash_equals($csrf, $postedCsrf)) {
         $_SESSION['message'] = 'Your session expired. Please try again.';
         $_SESSION['message_type'] = 'error';
+    } elseif (($_POST['action'] ?? '') === 'fix_scores') {
+        // Only the score: hand-set loan limits stay as they are.
+        $fixed = 0;
+        $stmt = $conn->prepare('UPDATE customers SET credit_score = ? WHERE user_id = ? AND (credit_score IS NULL OR credit_score = 0)');
+        foreach (rl_load($conn) as $r) {
+            if ($r['saved_score'] !== null && $r['saved_score'] > 0) {
+                continue;
+            }
+            $score = round((float)$r['calc']['score'], 1);
+            $uid = (int)$r['user_id'];
+            if ($score <= 0) {
+                continue;
+            }
+            $stmt->bind_param('di', $score, $uid);
+            $stmt->execute();
+            $fixed += $stmt->affected_rows;
+        }
+        $stmt->close();
+        $_SESSION['message'] = $fixed > 0
+            ? "Saved a credit score for {$fixed} client" . ($fixed === 1 ? '' : 's') . '. Their loan limits were not changed.'
+            : 'Every client already has a credit score.';
+        $_SESSION['message_type'] = $fixed > 0 ? 'success' : 'error';
     } elseif ($tab === 'noturnover') {
         $_SESSION['message'] = 'Clients without turnover cannot be recalculated. Add their turnover first.';
         $_SESSION['message_type'] = 'error';
@@ -172,9 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 continue; // never write a 0 limit
             }
             $limit = (float)$r['calc']['limit'];
-            $score = (int)$r['calc']['score'];
+            $score = round((float)$r['calc']['score'], 1);
             $uid = (int)$r['user_id'];
-            $stmt->bind_param('dii', $limit, $score, $uid);
+            $stmt->bind_param('ddi', $limit, $score, $uid);
             if ($stmt->execute()) {
                 $updated++;
             }
@@ -198,6 +220,7 @@ foreach ($rows as $r) {
         $counts[$r['tab']]++;
     }
 }
+$missingScores = count(array_filter(rl_load($conn), static fn($r) => $r['saved_score'] === null || $r['saved_score'] <= 0));
 $tabRows = array_values(array_filter($rows, static fn($r) => $r['tab'] === $tab));
 $total = count($tabRows);
 $totalPages = max(1, (int)ceil($total / $perPage));
@@ -262,6 +285,22 @@ require "nav-head.php";
             Business types not in the scoring table score 3.
         </p>
     </div>
+
+    <?php if ($missingScores > 0): ?>
+        <div class="rl-card" style="border-color:#fde68a;background:#fffbeb">
+            <h5><i class="fas fa-exclamation-triangle me-2" style="color:#b45309"></i><?= number_format($missingScores) ?> client<?= $missingScores === 1 ? ' has' : 's have' ?> no credit score saved (it shows as 0/10)</h5>
+            <p class="text-muted">This saves each one's current score from their business type, documents and repayment history. Their loan limits are not changed.</p>
+            <?php if ($canApply): ?>
+                <form method="post" onsubmit="return confirm('Save a credit score for <?= (int)$missingScores ?> client(s)? Loan limits will not change.');">
+                    <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+                    <input type="hidden" name="action" value="fix_scores">
+                    <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-wrench me-1"></i>Fix missing scores</button>
+                </form>
+            <?php else: ?>
+                <p class="text-muted mb-0">Only reviewers can apply changes.</p>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
     <div class="rl-card">
         <nav class="rl-tabs" aria-label="Limit groups">
