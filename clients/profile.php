@@ -606,6 +606,12 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if (($credit_profile['repayment_factor'] ?? 1) < 1): ?>
+                    <div class="cr-part-sub" style="margin-top:.6rem">
+                        Your loan limit is lower than usual because of late or missed repayments.
+                        Paying your next loans on time brings it back to the full amount.
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
             <h4 class="pf-subhead"><i class="fas fa-upload"></i> Upload a document</h4>

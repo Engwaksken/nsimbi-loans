@@ -56,7 +56,9 @@ declare(strict_types=1);
  *
  * Loan limit: average monthly income + average x (score / 10), where the
  * income is the verified income from approved statements/records when there is
- * any, otherwise the turnover the client declared.
+ * any, otherwise the turnover the client declared. A repayment score below 7
+ * cuts the limit in proportion (repayment 3.5 = half), down to at least 10% of
+ * monthly income. Clients with no repaid loans yet are not cut.
  */
 
 require_once __DIR__ . '/loan_assessment.php';
@@ -69,6 +71,10 @@ const CREDIT_EVIDENCE_DAILY_LIMIT = 10;
 const CREDIT_UTILITY_MONTHS = 6;
 const CREDIT_AUTO_DEFAULT_CAP = 2000000;
 const CREDIT_RETENTION_DEFAULT_MONTHS = 12;
+/** Repayment score needed for the full loan limit; below it the limit shrinks in proportion. */
+const CREDIT_REPAYMENT_FULL_LIMIT = 7.0;
+/** Lowest limit, as a share of monthly income (must stay above 0: 0 means "no limit"). */
+const CREDIT_LIMIT_FLOOR = 0.10;
 const CREDIT_CLEANUP_STATUSES = ['rejected', 'ignored'];
 
 /** Thrown when a client uploads a file they already uploaded. */
@@ -1092,9 +1098,31 @@ function credit_profile_compute(mysqli $conn, string $businessType, $amountLast,
     $verified = $incomes ? array_sum($incomes) / count($incomes) : 0.0;
     $used = $verified > 0 ? $verified : $declared;
 
+    // A poor repayment record cuts the limit: below CREDIT_REPAYMENT_FULL_LIMIT
+    // the limit shrinks in proportion, never below CREDIT_LIMIT_FLOOR x income.
+    // The floor stays above 0 because 0 means "no limit" across the system.
+    $repScore = $assessed['repaymentHistory'][0] ?? null;
+    $factor = $repScore === null ? 1.0 : min(1.0, max(0.0, (float)$repScore) / CREDIT_REPAYMENT_FULL_LIMIT);
+    $limit = 0.0;
+    $limitNote = '';
+    if ($used > 0) {
+        $full = $used + $used * $score / 10;
+        $limit = round($full);
+        if ($factor < 1) {
+            // Round a reduced limit down to the nearest UGX 1,000.
+            $limit = max(1000.0, floor(max($full * $factor, $used * CREDIT_LIMIT_FLOOR) / 1000) * 1000);
+            $limitNote = 'Limit cut to ' . (int)round(100 * $limit / $full) . '% of UGX ' . number_format($full)
+                . ' because the repayment record is ' . credit_fmt((float)$repScore) . '/10 (full limit needs '
+                . credit_fmt(CREDIT_REPAYMENT_FULL_LIMIT) . ')';
+        }
+    }
+
     return [
         'score'           => $score,
-        'limit'           => $used > 0 ? round($used + $used * $score / 10) : 0.0,
+        'limit'           => $limit,
+        'limit_full'      => $used > 0 ? round($used + $used * $score / 10) : 0.0,
+        'repayment_factor'=> $factor,
+        'limit_note'      => $limitNote,
         'base_score'      => $base,
         'components'      => $components,
         'verified_income' => round($verified),

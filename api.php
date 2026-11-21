@@ -1406,6 +1406,10 @@ function getCreditEvidence(mysqli $conn, array $user): void
         "data" => [
             "credit_score" => (float)($c["credit_score"] ?? 0),
             "loan_limit" => (float)($c["loan_limit"] ?? 0),
+            "limit_reduced" => $profile !== null && $profile["repayment_factor"] < 1,
+            "limit_note" => $profile !== null && $profile["repayment_factor"] < 1
+                ? "Your loan limit is lower than usual because of late or missed repayments. Paying your next loans on time brings it back to the full amount."
+                : "",
             "document_types" => $types,
             "documents" => $docs,
             "components" => $profile ? array_values(array_map(

@@ -343,7 +343,9 @@ require "nav-head.php";
                                 <td><?= $r['saved_score'] !== null ? h(loan_assessment_num($r['saved_score'])) : 'None' ?> / <?= (int)$r['calc']['score'] ?></td>
                                 <td class="<?= $tab === 'higher' ? 'rl-up' : ($tab === 'lower' ? 'rl-down' : '') ?>"><?= rl_money($r['saved_limit']) ?></td>
                                 <?php if ($tab !== 'noturnover'): ?>
-                                    <td class="rl-new"><?= rl_money((float)$r['calc']['limit']) ?></td>
+                                    <td class="rl-new"><?= rl_money((float)$r['calc']['limit']) ?>
+                                        <?php if (!empty($r['calc']['limit_note'])): ?><div style="font-size:.75rem;font-weight:500;color:#b45309;max-width:220px"><?= h($r['calc']['limit_note']) ?></div><?php endif; ?>
+                                    </td>
                                 <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>

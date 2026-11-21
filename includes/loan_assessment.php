@@ -203,10 +203,11 @@ if (!function_exists('loan_assessment')) {
         // see includes/credit_scoring.php.
         if ($userId !== null && $userId > 0 && function_exists('credit_profile_compute') && ($db = credit_db()) !== null) {
             $p = credit_profile_compute($db, $businessType, $amountLast, $amountThis, credit_approved_evidence($db, $userId), $userId);
-            if ($p['verified_income'] > 0 || abs($p['score'] - $p['base_score']) >= 0.05) {
+            if ($p['verified_income'] > 0 || abs($p['score'] - $p['base_score']) >= 0.05 || $p['repayment_factor'] < 1) {
                 return [
                     'score'        => $p['score'],
                     'limit'        => $p['limit'],
+                    'limit_note'   => $p['limit_note'],
                     'last'         => $p['income_used'],
                     'this'         => $p['income_used'],
                     'has_turnover' => $p['has_turnover'],
