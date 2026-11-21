@@ -2,16 +2,17 @@
 /**
  * Client-submitted payment (from view_loan.php).
  *
- * Records a PENDING payment with the client's transaction number for staff
- * to confirm. The loan balance is NOT reduced here; staff confirmation does
- * that. The client is always the logged-in user, never a form field.
+ * Records a PENDING payment with the transaction number and the payment slip
+ * for a loan officer to check on admin/payment_slips.php. The loan balance is
+ * NOT reduced here; approving the slip does that. The client is always the
+ * logged-in user, never a form field.
  */
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
 require "db.php";
-require_once __DIR__ . '/../includes/loan_workflow.php';
+require_once __DIR__ . '/../includes/payment_slips.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -44,79 +45,35 @@ $reference  = trim((string)($_POST['rec'] ?? ''));
 if ($loan_id <= 0) {
     back('Loan not specified.');
 }
-if ($amount <= 0) {
-    back('Please enter a valid amount.', 'error', $loan_id);
-}
 if ($reference === '' || strlen($reference) > 100) {
     back('Please enter the transaction number from your payment.', 'error', $loan_id);
 }
 
+$slip = $_FILES['slip'] ?? null;
+if (!is_array($slip) || (int)($slip['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+    back('Please attach your payment slip.', 'error', $loan_id);
+}
+if ((int)$slip['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string)$slip['tmp_name'])) {
+    back('The payment slip did not upload. Please try again (max 5 MB).', 'error', $loan_id);
+}
+
 try {
-    $stmt = $conn->prepare("SELECT id, status, loan_balance FROM loan WHERE id = ? AND client_id = ? LIMIT 1");
-    $stmt->bind_param("ii", $loan_id, $user_id);
-    $stmt->execute();
-    $loan = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if (!$loan) {
-        back('Loan not found.');
-    }
-    if (!in_array(strtoupper((string)$loan['status']), ['OUTSTANDING', 'OVERDUE'], true)) {
-        back('Payments can only be made on outstanding or overdue loans.', 'error', $loan_id);
-    }
-    if ($amount > (float)$loan['loan_balance']) {
-        back('Amount is more than your balance of UGX ' . number_format((float)$loan['loan_balance'], 2) . '.', 'error', $loan_id);
-    }
-
-    $ref_col = loan_table_has_column($conn, 'payments', 'transaction_reference') ? 'transaction_reference'
-        : (loan_table_has_column($conn, 'payments', 'reference') ? 'reference' : null);
-
-    // Reject the same transaction number being submitted twice.
-    if ($ref_col !== null) {
-        $stmt = $conn->prepare("SELECT 1 FROM payments WHERE loan_id = ? AND {$ref_col} = ? LIMIT 1");
-        $stmt->bind_param("is", $loan_id, $reference);
-        $stmt->execute();
-        $duplicate = $stmt->get_result()->num_rows > 0;
-        $stmt->close();
-        if ($duplicate) {
-            back('This transaction number has already been submitted.', 'error', $loan_id);
-        }
-    }
-
-    $status  = 'PENDING';
-    $now     = date('Y-m-d H:i:s');
-    $columns = ['loan_id', 'amount'];
-    $types   = 'id';
-    $values  = [$loan_id, $amount];
-
-    $optional = [
-        'user_id'   => ['i', $user_id],
-        'client_id' => ['i', $user_id],
-        'status'    => ['s', $status],
-        'datetime'  => ['s', $now],
-    ];
-    foreach ($optional as $column => [$type, $value]) {
-        if (loan_table_has_column($conn, 'payments', $column)) {
-            $columns[] = $column;
-            $types    .= $type;
-            $values[]  = $value;
-        }
-    }
-    if ($ref_col !== null) {
-        $columns[] = $ref_col;
-        $types    .= 's';
-        $values[]  = $reference;
-    }
-
-    $stmt = $conn->prepare(
-        "INSERT INTO payments (" . implode(', ', $columns) . ") VALUES (" . implode(', ', array_fill(0, count($columns), '?')) . ")"
+    payment_slip_submit(
+        $conn,
+        $user_id,
+        $loan_id,
+        $amount,
+        (string)($_POST['payment_method'] ?? 'mobile_money'),
+        $reference,
+        (string)file_get_contents((string)$slip['tmp_name']),
+        (string)($slip['name'] ?? ''),
+        'web'
     );
-    $stmt->bind_param($types, ...$values);
-    $stmt->execute();
-    $stmt->close();
-} catch (mysqli_sql_exception $e) {
+} catch (DomainException $e) {
+    back($e->getMessage(), 'error', $loan_id);
+} catch (Throwable $e) {
     error_log('Client payment submit failed: ' . $e->getMessage());
     back('Payment could not be submitted. Please try again.', 'error', $loan_id);
 }
 
-back('Payment submitted. It will reflect once our team confirms it.', 'success', $loan_id);
+back('Payment submitted. A loan officer will check your slip and update your balance.', 'success', $loan_id);

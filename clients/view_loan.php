@@ -186,7 +186,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
                     After paying via Mobile Money or bank, enter the amount and transaction number.
                     It will show as <strong>PENDING</strong> until our team confirms it.
                 </p>
-                <form method="post" action="added_payment.php">
+                <form method="post" action="added_payment.php" enctype="multipart/form-data">
                     <input type="hidden" name="loan" value="<?= (int)$loan['id']; ?>">
                     <div class="form-group">
                         <label class="form-label" for="pay_amount">Amount Paid</label>
@@ -196,6 +196,20 @@ unset($_SESSION['message'], $_SESSION['message_type']);
                     <div class="form-group">
                         <label class="form-label" for="pay_ref">Transaction Number</label>
                         <input type="text" class="form-control" id="pay_ref" name="rec" maxlength="100" placeholder="e.g. MP240312.1234.A56789" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="pay_method">Paid by</label>
+                        <select class="form-control" id="pay_method" name="payment_method">
+                            <option value="mobile_money">Mobile Money</option>
+                            <option value="bank_transfer">Bank deposit / transfer</option>
+                            <option value="cash">Cash at office</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="pay_slip">Payment slip</label>
+                        <input type="file" class="form-control" id="pay_slip" name="slip" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+                        <div class="form-help">Photo or screenshot of the receipt (JPG, PNG or PDF, max 5 MB). A loan officer checks it, then your balance is updated.</div>
                     </div>
                     <button type="submit" class="btn btn-primary w-100"><i class="fas fa-paper-plane"></i> Submit Payment</button>
                 </form>

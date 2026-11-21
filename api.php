@@ -55,6 +55,7 @@ require_once __DIR__ . '/includes/loan_workflow.php';
 require_once __DIR__ . '/includes/auth_lookup.php';
 require_once __DIR__ . '/includes/loan_assessment.php';
 require_once __DIR__ . '/includes/loan_offers.php';
+require_once __DIR__ . '/includes/payment_slips.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -797,6 +798,9 @@ function getClient(mysqli $conn, array $user): void
             "loan_period_unit" => (string)$row["loan_period_unit"],
         ];
     }
+    // Repayments sent with a slip and still waiting for a loan officer.
+    $row["pending_payment_total"] = !empty($row["loan_id"]) ? payment_slip_pending_total($conn, (int)$row["loan_id"]) : 0;
+
     $row["term_label"] = !empty($row["loan_id"])
         ? loan_term_label((int)$row["loan_period"], (string)$row["loan_period_unit"])
         : "";
@@ -1244,144 +1248,63 @@ function respondLoanOffer(mysqli $conn, array $user, array $input): void
 }
 
 /**
- * Pay loan.
+ * Loan repayment with a payment slip (multipart field "slip", or
+ * "slip_base64" + "slip_name"). Creates a PENDING payment; the balance only
+ * changes when a loan officer approves the slip (includes/payment_slips.php).
+ * Older app versions send no slip: their payments also wait for review
+ * instead of reducing the balance straight away.
  */
 function payLoan(mysqli $conn, array $user, array $input): void
 {
     $client_id = (int)$user["sub"];
     $amount = moneyValue($input["amount"] ?? 0);
 
-    if ($amount <= 0) {
-        respond(["status" => "error", "message" => "Invalid payment amount"], 422);
+    $bytes = null;
+    $name = "";
+    $f = $_FILES["slip"] ?? null;
+    if (is_array($f) && (int)($f["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        if ((int)$f["error"] !== UPLOAD_ERR_OK || !is_uploaded_file((string)$f["tmp_name"])) {
+            respond(["status" => "error", "message" => "The payment slip did not upload. Please try again (max 5 MB)."], 422);
+        }
+        $bytes = (string)file_get_contents((string)$f["tmp_name"]);
+        $name = (string)($f["name"] ?? "");
+    } elseif (($b64 = (string)($input["slip_base64"] ?? "")) !== "") {
+        $bytes = base64_decode((string)preg_replace("#^data:[^;]+;base64,#", "", $b64), true);
+        if ($bytes === false) {
+            respond(["status" => "error", "message" => "The payment slip could not be read."], 422);
+        }
+        $name = clean($input["slip_name"] ?? "");
     }
-
-    $conn->begin_transaction();
 
     try {
-        $stmt = $conn->prepare("
-            SELECT id, loan_balance, principal_balance, interest_balance, outstanding_balance
-            FROM loan
-            WHERE client_id = ?
-              AND COALESCE(loan_balance, 0) > 0
-              AND UPPER(COALESCE(status, '')) NOT IN ('CLEARED', 'REJECTED')
-            ORDER BY COALESCE(due_date, datetime) ASC, id ASC
-            LIMIT 1
-            FOR UPDATE
-        ");
-
-        if (!$stmt) {
-            throw new Exception("Loan lookup prepare failed: " . $conn->error);
-        }
-
-        $stmt->bind_param("i", $client_id);
-        $stmt->execute();
-
-        $loan = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
-        if (!$loan) {
-            throw new Exception("No active loan found");
-        }
-
-        $current_balance = (float)$loan["loan_balance"];
-
-        if ($amount > $current_balance) {
-            throw new Exception("Overpayment not allowed. Balance is UGX " . number_format($current_balance));
-        }
-
-        $new_balance = max(0.0, $current_balance - $amount);
-        $new_outstanding = $new_balance;
-
-        $interest_balance = max(0.0, (float)($loan["interest_balance"] ?? 0));
-        $principal_balance = max(0.0, (float)($loan["principal_balance"] ?? 0));
-
-        $remaining_payment = $amount;
-
-        if ($interest_balance > 0) {
-            $interest_paid = min($interest_balance, $remaining_payment);
-            $interest_balance -= $interest_paid;
-            $remaining_payment -= $interest_paid;
-        }
-
-        if ($remaining_payment > 0 && $principal_balance > 0) {
-            $principal_paid = min($principal_balance, $remaining_payment);
-            $principal_balance -= $principal_paid;
-        }
-
-        $stmt = $conn->prepare("
-            UPDATE loan
-            SET loan_balance = ?,
-                outstanding_balance = ?,
-                interest_balance = ?,
-                principal_balance = ?,
-                updated_at = NOW()
-            WHERE id = ?
-        ");
-
-        if (!$stmt) {
-            throw new Exception("Loan update prepare failed: " . $conn->error);
-        }
-
-        $loan_id = (int)$loan["id"];
-        $stmt->bind_param("ddddi", $new_balance, $new_outstanding, $interest_balance, $principal_balance, $loan_id);
-
-        if (!$stmt->execute()) {
-            throw new Exception("Loan update failed: " . $stmt->error);
-        }
-
-        $stmt->close();
-
-        $stmt = $conn->prepare("INSERT INTO payments (amount, loan_id, user_id, status) VALUES (?, ?, ?, 'SUCCESSFUL')");
-
-        if (!$stmt) {
-            throw new Exception("Payment prepare failed: " . $conn->error);
-        }
-
-        $stmt->bind_param("dii", $amount, $loan_id, $client_id);
-
-        if (!$stmt->execute()) {
-            throw new Exception("Payment insert failed: " . $stmt->error);
-        }
-
-        $stmt->close();
-
-        if ($new_balance <= 0) {
-            $stmt = $conn->prepare("
-                UPDATE loan
-                SET status = 'CLEARED',
-                    loan_balance = 0,
-                    outstanding_balance = 0,
-                    principal_balance = 0,
-                    interest_balance = 0,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-
-            if (!$stmt) {
-                throw new Exception("Clear loan prepare failed: " . $conn->error);
-            }
-
-            $stmt->bind_param("i", $loan_id);
-
-            if (!$stmt->execute()) {
-                throw new Exception("Clear loan failed: " . $stmt->error);
-            }
-
-            $stmt->close();
-        }
-
-        $conn->commit();
-
-        respond([
-            "status" => "success",
-            "message" => $new_balance <= 0 ? "Loan fully cleared!" : "Payment recorded",
-            "balance" => $new_balance,
-            "loan_balance" => $new_balance,
-        ]);
+        $r = payment_slip_submit(
+            $conn,
+            $client_id,
+            (int)clean($input["loan_id"] ?? 0),
+            $amount,
+            clean($input["payment_method"] ?? "mobile_money"),
+            clean($input["reference"] ?? $input["transaction_id"] ?? ""),
+            $bytes,
+            $name,
+            "app"
+        );
+    } catch (DomainException $e) {
+        respond(["status" => "error", "message" => $e->getMessage()], 422);
     } catch (Throwable $e) {
-        $conn->rollback();
-        respond(["status" => "error", "message" => $e->getMessage()], 500);
+        error_log("payLoan: " . $e->getMessage());
+        respond(["status" => "error", "message" => "Your payment could not be sent. Please try again."], 500);
     }
+
+    respond([
+        "status" => "success",
+        "message" => "Payment of " . loan_money($r["amount"]) . " sent. A loan officer will check your slip and update your balance.",
+        "payment_status" => "PENDING",
+        "payment_id" => $r["payment_id"],
+        // Balance is unchanged until the slip is approved.
+        "balance" => $r["balance"],
+        "loan_balance" => $r["balance"],
+        "pending_total" => $r["pending_total"],
+    ]);
 }
 
 /**

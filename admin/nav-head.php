@@ -95,6 +95,14 @@ try {
 } catch (Throwable $ignored) {
   // Table appears with the first credit document upload.
 }
+$payment_slips_pending = 0;
+try {
+  require_once dirname(__DIR__) . '/includes/payment_slips.php';
+  if (in_array((int)$role, PAYMENT_SLIP_REVIEW_ROLES, true)) {
+    $payment_slips_pending = payment_slip_pending_count($conn);
+  }
+} catch (Throwable $ignored) {
+}
 $bt_unscored = 0;
 try {
   require_once dirname(__DIR__) . '/includes/business_types.php';
@@ -130,6 +138,7 @@ $navSections = [
   'loans' => ['Loans', [
     ['loans.php', 'fa-file-invoice-dollar', 'All Loans'],
     ['pending_loans.php', 'fa-hourglass-half', 'Pending', (int)$count_pending, 'red'],
+    ['payment_slips.php', 'fa-receipt', 'Payment Slips', $payment_slips_pending, 'red', ['payment_slip_file.php']],
     ['outstanding.php', 'fa-exclamation-circle', 'Outstanding'],
     ['overdue.php', 'fa-clock', 'Overdue'],
     ['cleared.php', 'fa-check-circle', 'Cleared'],

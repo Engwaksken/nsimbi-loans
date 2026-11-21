@@ -513,6 +513,8 @@ if ($openRes) {
                                     <td class="text-center">
                                         <?php if ($status === 'SUCCESSFUL'): ?>
                                             <span class="status-badge status-success">SUCCESSFUL</span>
+                                        <?php elseif ($status === 'PENDING'): ?>
+                                            <a href="payment_slips.php" class="status-badge" style="background:#fff8e6;color:#92400e">PENDING REVIEW</a>
                                         <?php else: ?>
                                             <span class="status-badge status-failed"><?= h($status ?: 'FAILED') ?></span>
                                         <?php endif; ?>
