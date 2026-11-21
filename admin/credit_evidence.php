@@ -54,6 +54,7 @@ function ce_url(array $p): string
 }
 
 credit_cleanup_maybe_run($conn);
+credit_busy_retry_in_background($conn);
 
 $tab = (string)($_GET['tab'] ?? 'review');
 if (!isset(CE_TABS[$tab])) {
@@ -75,6 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $note = (string)($_POST['note'] ?? '');
         switch ((string)($_POST['action'] ?? '')) {
+            case 'retry_busy':
+                [$read, $stillBusy] = credit_busy_retry_all($conn);
+                $_SESSION['ce_flash'] = $read > 0
+                    ? ["Read {$read} document(s)." . ($stillBusy ? ' The AI is still busy for the rest; they will be tried again automatically.' : ''), 'success']
+                    : ['The AI service is still busy. The documents will be tried again automatically.', 'error'];
+                break;
             case 'approve':
                 $profile = credit_evidence_approve($conn, $id, $reviewerId, $note);
                 $_SESSION['ce_flash'] = ['Approved. Credit score is now ' . number_format($profile['score'], 1) . '/10'
@@ -188,6 +195,9 @@ require "nav-head.php";
 .ce-stat .v.up { color: #15803d; }
 .ce-summary { background: #f8fafc; border-radius: 10px; padding: .7rem .9rem; font-size: .9rem; }
 .ce-list { margin: .4rem 0 0; padding-left: 1.1rem; font-size: .88rem; }
+.ce-busy { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 10px; padding: .7rem .9rem; margin-bottom: 1rem; font-size: .88rem; }
+.ce-busy form { margin: 0; }
+.ce-wait { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 10px; padding: .6rem .8rem; margin-top: .6rem; font-size: .88rem; }
 .ce-concern { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 10px; padding: .6rem .8rem; margin-top: .6rem; font-size: .88rem; }
 .ce-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: flex-start; margin-top: .8rem; }
 .ce-actions form { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: 0; }
@@ -224,6 +234,22 @@ require "nav-head.php";
                 </a>
             <?php endforeach; ?>
         </nav>
+
+        <?php $busyWaiting = credit_busy_waiting($conn); ?>
+        <?php if ($tab === 'failed' && $busyWaiting > 0): ?>
+            <div class="ce-busy">
+                <div>
+                    <strong><i class="fas fa-hourglass-half me-1"></i><?= number_format($busyWaiting) ?> document<?= $busyWaiting === 1 ? ' is' : 's are' ?> waiting because the AI service was busy.</strong>
+                    They are read again automatically after 5, 15, 30 and 60 minutes, then 2 and 4 hours. You can also try now.
+                </div>
+                <?php if ($canDecide): ?>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+                        <button class="btn btn-primary btn-sm" name="action" value="retry_busy" type="submit"><i class="fas fa-redo me-1"></i>Read them now</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
 
         <form method="get" class="ce-search">
             <input type="hidden" name="tab" value="<?= h($tab) ?>">
@@ -269,7 +295,11 @@ require "nav-head.php";
                     </div>
                 </div>
 
-                <?php if ($r['status'] === 'failed' || $r['status'] === 'processing'): ?>
+                <?php if ($r['status'] === 'failed' && !empty($r['retry_at'])): ?>
+                    <div class="ce-wait"><strong><i class="fas fa-hourglass-half me-1"></i>Not read yet: the AI service was busy.</strong>
+                        Next automatic try around <?= h(date('H:i', strtotime((string)$r['retry_at']))) ?>
+                        (attempt <?= (int)$r['retry_count'] + 1 ?> of <?= count(CREDIT_BUSY_RETRY_MINUTES) + 1 ?>). Or use Read again.</div>
+                <?php elseif ($r['status'] === 'failed' || $r['status'] === 'processing'): ?>
                     <div class="ce-concern"><strong>The AI could not read this document.</strong> <?= h($r['error'] ?? 'It may still be processing.') ?></div>
                 <?php else: ?>
                     <div class="ce-grid">

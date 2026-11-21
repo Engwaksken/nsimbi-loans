@@ -11,7 +11,12 @@ declare(strict_types=1);
  * Main entry point:
  *   ai_extract_document($conn, $prompt, $schema, $bytes, $mime)
  *     -> ['data' => array, 'provider' => string, 'model' => string]
- *   Throws RuntimeException with a message safe to show staff.
+ *   Throws RuntimeException with a message safe to show staff, or
+ *   AiBusyException when every provider was busy (try again later).
+ *
+ * Busy replies (HTTP 429/5xx, "high demand", "overloaded") are retried after a
+ * short pause, then the other saved providers that passed their test on AI
+ * Settings are tried, so one provider's busy spell does not stop documents.
  */
 
 require_once __DIR__ . '/env.php';
@@ -38,6 +43,22 @@ const AI_PROVIDERS = [
 ];
 
 const AI_DOCUMENT_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+/** Seconds to wait before each extra attempt when a provider is busy. */
+const AI_BUSY_PAUSES = [4, 10];
+
+/** The AI service is temporarily busy or unreachable; worth trying again later. */
+class AiBusyException extends RuntimeException
+{
+}
+
+/** Does this HTTP status / message mean "busy, try again later"? */
+function ai_is_busy(int $code, string $message): bool
+{
+    if (in_array($code, [408, 429, 500, 502, 503, 504, 529], true)) {
+        return true;
+    }
+    return (bool)preg_match('/high demand|overloaded|try again later|temporarily|unavailable|rate limit|capacity/i', $message);
+}
 
 function ai_ensure_schema(mysqli $conn): void
 {
@@ -228,16 +249,22 @@ function ai_http_post(string $url, array $headers, array $payload, int $timeout 
 
     if ($errno !== 0 || $body === false) {
         error_log("AI request to {$url} failed: {$errno} {$err}");
-        throw new RuntimeException('Could not reach the AI service. Please try again.');
+        throw new AiBusyException('Could not reach the AI service.');
     }
     $decoded = json_decode((string)$body, true);
     if (!is_array($decoded)) {
         error_log('AI invalid response: ' . substr((string)$body, 0, 800));
+        if ($code >= 500 || $code === 429) {
+            throw new AiBusyException('The AI service is busy (HTTP ' . $code . ').');
+        }
         throw new RuntimeException('The AI service returned an unreadable response.');
     }
     if ($code >= 400) {
         $msg = (string)($decoded['error']['message'] ?? $decoded['message'] ?? ('HTTP ' . $code));
         error_log("AI HTTP {$code}: " . substr((string)$body, 0, 800));
+        if (ai_is_busy($code, $msg)) {
+            throw new AiBusyException('The AI service is busy: ' . mb_substr($msg, 0, 200));
+        }
         throw new RuntimeException('AI service error: ' . mb_substr($msg, 0, 300));
     }
     return $decoded;
@@ -414,10 +441,40 @@ function ai_extract_document(mysqli $conn, string $system, string $prompt, array
     if (!in_array($mime, AI_DOCUMENT_MIMES, true)) {
         throw new RuntimeException('Only PDF, JPG, PNG or WebP files can be read.');
     }
-    $provider = ai_active_provider($conn);
-    if (!$provider) {
+    $active = ai_active_provider($conn);
+    if (!$active) {
         throw new RuntimeException('No AI provider is active. An admin must add one under System > AI Settings.');
     }
-    $data = ai_call($provider, $system, $prompt, $schema, $bytes, $mime);
-    return ['data' => $data, 'provider' => (string)$provider['provider'], 'model' => (string)$provider['model']];
+    // Active provider first, then other saved providers whose test passed.
+    $queue = [$active];
+    foreach (ai_providers_all($conn) as $p) {
+        if ((int)$p['id'] !== (int)$active['id'] && (string)($p['last_test_ok'] ?? '') === '1') {
+            $queue[] = $p;
+        }
+    }
+    $busy = null;
+    foreach ($queue as $n => $provider) {
+        // The active provider gets extra attempts; a backup gets one.
+        $pauses = $n === 0 ? AI_BUSY_PAUSES : [];
+        for ($try = 0; ; $try++) {
+            try {
+                $data = ai_call($provider, $system, $prompt, $schema, $bytes, $mime);
+                return ['data' => $data, 'provider' => (string)$provider['provider'], 'model' => (string)$provider['model']];
+            } catch (AiBusyException $e) {
+                $busy = $e;
+                error_log('AI busy (' . $provider['provider'] . ' ' . $provider['model'] . ', try ' . ($try + 1) . '): ' . $e->getMessage());
+                if (!isset($pauses[$try])) {
+                    break;
+                }
+                sleep($pauses[$try]);
+            } catch (Throwable $e) {
+                if ($n === 0) {
+                    throw $e; // a real error with the active provider (bad key, unreadable file...)
+                }
+                error_log('AI backup provider ' . $provider['provider'] . ' failed: ' . $e->getMessage());
+                break;
+            }
+        }
+    }
+    throw new AiBusyException($busy ? $busy->getMessage() : 'The AI service is busy.');
 }

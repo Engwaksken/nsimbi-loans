@@ -1371,10 +1371,16 @@ document.addEventListener('DOMContentLoaded', function () {
     clear.addEventListener('click', () => { checks.forEach(x => x.checked = false); updateSelection(); });
     action.addEventListener('change', updateAction);
     form.addEventListener('submit', e => {
+        if (form.dataset.bulkOk === '1') { delete form.dataset.bulkOk; return; }
+        e.preventDefault();
         const count = checks.filter(x => x.checked).length;
-        if (!count || !action.value) { e.preventDefault(); alert('Select at least one loan and an action.'); return; }
+        if (!count || !action.value) { Popup.alert('Select at least one loan and an action.'); return; }
         const labels = {approve:'approve',reject:'reject',request_info:'request additional information for',delete:'soft-delete'};
-        if (!confirm(`Are you sure you want to ${labels[action.value]} ${count} selected loan(s)?`)) e.preventDefault();
+        Popup.confirm(`Are you sure you want to ${labels[action.value]} ${count} selected loan(s)?`).then(ok => {
+            if (!ok) return;
+            form.dataset.bulkOk = '1';
+            form.requestSubmit ? form.requestSubmit() : form.submit();
+        });
     });
     updateAction();
 });

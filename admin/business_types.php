@@ -83,9 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     $_SESSION['bt_flash'] = $msg;
-    header('Location: business_types.php', true, 303);
+    $backTab = in_array($_POST['tab'] ?? '', ['fix', 'blank', 'history'], true) ? $_POST['tab'] : 'fix';
+    header('Location: business_types.php?tab=' . $backTab, true, 303);
     exit;
 }
+
 
 $data = bt_unscored($conn);
 $groups = $data['groups'];
@@ -95,15 +97,27 @@ $total = array_sum(array_column($groups, 'count'));
 unset($_SESSION['bt_flash']);
 
 $recent = [];
+$historyTotal = 0;
 try {
     bt_ensure_schema($conn);
+    $historyTotal = (int)($conn->query('SELECT COUNT(*) AS c FROM business_type_corrections')->fetch_assoc()['c'] ?? 0);
     $recent = $conn->query("SELECT b.*, u.fname, u.lname, a.fname AS by_fname
         FROM business_type_corrections b
         LEFT JOIN user u ON u.id = b.user_id
         LEFT JOIN user a ON a.id = b.corrected_by
-        ORDER BY b.id DESC LIMIT 15")->fetch_all(MYSQLI_ASSOC);
+        ORDER BY b.id DESC LIMIT 100")->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $e) {
     error_log('Business type corrections log: ' . $e->getMessage());
+}
+
+$tabs = [
+    'fix'     => ['To correct', 'fa-spell-check', $total],
+    'blank'   => ['No business type', 'fa-question-circle', count($blank)],
+    'history' => ['History', 'fa-history', $historyTotal],
+];
+$tab = (string)($_GET['tab'] ?? 'fix');
+if (!isset($tabs[$tab])) {
+    $tab = 'fix';
 }
 
 /** Dropdown of scoring table types. */
@@ -126,6 +140,12 @@ require 'nav-head.php';
 .bt-flash { padding: .7rem 1rem; border-radius: 10px; margin-bottom: 1rem; }
 .bt-flash.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 .bt-flash.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.bt-tabs { display: flex; gap: .25rem; flex-wrap: wrap; border-bottom: 1px solid #e5e7eb; margin: -.2rem 0 1rem; }
+.bt-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .65rem .9rem; color: #475569; font-weight: 700; font-size: .88rem; text-decoration: none; border-bottom: 3px solid transparent; border-radius: 10px 10px 0 0; }
+.bt-tab:hover { background: #f8fafc; color: #0f172a; }
+.bt-tab.active { color: var(--primary, #123299); border-bottom-color: var(--primary, #123299); background: #f1f5ff; }
+.bt-count { background: #e2e8f0; color: #334155; border-radius: 999px; font-size: .72rem; padding: .05rem .5rem; }
+.bt-tab.active .bt-count { background: var(--primary, #123299); color: #fff; }
 .bt-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .bt-table th { text-align: left; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; color: #64748b; padding: .5rem .6rem; border-bottom: 1px solid #e5e7eb; }
 .bt-table td { padding: .55rem .6rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
@@ -135,30 +155,53 @@ require 'nav-head.php';
 .bt-tag.spelling { background: #dcfce7; color: #166534; }
 .bt-tag.keyword { background: #fef3c7; color: #92400e; }
 .bt-tag.none { background: #f1f5f9; color: #475569; }
+.bt-toolbar { display: flex; gap: .6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .6rem; }
+.bt-search { border: 1px solid #d1d5db; border-radius: 8px; padding: .4rem .65rem; min-width: 220px; }
+.bt-empty { text-align: center; padding: 2rem 1rem; color: #64748b; }
+.bt-empty i { display: block; font-size: 1.8rem; margin-bottom: .5rem; color: #16a34a; }
 </style>
 
 <div class="bt-page">
     <?php if ($flash !== ''): ?><div class="bt-flash <?= h($flashType) ?>" role="status"><?= h($flash) ?></div><?php endif; ?>
 
     <div class="bt-card">
-        <h5><i class="fas fa-tags me-2"></i>Business types not in the scoring table</h5>
+        <h5><i class="fas fa-tags me-2"></i>Business types</h5>
         <p class="bt-muted" style="margin:0">
-            A business type that is not in the scoring table scores <?= (int)LOAN_ASSESSMENT_DEFAULT_SCORE ?>, the lowest.
-            <?= number_format($total) ?> client<?= $total === 1 ? '' : 's' ?> in <?= count($groups) ?> group<?= count($groups) === 1 ? '' : 's' ?> below, plus <?= count($blank) ?> with no business type.
-            Tick the corrections that are right and apply them. Each client's credit score is recalculated; loan limits are not changed.
-            <strong>Green</strong> suggestions are spelling fixes and are ticked for you. <strong>Amber</strong> ones are guesses from a word in the text: check them before ticking.
+            A business type that is not in the scoring table (System &gt; Manage Sectors) scores <?= (int)LOAN_ASSESSMENT_DEFAULT_SCORE ?>, the lowest.
+            Correct them here. Each client's credit score is recalculated; loan limits are not changed, and every change is kept in History.
         </p>
     </div>
 
     <div class="bt-card">
+        <nav class="bt-tabs" aria-label="Business type groups">
+            <?php foreach ($tabs as $key => [$label, $icon, $count]): ?>
+                <a class="bt-tab<?= $key === $tab ? ' active' : '' ?>" href="business_types.php?tab=<?= h($key) ?>"<?= $key === $tab ? ' aria-current="page"' : '' ?>>
+                    <i class="fas <?= h($icon) ?>"></i><?= h($label) ?> <span class="bt-count"><?= number_format($count) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+
+<?php if ($tab === 'fix'): ?>
         <?php if (!$groups): ?>
-            <p class="bt-muted" style="margin:0">Every business type that was given is in the scoring table.</p>
+            <div class="bt-empty"><i class="fas fa-check-circle"></i>Every business type that was given is in the scoring table.</div>
         <?php else: ?>
-            <form method="post" onsubmit="return confirm('Correct the business type of every client in the ticked rows?');">
+            <p class="bt-muted">
+                <?= number_format($total) ?> client<?= $total === 1 ? '' : 's' ?> in <?= count($groups) ?> group<?= count($groups) === 1 ? '' : 's' ?>.
+                <span class="bt-tag spelling">Spelling</span> fixes are ticked for you.
+                <span class="bt-tag keyword">Guess</span> matches come from a word in the text: check them before ticking.
+            </p>
+            <form method="post" data-ns-confirm="Correct the business type of every client in the ticked rows? Their credit scores will be recalculated.">
                 <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
                 <input type="hidden" name="action" value="groups">
+                <input type="hidden" name="tab" value="fix">
+                <div class="bt-toolbar">
+                    <input type="search" class="bt-search" data-bt-filter="btFix" placeholder="Search typed business types..." aria-label="Search business types">
+                    <?php if ($canApply): ?>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check me-1"></i>Apply ticked corrections</button>
+                    <?php endif; ?>
+                </div>
                 <div class="bt-wrap">
-                    <table class="bt-table">
+                    <table class="bt-table" id="btFix">
                         <thead><tr><th></th><th>Typed as</th><th>Clients</th><th>Suggestion</th><th>Correct to</th></tr></thead>
                         <tbody>
                         <?php foreach ($groups as $i => $g): $s = $g['suggestion']; ?>
@@ -181,65 +224,102 @@ require 'nav-head.php';
                         </tbody>
                     </table>
                 </div>
-                <?php if ($canApply): ?>
-                    <button type="submit" class="btn btn-primary btn-sm" style="margin-top:.8rem"><i class="fas fa-check me-1"></i>Apply ticked corrections</button>
-                <?php else: ?>
+                <?php if (!$canApply): ?>
                     <p class="bt-muted" style="margin:.8rem 0 0">Only reviewers can apply corrections.</p>
                 <?php endif; ?>
             </form>
         <?php endif; ?>
-    </div>
 
-    <?php if ($blank): ?>
-    <div class="bt-card">
-        <h5>No business type given (<?= count($blank) ?>)</h5>
-        <p class="bt-muted">These score <?= (int)LOAN_ASSESSMENT_DEFAULT_SCORE ?>. Each business is different, so set them one at a time.</p>
-        <div class="bt-wrap">
-            <table class="bt-table">
-                <thead><tr><th>Client</th><th>Business type</th><th></th></tr></thead>
-                <tbody>
-                <?php foreach (array_slice($blank, 0, 100) as $b): $uid = (int)$b['user_id']; ?>
-                    <tr>
-                        <td><a href="view_client.php?user_id=<?= $uid ?>"><?= h(trim($b['fname'] . ' ' . $b['lname'])) ?></a> <span class="bt-muted">#<?= $uid ?></span></td>
-                        <td colspan="2">
-                            <form method="post" style="display:flex;gap:.4rem;align-items:center;margin:0">
-                                <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
-                                <input type="hidden" name="action" value="one">
-                                <input type="hidden" name="user_id" value="<?= $uid ?>">
-                                <?= bt_select("type[$uid]", null, !$canApply) ?>
-                                <?php if ($canApply): ?><button type="submit" class="btn btn-secondary btn-sm">Save</button><?php endif; ?>
-                            </form>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <?php if (count($blank) > 100): ?><p class="bt-muted" style="margin:.6rem 0 0">Showing the newest 100.</p><?php endif; ?>
-    </div>
-    <?php endif; ?>
+<?php elseif ($tab === 'blank'): ?>
+        <?php if (!$blank): ?>
+            <div class="bt-empty"><i class="fas fa-check-circle"></i>Every client has a business type.</div>
+        <?php else: ?>
+            <p class="bt-muted">These clients score <?= (int)LOAN_ASSESSMENT_DEFAULT_SCORE ?>. Each business is different, so set them one at a time.</p>
+            <div class="bt-toolbar">
+                <input type="search" class="bt-search" data-bt-filter="btBlank" placeholder="Search clients..." aria-label="Search clients">
+            </div>
+            <div class="bt-wrap">
+                <table class="bt-table" id="btBlank">
+                    <thead><tr><th>Client</th><th>Business type</th></tr></thead>
+                    <tbody>
+                    <?php foreach (array_slice($blank, 0, 200) as $b): $uid = (int)$b['user_id']; ?>
+                        <tr>
+                            <td><a href="view_client.php?user_id=<?= $uid ?>"><?= h(trim($b['fname'] . ' ' . $b['lname'])) ?></a> <span class="bt-muted">#<?= $uid ?></span></td>
+                            <td>
+                                <form method="post" style="display:flex;gap:.4rem;align-items:center;margin:0">
+                                    <input type="hidden" name="csrf_token" value="<?= h($csrf) ?>">
+                                    <input type="hidden" name="action" value="one">
+                                    <input type="hidden" name="tab" value="blank">
+                                    <input type="hidden" name="user_id" value="<?= $uid ?>">
+                                    <?= bt_select("type[$uid]", null, !$canApply) ?>
+                                    <?php if ($canApply): ?><button type="submit" class="btn btn-secondary btn-sm">Save</button><?php endif; ?>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if (count($blank) > 200): ?><p class="bt-muted" style="margin:.6rem 0 0">Showing the newest 200 of <?= number_format(count($blank)) ?>.</p><?php endif; ?>
+        <?php endif; ?>
 
-    <?php if ($recent): ?>
-    <div class="bt-card">
-        <h5>Recent corrections</h5>
-        <div class="bt-wrap">
-            <table class="bt-table">
-                <thead><tr><th>When</th><th>Client</th><th>From</th><th>To</th><th>Score</th><th>By</th></tr></thead>
-                <tbody>
-                <?php foreach ($recent as $r): ?>
-                    <tr>
-                        <td><?= h(date('d M Y H:i', strtotime((string)$r['created_at']))) ?></td>
-                        <td><a href="view_client.php?user_id=<?= (int)$r['user_id'] ?>"><?= h(trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? ''))) ?></a></td>
-                        <td><?= h($r['old_type'] !== '' ? $r['old_type'] : '(none)') ?></td>
-                        <td><?= h($r['new_type']) ?></td>
-                        <td><?= $r['old_score'] !== null ? h(rtrim(rtrim((string)$r['old_score'], '0'), '.')) : '-' ?> &rarr; <?= $r['new_score'] !== null ? h(rtrim(rtrim((string)$r['new_score'], '0'), '.')) : '-' ?></td>
-                        <td><?= h($r['by_fname'] ?? '') ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+<?php else: ?>
+        <?php if (!$recent): ?>
+            <div class="bt-empty"><i class="fas fa-history" style="color:#94a3b8"></i>No corrections yet.</div>
+        <?php else: ?>
+            <div class="bt-toolbar">
+                <input type="search" class="bt-search" data-bt-filter="btHistory" placeholder="Search history..." aria-label="Search history">
+                <?php if ($historyTotal > count($recent)): ?><span class="bt-muted">Newest <?= count($recent) ?> of <?= number_format($historyTotal) ?></span><?php endif; ?>
+            </div>
+            <div class="bt-wrap">
+                <table class="bt-table" id="btHistory">
+                    <thead><tr><th>When</th><th>Client</th><th>From</th><th>To</th><th>Score</th><th>By</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($recent as $r): ?>
+                        <tr>
+                            <td><?= h(date('d M Y H:i', strtotime((string)$r['created_at']))) ?></td>
+                            <td><a href="view_client.php?user_id=<?= (int)$r['user_id'] ?>"><?= h(trim(($r['fname'] ?? '') . ' ' . ($r['lname'] ?? ''))) ?></a></td>
+                            <td><?= h($r['old_type'] !== '' ? $r['old_type'] : '(none)') ?></td>
+                            <td><?= h($r['new_type']) ?></td>
+                            <td><?= $r['old_score'] !== null ? h(bt_fmt((float)$r['old_score'])) : '-' ?> &rarr; <?= $r['new_score'] !== null ? h(bt_fmt((float)$r['new_score'])) : '-' ?></td>
+                            <td><?= h($r['by_fname'] ?? '') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+<?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
+<script>
+document.querySelectorAll('[data-bt-filter]').forEach(function (input) {
+    var table = document.getElementById(input.getAttribute('data-bt-filter'));
+    if (!table) return;
+    input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        table.querySelectorAll('tbody tr').forEach(function (row) {
+            row.style.display = !q || row.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+        });
+    });
+});
+// Apply needs a choice in every ticked row. Checked on window so it runs
+// before the confirmation popup (which listens on document).
+window.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form.matches || !form.matches('form[data-ns-confirm]') || !form.querySelector('input[name^="apply["]')) return;
+    (function () {
+        var ticked = form.querySelectorAll('input[name^="apply["]:checked');
+        var missing = Array.prototype.some.call(ticked, function (box) {
+            var sel = box.closest('tr').querySelector('select');
+            return !sel || !sel.value;
+        });
+        if (!ticked.length || missing) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            Popup.alert(!ticked.length ? 'Tick at least one row to correct.' : 'Choose a business type for every ticked row.');
+        }
+    })();
+}, true);
+</script>
 <?php require 'footer.php'; ?>

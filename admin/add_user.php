@@ -1,4 +1,5 @@
 <?php 
+require_once __DIR__ . '/includes/alert_bridge.php';
 require "nav-head.php"; 
 
 if (session_status() == PHP_SESSION_NONE) {

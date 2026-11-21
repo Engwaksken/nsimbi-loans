@@ -340,7 +340,7 @@ window.clientLoanDetails = async function (id) {
 };
 
 window.deleteClient = async function (id) {
-    if (!confirm('Are you sure you want to delete this client?')) {
+    if (!(await Popup.confirm('Are you sure you want to delete this client?'))) {
         return;
     }
 
@@ -443,7 +443,7 @@ window.addPaymentModal = async function (loanId) {
 window.toggleClientStatus = async function (userId, current) {
     const action = Number(current) === 1 ? 'Block' : 'Activate';
 
-    if (!confirm(`${action} this client?`)) {
+    if (!(await Popup.confirm(`${action} this client?`))) {
         return;
     }
 
@@ -1086,3 +1086,186 @@ document.addEventListener('click', function (event) {
         });
     });
 });
+
+/* =========================================================
+   POPUPS: Popup.confirm() and Popup.alert() replace the browser's
+   confirm()/alert() boxes on every admin page.
+   - Buttons, links and forms written as onclick/onsubmit="return confirm('...')"
+     are switched to the custom popup automatically.
+   - window.alert() shows the custom popup.
+   - Pages that alert() and then redirect (added_loan.php, status_client.php...)
+     queue the message (admin/includes/alert_bridge.php); it shows here.
+========================================================= */
+window.Popup = (function () {
+    let chain = Promise.resolve();
+
+    const DANGER = /\b(delete|remove|block|reject|permanently|cannot be recovered|soft-delete|deactivate|discard)\b/i;
+    const ERROR = /\b(fail|failed|invalid|not found|not authori[sz]ed|error|exceed|exceeded|cannot|denied|required|missing|unable|wrong)\b/i;
+    const SUCCESS = /\b(success|successfully|saved|added|approved|updated|deleted|created|done|disbursed|recorded)\b/i;
+
+    function build(kind, message, opts) {
+        const tone = opts.tone || (kind === 'confirm'
+            ? (DANGER.test(message) ? 'danger' : 'primary')
+            : (ERROR.test(message) ? 'danger' : (SUCCESS.test(message) ? 'success' : 'primary')));
+        const icon = {
+            danger: kind === 'confirm' ? 'exclamation-triangle' : 'times-circle',
+            success: 'check-circle',
+            primary: kind === 'confirm' ? 'question-circle' : 'info-circle'
+        }[tone];
+        const title = opts.title || (kind === 'confirm'
+            ? (tone === 'danger' ? 'Please confirm' : 'Are you sure?')
+            : (tone === 'danger' ? 'Something went wrong' : (tone === 'success' ? 'Done' : 'Notice')));
+        const okText = opts.okText || (kind === 'confirm' ? (tone === 'danger' ? 'Yes, continue' : 'Yes') : 'OK');
+
+        const overlay = document.createElement('div');
+        overlay.className = 'ns-pop-overlay';
+        overlay.innerHTML =
+            '<div class="ns-pop t-' + tone + '" role="' + (kind === 'confirm' ? 'alertdialog' : 'dialog') + '" aria-modal="true" aria-labelledby="nsPopTitle" aria-describedby="nsPopMsg">' +
+                '<div class="ns-pop-ico"><i class="fas fa-' + icon + '"></i></div>' +
+                '<div class="ns-pop-title" id="nsPopTitle">' + escapeHtml(title) + '</div>' +
+                '<div class="ns-pop-msg" id="nsPopMsg">' + escapeHtml(message) + '</div>' +
+                '<div class="ns-pop-actions">' +
+                    (kind === 'confirm' ? '<button type="button" class="btn btn-secondary" data-ns="cancel">' + escapeHtml(opts.cancelText || 'Cancel') + '</button>' : '') +
+                    '<button type="button" class="btn ' + (tone === 'danger' ? 'btn-danger' : 'btn-primary') + '" data-ns="ok">' + escapeHtml(okText) + '</button>' +
+                '</div>' +
+            '</div>';
+        return overlay;
+    }
+
+    function open(kind, message, opts) {
+        opts = opts || {};
+        message = String(message == null ? '' : message);
+        const run = function () {
+            return new Promise(function (resolve) {
+                const overlay = build(kind, message, opts);
+                const before = document.activeElement;
+                document.body.appendChild(overlay);
+                requestAnimationFrame(function () { overlay.classList.add('open'); });
+                const ok = overlay.querySelector('[data-ns="ok"]');
+                const cancel = overlay.querySelector('[data-ns="cancel"]');
+                ok.focus();
+
+                function close(result) {
+                    document.removeEventListener('keydown', onKey, true);
+                    overlay.classList.remove('open');
+                    setTimeout(function () { overlay.remove(); }, 160);
+                    if (before && typeof before.focus === 'function') {
+                        try { before.focus({ preventScroll: true }); } catch (e) { /* element gone */ }
+                    }
+                    resolve(result);
+                }
+                function onKey(e) {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close(kind !== 'confirm');
+                    } else if (e.key === 'Tab') {
+                        // Keep focus inside the popup.
+                        const items = [cancel, ok].filter(Boolean);
+                        const i = items.indexOf(document.activeElement);
+                        e.preventDefault();
+                        items[(i + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
+                    }
+                }
+                document.addEventListener('keydown', onKey, true);
+                ok.addEventListener('click', function () { close(true); });
+                if (cancel) cancel.addEventListener('click', function () { close(false); });
+                overlay.addEventListener('click', function (e) { if (e.target === overlay) close(kind !== 'confirm'); });
+            });
+        };
+        // One popup at a time.
+        const p = chain.then(run, run);
+        chain = p.catch(function () {});
+        return p;
+    }
+
+    return {
+        confirm: function (message, opts) { return open('confirm', message, opts); },
+        alert: function (message, opts) { return open('alert', message, opts); }
+    };
+})();
+
+(function () {
+    const nativeAlert = window.alert.bind(window);
+    window.alert = function (message) {
+        if (!document.body) { nativeAlert(message); return; }
+        Popup.alert(message);
+    };
+
+    const INLINE = /^\s*return\s+(?:window\.)?confirm\(\s*(['"`])([\s\S]*)\1\s*\)\s*;?\s*$/;
+
+    function unescapeJs(s) {
+        return s.replace(/\\(['"`\\])/g, '$1').replace(/\\n/g, '\n');
+    }
+
+    /** onclick/onsubmit="return confirm('...')" becomes data-ns-confirm="..." */
+    function upgrade(root) {
+        if (!root || !root.querySelectorAll) return;
+        const nodes = [];
+        if (root.matches && root.matches('[onclick],[onsubmit]')) nodes.push(root);
+        root.querySelectorAll('[onclick],[onsubmit]').forEach(function (n) { nodes.push(n); });
+        nodes.forEach(function (el) {
+            ['onclick', 'onsubmit'].forEach(function (attr) {
+                const code = el.getAttribute(attr);
+                const m = code && code.match(INLINE);
+                if (m) {
+                    el.removeAttribute(attr);
+                    el.setAttribute('data-ns-confirm', unescapeJs(m[2]));
+                }
+            });
+        });
+    }
+
+    // Buttons and links that need confirming.
+    document.addEventListener('click', function (e) {
+        const el = e.target.closest('[data-ns-confirm]');
+        if (!el || el.tagName === 'FORM') return;
+        if (el.dataset.nsOk === '1') { delete el.dataset.nsOk; return; }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        Popup.confirm(el.getAttribute('data-ns-confirm')).then(function (ok) {
+            if (!ok) return;
+            if (el.tagName === 'A' && el.getAttribute('href')) {
+                if (el.target === '_blank') window.open(el.href, '_blank', 'noopener');
+                else window.location.href = el.href;
+                return;
+            }
+            if (el.form && el.form.hasAttribute('data-ns-confirm')) el.form.dataset.nsOk = '1';
+            el.dataset.nsOk = '1';
+            el.click();
+        });
+    }, true);
+
+    // Forms that need confirming.
+    document.addEventListener('submit', function (e) {
+        const form = e.target;
+        if (!form.hasAttribute || !form.hasAttribute('data-ns-confirm')) return;
+        if (form.dataset.nsOk === '1') { delete form.dataset.nsOk; return; }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const submitter = e.submitter && e.submitter.form === form ? e.submitter : null;
+        Popup.confirm(form.getAttribute('data-ns-confirm')).then(function (ok) {
+            if (!ok) return;
+            form.dataset.nsOk = '1';
+            if (typeof form.requestSubmit === 'function') {
+                if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
+    }, true);
+
+    function start() {
+        upgrade(document.body);
+        new MutationObserver(function (list) {
+            list.forEach(function (m) { m.addedNodes.forEach(function (n) { upgrade(n); }); });
+        }).observe(document.body, { childList: true, subtree: true });
+        // Messages from a page that alerted and then redirected here.
+        try {
+            const queued = JSON.parse(sessionStorage.getItem('nsAlerts') || '[]');
+            sessionStorage.removeItem('nsAlerts');
+            queued.forEach(function (msg) { Popup.alert(msg); });
+        } catch (err) { /* storage unavailable */ }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+})();

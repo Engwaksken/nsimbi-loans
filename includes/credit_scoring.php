@@ -76,6 +76,8 @@ const CREDIT_REPAYMENT_FULL_LIMIT = 7.0;
 /** Lowest limit, as a share of monthly income (must stay above 0: 0 means "no limit"). */
 const CREDIT_LIMIT_FLOOR = 0.10;
 const CREDIT_CLEANUP_STATUSES = ['rejected', 'ignored'];
+/** Minutes to wait before each automatic re-read when the AI was busy (then staff use "Read again"). */
+const CREDIT_BUSY_RETRY_MINUTES = [5, 15, 30, 60, 120, 240];
 
 /** Thrown when a client uploads a file they already uploaded. */
 class CreditDuplicateException extends DomainException
@@ -180,6 +182,8 @@ function credit_ensure_schema(mysqli $conn): void
         'file_hash'  => 'ADD COLUMN file_hash CHAR(64) NULL AFTER file_size, ADD KEY idx_file_hash (file_hash)',
         'auto_note'  => 'ADD COLUMN auto_note VARCHAR(500) NULL AFTER review_note',
         'file_deleted_at' => 'ADD COLUMN file_deleted_at DATETIME NULL AFTER file_hash',
+        // The AI was busy: try again automatically at retry_at.
+        'retry_at'    => 'ADD COLUMN retry_at DATETIME NULL AFTER error, ADD COLUMN retry_count TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER retry_at, ADD KEY idx_retry (status, retry_at)',
     ];
     foreach ($added as $col => $ddl) {
         $res = $conn->query("SHOW COLUMNS FROM credit_evidence LIKE '{$col}'");
@@ -1495,6 +1499,9 @@ function credit_evidence_auto_decide(mysqli $conn, int $id): string
 function credit_evidence_result_message(array $row): string
 {
     $label = CREDIT_EVIDENCE_TYPES[$row['doc_type']]['label'] ?? 'document';
+    if (($row['status'] ?? '') === 'failed' && !empty($row['retry_at'])) {
+        return "Your {$label} was uploaded. Our checking service is busy right now, so it will be checked shortly. You do not need to upload it again.";
+    }
     return match ((string)($row['status'] ?? '')) {
         'approved' => "Your {$label} was checked and approved. Your credit score has been updated.",
         'rejected' => "Your {$label} was not accepted: " . trim((string)$row['review_note']),
@@ -1565,14 +1572,29 @@ function credit_evidence_analyze(mysqli $conn, int $id, ?string $bytes = null, ?
         $provider = $result['provider'];
         $model = $result['model'];
 
-        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'analyzed', doc_type = ?, ai_provider = ?, ai_model = ?, ai_score = ?, monthly_income = ?, summary = ?, extracted_json = ?, proposed_score = ?, proposed_limit = ?, error = NULL, auto_note = NULL WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'analyzed', doc_type = ?, ai_provider = ?, ai_model = ?, ai_score = ?, monthly_income = ?, summary = ?, extracted_json = ?, proposed_score = ?, proposed_limit = ?, error = NULL, auto_note = NULL, retry_at = NULL WHERE id = ?");
         $stmt->bind_param('sssddssddi', $docType, $provider, $model, $score, $income, $summary, $json, $pScore, $pLimit, $id);
         $stmt->execute();
         $stmt->close();
+    } catch (AiBusyException $e) {
+        // Temporary: keep it queued and read it again later by itself.
+        error_log('credit_evidence_analyze #' . $id . ' (busy): ' . $e->getMessage());
+        $tries = (int)($row['retry_count'] ?? 0);
+        $wait = CREDIT_BUSY_RETRY_MINUTES[$tries] ?? null;
+        $msg = 'The AI service was busy (high demand), so this document has not been read yet. '
+            . ($wait !== null ? 'It will be read again automatically.' : 'Automatic tries have stopped: use Read again.');
+        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'failed', error = ?, retry_count = LEAST(retry_count + 1, 250),
+                                retry_at = IF(? IS NULL, NULL, NOW() + INTERVAL ? MINUTE) WHERE id = ?");
+        $waitArg = $wait;
+        $waitMin = (int)($wait ?? 0);
+        $stmt->bind_param('siii', $msg, $waitArg, $waitMin, $id);
+        $stmt->execute();
+        $stmt->close();
+        return;
     } catch (Throwable $e) {
         error_log('credit_evidence_analyze #' . $id . ': ' . $e->getMessage());
         $msg = mb_substr($e->getMessage(), 0, 500);
-        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'failed', error = ? WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE credit_evidence SET status = 'failed', error = ?, retry_at = NULL WHERE id = ?");
         $stmt->bind_param('si', $msg, $id);
         $stmt->execute();
         $stmt->close();
@@ -1584,6 +1606,96 @@ function credit_evidence_analyze(mysqli $conn, int $id, ?string $bytes = null, ?
         // Leave it waiting for staff.
         error_log('credit_evidence_auto_decide #' . $id . ': ' . $e->getMessage());
     }
+}
+
+/** Documents the AI was too busy to read, due for another try. */
+function credit_busy_due(mysqli $conn, int $limit = 3): array
+{
+    credit_ensure_schema($conn);
+    $stmt = $conn->prepare("SELECT id FROM credit_evidence WHERE status = 'failed' AND retry_at IS NOT NULL AND retry_at <= NOW() ORDER BY retry_at LIMIT ?");
+    $stmt->bind_param('i', $limit);
+    $stmt->execute();
+    $ids = array_map(static fn($r) => (int)$r['id'], $stmt->get_result()->fetch_all(MYSQLI_ASSOC));
+    $stmt->close();
+    return $ids;
+}
+
+/** Busy documents waiting for an automatic re-read (due or not). */
+function credit_busy_waiting(mysqli $conn): int
+{
+    try {
+        credit_ensure_schema($conn);
+        $r = $conn->query("SELECT COUNT(*) AS n FROM credit_evidence WHERE status = 'failed' AND retry_at IS NOT NULL");
+        return (int)($r ? $r->fetch_assoc()['n'] : 0);
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Read again every busy document now (staff button). Returns [read, still busy]. */
+function credit_busy_retry_all(mysqli $conn, int $limit = 10): array
+{
+    credit_ensure_schema($conn);
+    $res = $conn->query("SELECT id FROM credit_evidence WHERE status = 'failed' AND retry_at IS NOT NULL ORDER BY retry_at LIMIT " . max(1, $limit));
+    $read = 0;
+    $busy = 0;
+    foreach ($res ? $res->fetch_all(MYSQLI_ASSOC) : [] as $r) {
+        credit_evidence_analyze($conn, (int)$r['id']);
+        $row = credit_evidence_find($conn, (int)$r['id']);
+        if ($row && $row['status'] !== 'failed') {
+            $read++;
+        } else {
+            $busy++;
+            if ($row && $row['retry_at'] !== null && str_contains((string)$row['error'], 'busy')) {
+                break; // still busy: no point hammering the service
+            }
+        }
+    }
+    return [$read, $busy];
+}
+
+/**
+ * Re-read due busy documents after this page has been sent, so nobody waits.
+ * Runs at most once every 2 minutes, and only where PHP can finish the
+ * response early (PHP-FPM or LiteSpeed); elsewhere staff use "Read again".
+ */
+function credit_busy_retry_in_background(mysqli $conn): void
+{
+    if (!function_exists('fastcgi_finish_request') && !function_exists('litespeed_finish_request')) {
+        return;
+    }
+    try {
+        $last = (int)credit_setting($conn, 'credit_busy_retry_last', '0');
+        if (time() - $last < 120 || !credit_busy_due($conn, 1)) {
+            return;
+        }
+        credit_setting_set($conn, 'credit_busy_retry_last', (string)time());
+    } catch (Throwable $e) {
+        return;
+    }
+    register_shutdown_function(static function () use ($conn): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close(); // do not hold the session lock while reading
+        }
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        } elseif (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        }
+        ignore_user_abort(true);
+        @set_time_limit(600);
+        try {
+            foreach (credit_busy_due($conn, 3) as $id) {
+                credit_evidence_analyze($conn, $id);
+                $row = credit_evidence_find($conn, $id);
+                if ($row && $row['status'] === 'failed' && $row['retry_at'] !== null) {
+                    break; // still busy
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('credit_busy_retry_in_background: ' . $e->getMessage());
+        }
+    });
 }
 
 /**

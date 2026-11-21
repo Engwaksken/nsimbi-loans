@@ -332,7 +332,7 @@ function openEditUserModal(userId) {
 }
 
 async function toggleUserStatus(userId) {
-    if (!confirm('Change this user status?')) return;
+    if (!(await Popup.confirm('Change this user status?'))) return;
 
     try {
         const data = await postJson(USER_PROCESS_URL, {
@@ -350,7 +350,7 @@ async function toggleUserStatus(userId) {
 }
 
 async function deleteUserRecord(userId) {
-    if (!confirm('Delete this user?')) return;
+    if (!(await Popup.confirm('Delete this user?'))) return;
 
     try {
         const data = await postJson(USER_PROCESS_URL, {

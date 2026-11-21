@@ -710,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.getElementById('normalizeWeights')?.addEventListener('click', async function () {
-        if (!window.confirm('Scale all weights so they add up to 1.00? Each component keeps the same share.')) {
+        if (!(await Popup.confirm('Scale all weights so they add up to 1.00? Each component keeps the same share.'))) {
             return;
         }
         const btn = this;

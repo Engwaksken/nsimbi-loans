@@ -454,10 +454,16 @@ require "nav-head.php";
                 e.preventDefault();
                 return;
             }
-            if (scope === 'all' && !window.confirm(btn.getAttribute('data-confirm'))) {
+            if (scope === 'all' && btn.dataset.ok !== '1') {
                 e.preventDefault();
+                Popup.confirm(btn.getAttribute('data-confirm')).then(function (ok) {
+                    if (!ok) return;
+                    btn.dataset.ok = '1';
+                    btn.click();
+                });
                 return;
             }
+            delete btn.dataset.ok;
             document.getElementById('rlScope').value = scope;
         });
     });

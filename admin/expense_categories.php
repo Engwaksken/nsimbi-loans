@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/includes/alert_bridge.php';
 require "nav-head.php";
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $id = intval($_GET['delete']);

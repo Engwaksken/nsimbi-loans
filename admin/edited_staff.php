@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/includes/alert_bridge.php';
 session_start();
 require "db.php";
 
