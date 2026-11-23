@@ -30,8 +30,13 @@
 .client-registration-page .btn-secondary:hover { background: var(--reg-tint,#e2e7f4) !important; }
 .client-registration-page .form-control:focus, .client-registration-page .form-select:focus { border-color: var(--reg-primary,#0f3399) !important; box-shadow: 0 0 0 3px rgba(var(--reg-primary-rgb,15,51,153),.15) !important; }
 .client-registration-page .form-check-input:checked { background-color: var(--reg-primary,#0f3399); border-color: var(--reg-primary,#0f3399); }
-.client-registration-page .signature-wrapper { width: 100%; height: 150px; position: relative; overflow: hidden; background: #fff; border: 2px solid #dee2e6; border-radius: 8px; }
-.client-registration-page #signature-pad { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.client-registration-page .signature-wrapper { width: 100%; height: 170px; position: relative; overflow: hidden; background: #fff; border: 2px dashed #cbd5e1; border-radius: 10px; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.client-registration-page .signature-wrapper.has-signature { border-style: solid; border-color: #94a3b8; }
+.client-registration-page #signature-pad { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; -ms-touch-action: none; position: relative; z-index: 1; }
+.client-registration-page .signature-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: .45rem; color: #94a3b8; font-size: .92rem; pointer-events: none; }
+.client-registration-page .signature-wrapper::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: 28%; border-bottom: 1px solid #e2e8f0; pointer-events: none; }
+.client-registration-page .signature-wrapper.has-signature .signature-hint { display: none; }
+@media (max-width: 767px) { .client-registration-page .signature-wrapper { height: 210px; } }
 .client-registration-page .signature-status { margin-top: .4rem; font-size: .875rem; }
 .client-registration-page .signature-status.signed { color: #198754; }
 .client-registration-page .signature-status.empty { color: #6c757d; }

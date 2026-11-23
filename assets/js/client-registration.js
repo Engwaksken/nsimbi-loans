@@ -17,8 +17,9 @@ document.addEventListener("DOMContentLoaded", function () {
     let ctx = null;
     let isDrawing = false;
     let hasSignature = false;
-    let lastX = 0;
-    let lastY = 0;
+    let strokes = [];      // [[{x, y}, ...], ...] as a share of the pad size
+    let padWidth = 0;      // pad size in CSS pixels
+    let padHeight = 0;
 
     showStep(currentStep);
     initBusinessType();
@@ -292,22 +293,62 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    /* ---------------------------------------------------------------
+     * Signature pad: finger, stylus or mouse.
+     *
+     * Strokes are kept as points (in CSS pixels, as a share of the pad
+     * width/height) so the signature can be redrawn sharply when the pad
+     * changes size, e.g. when a phone is turned. Phones also fire "resize"
+     * while scrolling (the address bar hides) and when the keyboard closes;
+     * those only change the height of the window, so they are ignored and
+     * never wipe the signature.
+     * ------------------------------------------------------------- */
     function initSignaturePad() {
         if (!canvas) return;
 
         ctx = canvas.getContext("2d");
         resizeCanvas();
 
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        canvas.addEventListener("pointerdown", startPointerDrawing);
-        canvas.addEventListener("pointermove", drawPointer);
-        canvas.addEventListener("pointerup", stopPointerDrawing);
-        canvas.addEventListener("pointercancel", stopPointerDrawing);
-        canvas.addEventListener("pointerleave", stopPointerDrawing);
+        if (window.PointerEvent) {
+            canvas.addEventListener("pointerdown", function (e) {
+                // Ignore a second finger and right/middle mouse buttons.
+                if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+                e.preventDefault();
+                try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+                startStroke(e.clientX, e.clientY);
+            });
+            canvas.addEventListener("pointermove", function (e) {
+                if (!isDrawing || !e.isPrimary) return;
+                e.preventDefault();
+                // Use every point the screen recorded, for smooth fast strokes.
+                const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
+                (events.length ? events : [e]).forEach(function (p) { extendStroke(p.clientX, p.clientY); });
+            });
+            canvas.addEventListener("pointerup", endStroke);
+            canvas.addEventListener("pointercancel", endStroke);
+        } else {
+            // Older phone browsers without pointer events.
+            canvas.addEventListener("touchstart", function (e) {
+                if (e.touches.length !== 1) return;
+                e.preventDefault();
+                startStroke(e.touches[0].clientX, e.touches[0].clientY);
+            }, { passive: false });
+            canvas.addEventListener("touchmove", function (e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                extendStroke(e.touches[0].clientX, e.touches[0].clientY);
+            }, { passive: false });
+            canvas.addEventListener("touchend", endStroke);
+            canvas.addEventListener("touchcancel", endStroke);
+            canvas.addEventListener("mousedown", function (e) {
+                if (e.button !== 0) return;
+                startStroke(e.clientX, e.clientY);
+            });
+            window.addEventListener("mousemove", function (e) {
+                if (isDrawing) extendStroke(e.clientX, e.clientY);
+            });
+            window.addEventListener("mouseup", endStroke);
+        }
 
         const clearBtn = document.getElementById("clear-signature");
 
@@ -316,6 +357,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         window.addEventListener("resize", resizeCanvas);
+        window.addEventListener("orientationchange", function () {
+            setTimeout(resizeCanvas, 250);
+        });
 
         updateSignatureStatus();
     }
@@ -323,85 +367,116 @@ document.addEventListener("DOMContentLoaded", function () {
     function resizeCanvas() {
         if (!canvas || !ctx) return;
 
-        const wrapper = canvas.parentElement;
-        const rect = wrapper.getBoundingClientRect();
+        const rect = canvas.parentElement.getBoundingClientRect();
 
         if (rect.width <= 0 || rect.height <= 0) return;
+        // Same size (address bar or keyboard moved): nothing to do. Never
+        // resize in the middle of a stroke.
+        if (isDrawing || (Math.round(rect.width) === padWidth && Math.round(rect.height) === padHeight)) return;
 
-        const oldSignature = hasSignature ? canvas.toDataURL("image/png") : null;
+        padWidth = Math.round(rect.width);
+        padHeight = Math.round(rect.height);
         const pixelRatio = window.devicePixelRatio || 1;
 
-        canvas.width = Math.round(rect.width * pixelRatio);
-        canvas.height = Math.round(rect.height * pixelRatio);
-        canvas.style.width = rect.width + "px";
-        canvas.style.height = rect.height + "px";
+        canvas.width = Math.round(padWidth * pixelRatio);
+        canvas.height = Math.round(padHeight * pixelRatio);
+        canvas.style.width = padWidth + "px";
+        canvas.style.height = padHeight + "px";
         ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        if (oldSignature) {
-            const img = new Image();
-            img.onload = function () {
-                 ctx.drawImage(img, 0, 0, rect.width, rect.height);
-            };
-            img.src = oldSignature;
-        }
+        redrawSignature();
     }
 
-    function getPointerPos(e) {
+    function penStyle() {
+        ctx.strokeStyle = "#0f172a";
+        ctx.fillStyle = "#0f172a";
+        // A little thicker on small screens, where fingers are used.
+        ctx.lineWidth = padWidth < 500 ? 2.6 : 2.2;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+    }
+
+    function pointFromClient(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
 
+        // Stored as a share of the pad so a resize keeps the shape.
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: (clientX - rect.left) / rect.width,
+            y: (clientY - rect.top) / rect.height
         };
     }
 
-    function startPointerDrawing(e) {
+    function toPad(p) {
+        return { x: p.x * padWidth, y: p.y * padHeight };
+    }
+
+    function startStroke(clientX, clientY) {
         if (!ctx) return;
 
-        e.preventDefault();
-        canvas.setPointerCapture(e.pointerId);
         isDrawing = true;
-        const pos = getPointerPos(e);
-
-        lastX = pos.x;
-        lastY = pos.y;
-
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
+        strokes.push([pointFromClient(clientX, clientY)]);
+        // A tap leaves a dot until the finger moves.
+        drawDot(strokes[strokes.length - 1][0]);
 
         hasSignature = true;
         updateSignatureStatus();
     }
 
-    function drawPointer(e) {
+    function extendStroke(clientX, clientY) {
         if (!isDrawing || !ctx) return;
 
-        e.preventDefault();
-        const pos = getPointerPos(e);
+        const stroke = strokes[strokes.length - 1];
+        const p = pointFromClient(clientX, clientY);
+        const prev = stroke[stroke.length - 1];
 
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
+        // Skip jitter smaller than about half a pixel.
+        if (Math.abs((p.x - prev.x) * padWidth) < 0.5 && Math.abs((p.y - prev.y) * padHeight) < 0.5) return;
 
-        lastX = pos.x;
-        lastY = pos.y;
-
-        saveSignature();
+        stroke.push(p);
+        drawSegment(stroke, stroke.length - 1);
     }
 
-    function stopPointerDrawing() {
+    function endStroke() {
         if (!isDrawing) return;
 
         isDrawing = false;
+        // Save once per stroke; saving on every move makes phones lag.
         saveSignature();
+    }
 
-        if (ctx) {
-            ctx.beginPath();
-        }
+    function drawDot(p) {
+        const q = toPad(p);
+
+        penStyle();
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Smooth curve through the midpoints of the last three points.
+    function drawSegment(stroke, i) {
+        const a = toPad(stroke[Math.max(0, i - 2)]);
+        const b = toPad(stroke[i - 1]);
+        const c = toPad(stroke[i]);
+        const start = i < 2 ? a : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const end = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+
+        penStyle();
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.quadraticCurveTo(b.x, b.y, end.x, end.y);
+        ctx.stroke();
+    }
+
+    function redrawSignature() {
+        ctx.clearRect(0, 0, padWidth, padHeight);
+
+        strokes.forEach(function (stroke) {
+            drawDot(stroke[0]);
+            for (let i = 1; i < stroke.length; i++) {
+                drawSegment(stroke, i);
+            }
+        });
     }
 
     function saveSignature() {
@@ -421,7 +496,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (!ctx || !canvas) return;
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        strokes = [];
+        isDrawing = false;
+        ctx.clearRect(0, 0, padWidth, padHeight);
 
         if (signatureData) {
             signatureData.value = "";
@@ -433,6 +510,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function updateSignatureStatus() {
         const statusEl = document.getElementById("signature-status");
+        const wrapper = canvas ? canvas.parentElement : null;
+
+        if (wrapper) {
+            wrapper.classList.toggle("has-signature", hasSignature);
+        }
 
         if (!statusEl) return;
 

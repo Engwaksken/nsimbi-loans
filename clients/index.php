@@ -12,6 +12,12 @@ try {
   error_log('Apply: could not load loan officers: ' . $e->getMessage());
 }
 $referralPick = (int)($_GET['ref'] ?? 0);
+
+// Version stamp so phones load new CSS/JS after a change instead of a cached copy.
+$applyAsset = static function (string $path): string {
+  $file = dirname(__DIR__) . '/' . ltrim($path, '/');
+  return '/' . ltrim($path, '/') . (is_file($file) ? '?v=' . filemtime($file) : '');
+};
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,7 +30,7 @@ $referralPick = (int)($_GET['ref'] ?? 0);
 
   <!-- Reuse the shared application styles; avoid loading legacy CDN copies. -->
   <link rel="stylesheet" href="../assets/css/soft-ui-dashboard.css">
-  <link rel="stylesheet" href="../assets/css/loanpro.css">
+  <link rel="stylesheet" href="<?= site_e($applyAsset('assets/css/loanpro.css')) ?>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <?= site_panel_style_tags() ?>
   <?= site_apply_style_tags() ?>
@@ -334,9 +340,10 @@ $referralPick = (int)($_GET['ref'] ?? 0);
                         <?php endif; ?>
                       </div>
                          <div class="col-md-6">
-                          <label for="signature-pad">Draw your Signature (Mouse or Touch)</label>
+                          <label for="signature-pad">Your signature: sign in the box with your finger (or mouse)</label>
                           <div class="signature-wrapper">
-                            <canvas id="signature-pad"></canvas>
+                            <span class="signature-hint" aria-hidden="true"><i class="fas fa-signature"></i> Sign here</span>
+                            <canvas id="signature-pad" role="img" aria-label="Signature pad"></canvas>
                             <input type="hidden" name="applicant_signature" id="signature-data" required>
                           </div>
                           <div class="signature-status empty" id="signature-status">
@@ -381,7 +388,7 @@ $referralPick = (int)($_GET['ref'] ?? 0);
       </div>
     </section>
   </main>
-<script src="/assets/js/client-registration.js" defer></script>
+<script src="<?= site_e($applyAsset('assets/js/client-registration.js')) ?>" defer></script>
 
 </body>
 </html>
