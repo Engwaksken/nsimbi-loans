@@ -46,6 +46,93 @@ function money($value): string
     return 'UGX ' . number_format((float)($value ?? 0));
 }
 
+/**
+ * Plain-language explanation of how the AI recommended amount was worked out,
+ * from the loan_assessment() result. Admin screens only.
+ */
+function aiExplanationHtml(array $a): string
+{
+    $fmt = static fn($n) => rtrim(rtrim(number_format((float)$n, 2), '0'), '.');
+    $toneClass = ['success' => 'ok', 'warning' => 'warn', 'danger' => 'bad'][$a['tone']] ?? 'warn';
+    $p = $a['profile'] ?? null;
+    $fromProfile = ($a['source'] ?? '') === 'profile' && is_array($p);
+    $score = (float)($a['score'] ?? 0);
+
+    ob_start(); ?>
+    <div class="ai-verdict ai-<?= $toneClass ?>">
+        <div class="ai-verdict-head"><?= h($a['headline']) ?></div>
+        <div><?= h($a['detail']) ?></div>
+    </div>
+
+    <h6 class="ai-h">1. Monthly income used</h6>
+    <?php if ($fromProfile && (float)$p['verified_income'] > 0): ?>
+        <p class="ai-p"><strong><?= money($p['income_used']) ?></strong> a month, verified from the client's approved documents (mobile money statement or business records).
+            <?php if ((float)$p['declared_income'] > 0): ?>The client declared <?= money($p['declared_income']) ?>, but verified income takes priority.<?php endif; ?></p>
+    <?php else: ?>
+        <?php
+        $last = loan_assessment_parse_turnover((string)$a['amount_last'])[0];
+        $this_ = loan_assessment_parse_turnover((string)$a['amount_this'])[0];
+        ?>
+        <table class="ai-table">
+            <tr><td>Turnover last month (declared)</td><td><?= h(loan_assessment_turnover((string)$a['amount_last'])) ?></td><td class="text-end"><?= money($last) ?></td></tr>
+            <tr><td>Turnover this month (declared)</td><td><?= h(loan_assessment_turnover((string)$a['amount_this'])) ?></td><td class="text-end"><?= money($this_) ?></td></tr>
+            <tr class="ai-total"><td colspan="2">Average monthly income</td><td class="text-end"><?= money(($last + $this_) / 2) ?></td></tr>
+        </table>
+        <p class="ai-p fs-xs text-muted">Ranges such as "100,000 - 500,000" use their midpoint. No documents have verified this income yet.</p>
+    <?php endif; ?>
+
+    <h6 class="ai-h">2. Credit score: <?= h($fmt($score)) ?>/10 <span class="badge badge-<?= h($a['score_tone']) ?>"><?= h($a['score_band']) ?></span></h6>
+    <?php if ($fromProfile && !empty($p['components'])): ?>
+        <table class="ai-table">
+            <thead><tr><th>Factor</th><th class="text-end">Score</th><th class="text-end">Weight</th><th class="text-end">Points</th></tr></thead>
+            <tbody>
+            <?php foreach ($p['components'] as $c): ?>
+                <tr>
+                    <td><?= h($c['label']) ?>
+                        <?php if ((string)$c['note'] !== ''): ?><div class="fs-xs text-muted"><?= h($c['note']) ?></div><?php endif; ?>
+                    </td>
+                    <td class="text-end"><?= h($fmt($c['score'])) ?>/10</td>
+                    <td class="text-end"><?= h($fmt($c['weight'] * 100)) ?>%</td>
+                    <td class="text-end"><?= h($fmt($c['score'] * $c['weight'])) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            <tr class="ai-total"><td colspan="3">Credit score</td><td class="text-end"><?= h($fmt($score)) ?></td></tr>
+            </tbody>
+        </table>
+        <p class="ai-p fs-xs text-muted">Factors with no document yet count as the business sector score.
+            <?php if ((int)($p['overdue_days'] ?? 0) > 30): ?>The score is capped because a loan is <?= (int)$p['overdue_days'] ?> days overdue.<?php endif; ?></p>
+    <?php else: ?>
+        <p class="ai-p">Based on the business type <strong><?= h($a['business_type'] !== '' ? $a['business_type'] : 'not given') ?></strong><?php if (!empty($a['matched_type']) && strcasecmp((string)$a['matched_type'], (string)$a['business_type']) !== 0): ?> (scored as "<?= h($a['matched_type']) ?>")<?php endif; ?>.
+            No approved documents or repayment record change it yet.</p>
+    <?php endif; ?>
+
+    <h6 class="ai-h">3. Recommended amount</h6>
+    <?php
+    $income = $fromProfile ? (float)$p['income_used'] : (loan_assessment_parse_turnover((string)$a['amount_last'])[0] + loan_assessment_parse_turnover((string)$a['amount_this'])[0]) / 2;
+    $full = round($income + $income * $score / 10);
+    ?>
+    <div class="ai-formula">
+        income + income &times; (score &divide; 10)<br>
+        = <?= money($income) ?> + <?= money($income) ?> &times; <?= h($fmt($score / 10)) ?><br>
+        = <strong><?= money($full) ?></strong>
+    </div>
+    <?php if ((string)$a['limit_note'] !== ''): ?>
+        <p class="ai-p"><i class="fas fa-scissors"></i> <?= h($a['limit_note']) ?>, giving <strong><?= money($a['limit']) ?></strong>.</p>
+    <?php endif; ?>
+    <p class="ai-p">The applicant asked for <strong><?= money($a['requested']) ?></strong>.</p>
+
+    <?php if (!empty($a['warnings'])): ?>
+        <h6 class="ai-h">Things to check</h6>
+        <ul class="ai-warn">
+            <?php foreach ($a['warnings'] as $w): ?><li><?= h($w) ?></li><?php endforeach; ?>
+        </ul>
+    <?php endif; ?>
+
+    <p class="ai-p fs-xs text-muted mb-0">This is worked out fresh each time from the client's business type, turnover, approved documents and repayment record. It is a guide: the reviewer makes the decision.</p>
+    <?php
+    return (string)ob_get_clean();
+}
+
 function typeBadge(string $type): string
 {
     return match ($type) {
@@ -531,9 +618,30 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 .pending-table tr.loan-row.status-info_requested td:first-child { box-shadow: inset 4px 0 0 #0ea5e9; }
 .pending-table tr.loan-row.status-info_provided td:first-child { box-shadow: inset 4px 0 0 #7e22ce; }
 .pending-table tr.loan-row.selected-loan td { background: #eff6ff; }
-.pending-table tr.loan-row.row-open td { background: #f8fafc; border-bottom-color: transparent; }
-.pending-table tr.loan-detail-row td { background: #f8fafc; padding-top: 0; }
-.pending-table tr.loan-detail-row:hover { background: transparent; }
+.review-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .9rem 1.2rem;
+    padding: .9rem 1rem; border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; }
+.review-summary .rs-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+.review-summary .rs-value { font-weight: 700; color: #111827; overflow-wrap: anywhere; }
+.review-summary .amount-main { font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; }
+.review-modal .review-panel { margin-top: 1rem; }
+.ai-why { border: 0; background: none; padding: 0; margin-top: .2rem; font-size: .72rem; font-weight: 700; color: #1d4ed8; cursor: pointer; white-space: nowrap; }
+.ai-why:hover { text-decoration: underline; }
+.ai-verdict { border-radius: 12px; padding: .75rem .9rem; font-size: .86rem; margin-bottom: 1rem; border: 1px solid; }
+.ai-verdict-head { font-weight: 800; margin-bottom: .15rem; }
+.ai-verdict.ai-ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.ai-verdict.ai-warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.ai-verdict.ai-bad { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.ai-h { font-size: .82rem; font-weight: 800; color: #111827; margin: 1rem 0 .45rem; display: flex; align-items: center; gap: .4rem; }
+.ai-p { font-size: .85rem; color: #334155; margin: 0 0 .5rem; }
+.ai-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-bottom: .4rem; }
+.ai-table th { font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; color: #64748b; font-weight: 700; padding: .35rem .5rem; border-bottom: 1px solid #e5e7eb; }
+.ai-table td { padding: .45rem .5rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.ai-table td.text-end, .ai-table th.text-end { white-space: nowrap; }
+.ai-table .ai-total td { font-weight: 800; border-top: 1.5px solid #cbd5e1; border-bottom: 0; }
+.ai-formula { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: .65rem .85rem; margin-bottom: .6rem; line-height: 1.7; overflow-x: auto; }
+.ai-warn { font-size: .82rem; color: #92400e; padding-left: 1.1rem; margin: 0 0 .7rem; }
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-danger { background: #fee2e2; color: #b91c1c; }
 .pending-table .applicant-name { font-weight: 700; color: var(--text-dark); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 .pending-table .amount-main { font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; }
 .pending-table .ai-amount { font-weight: 700; color: #1d4ed8; }
@@ -670,13 +778,6 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
 .review-tab-content.d-none { display: none; }
 
-.review-toggle-btn .fa-chevron-down {
-    transition: transform .15s ease;
-}
-
-.review-toggle-btn[aria-expanded="true"] .fa-chevron-down {
-    transform: rotate(180deg);
-}
 
 @media (max-width: 992px) {
     .stats-grid,
@@ -960,6 +1061,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     </tr>
                 </thead>
                 <tbody>
+    <?php $reviewModals = []; $aiModals = []; ?>
     <?php foreach ($loans as $loan): ?>
         <?php
         $loanId = (int)$loan['id'];
@@ -1032,7 +1134,29 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
         <?php
         $hasNotes = in_array($status, ['INFO_PROVIDED', 'INFO_REQUESTED'], true);
         $hasDetail = $isReviewer || $hasNotes || !empty($trail);
-        $colspan = $isReviewer ? 9 : 8;
+        $hasAiAmount = $assessment['available'] && $assessment['limit'] > 0;
+        if ($hasAiAmount) {
+            ob_start(); ?>
+<div class="modal-overlay review-modal" id="aiModal-<?= $loanId ?>" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle-<?= $loanId ?>">
+        <div class="modal-header">
+            <div class="modal-title">
+                <div class="modal-ico"><i class="fas fa-wand-magic-sparkles"></i></div>
+                <span class="modal-title-text" id="aiModalTitle-<?= $loanId ?>">AI recommended amount: <?= money($assessment['limit']) ?></span>
+            </div>
+            <button type="button" class="modal-close" data-review-close aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p class="ai-p text-muted">How this amount was worked out for <strong><?= h($clientName) ?></strong>.</p>
+            <?= aiExplanationHtml($assessment) ?>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-review-close>Close</button>
+        </div>
+    </div>
+</div>
+            <?php $aiModals[] = ob_get_clean();
+        }
         ?>
                     <tr class="loan-row status-<?= h(strtolower($status)) ?>">
                         <?php if ($isReviewer): ?>
@@ -1069,8 +1193,11 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         </td>
                         <td class="text-nowrap"><?= money($loan['interest'] ?? 0) ?></td>
                         <td class="text-nowrap">
-                            <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
+                            <?php if ($hasAiAmount): ?>
                                 <span class="ai-amount"><?= money($assessment['limit']) ?></span>
+                                <div><button type="button" class="ai-why" data-review-open="aiModal-<?= $loanId ?>" aria-haspopup="dialog">
+                                    <i class="fas fa-wand-magic-sparkles"></i> View AI explanation
+                                </button></div>
                             <?php else: ?>
                                 <span class="text-muted">-</span>
                             <?php endif; ?>
@@ -1082,10 +1209,9 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                     <i class="fas fa-eye"></i> View
                                 </a>
                                 <?php if ($isReviewer): ?>
-                                    <button type="button" class="btn btn-outline-primary btn-sm review-toggle-btn"
-                                            data-panel="detail-<?= $loanId ?>" aria-expanded="false" aria-controls="detail-<?= $loanId ?>">
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            data-review-open="reviewModal-<?= $loanId ?>" aria-haspopup="dialog">
                                         <i class="fas fa-clipboard-check"></i> Review
-                                        <i class="fas fa-chevron-down fs-xs"></i>
                                     </button>
                                 <?php else: ?>
                                     <?php if ($isAssignedToMe && $status === 'INFO_REQUESTED'): ?>
@@ -1094,9 +1220,9 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                         </a>
                                     <?php endif; ?>
                                     <?php if ($hasDetail): ?>
-                                        <button type="button" class="btn btn-ghost btn-sm review-toggle-btn"
-                                                data-panel="detail-<?= $loanId ?>" aria-expanded="false" aria-controls="detail-<?= $loanId ?>">
-                                            Details <i class="fas fa-chevron-down fs-xs"></i>
+                                        <button type="button" class="btn btn-ghost btn-sm"
+                                                data-review-open="reviewModal-<?= $loanId ?>" aria-haspopup="dialog">
+                                            <i class="fas fa-circle-info"></i> Details
                                         </button>
                                     <?php endif; ?>
                                 <?php endif; ?>
@@ -1107,8 +1233,50 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         </td>
                     </tr>
         <?php if ($hasDetail): ?>
-                    <tr class="loan-detail-row d-none" id="detail-<?= $loanId ?>">
-                        <td colspan="<?= $colspan ?>">
+        <?php ob_start(); ?>
+<div class="modal-overlay review-modal" id="reviewModal-<?= $loanId ?>" aria-hidden="true">
+    <div class="modal-box md" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle-<?= $loanId ?>">
+        <div class="modal-header">
+            <div class="modal-title">
+                <div class="modal-ico"><i class="fas fa-<?= $isReviewer ? 'clipboard-check' : 'circle-info' ?>"></i></div>
+                <span class="modal-title-text" id="reviewModalTitle-<?= $loanId ?>"><?= $isReviewer ? 'Review application' : 'Application details' ?>: <?= h($clientName) ?></span>
+            </div>
+            <button type="button" class="modal-close" data-review-close aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="review-summary">
+                <div>
+                    <div class="rs-label">Applicant</div>
+                    <div class="rs-value"><?= h($clientName) ?></div>
+                    <div class="fs-xs text-muted"><?= $phone !== '' ? h($phone) : 'Client ID: ' . h($loan['client_id'] ?? '') ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">Requested</div>
+                    <div class="rs-value amount-main"><?= money((float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0)) ?></div>
+                    <div class="fs-xs text-muted"><?= h(loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'))) ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">Interest</div>
+                    <div class="rs-value"><?= money($loan['interest'] ?? 0) ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">AI recommended</div>
+                    <div class="rs-value"><?= $hasAiAmount ? money($assessment['limit']) : '-' ?></div>
+                    <?php if ($hasAiAmount): ?>
+                        <button type="button" class="ai-why" data-review-open="aiModal-<?= $loanId ?>" aria-haspopup="dialog">
+                            <i class="fas fa-wand-magic-sparkles"></i> View AI explanation
+                        </button>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <div class="rs-label">Applied</div>
+                    <div class="rs-value"><?= h($appliedDate) ?></div>
+                    <div class="mt-1">
+                        <span class="badge <?= typeBadge($clientType) ?>"><?= h(ucfirst($clientType)) ?></span>
+                        <span class="badge <?= statusBadge($status) ?>"><?= h(statusLabel($status)) ?></span>
+                    </div>
+                </div>
+            </div>
             <?php if ($status === 'INFO_PROVIDED'): ?>
                 <div class="workflow-note">
                     <strong><i class="fas fa-reply"></i> Loan officer response<?= $officerName !== '' ? ' from ' . h($officerName) : '' ?>:</strong>
@@ -1278,8 +1446,14 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     </div>
                 </div>
             <?php endif; ?>
-                        </td>
-                    </tr>
+        </div>
+        <div class="modal-footer">
+            <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>" class="btn btn-ghost"><i class="fas fa-eye"></i> Full loan details</a>
+            <button type="button" class="btn btn-secondary" data-review-close>Close</button>
+        </div>
+    </div>
+</div>
+        <?php $reviewModals[] = ob_get_clean(); ?>
         <?php endif; ?>
 
     <?php endforeach; ?>
@@ -1287,6 +1461,10 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
             </table>
         </div>
     </div>
+
+    <?= implode('', $reviewModals) ?>
+    <?php /* After the review modals so it opens on top of one. */ ?>
+    <?= implode('', $aiModals) ?>
 
     <?php if ($totalPages > 1): ?>
         <?php
@@ -1347,16 +1525,33 @@ document.querySelectorAll('.offer-form input[name="custom_amount"]').forEach(inp
         if (radio) radio.checked = true;
     });
 });
+function openReviewModal(id) {
+    var modal = document.getElementById(id);
+    if (!modal) return;
+    if (window.Modal) { Modal.open(id); } else { modal.classList.add('open'); }
+    modal.setAttribute('aria-hidden', 'false');
+}
+function closeReviewModal(id) {
+    var modal = document.getElementById(id);
+    if (!modal) return;
+    if (window.Modal) { Modal.close(id); } else { modal.classList.remove('open'); }
+    modal.setAttribute('aria-hidden', 'true');
+}
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    // Close only the top one, e.g. the AI explanation opened over a review.
+    var open = document.querySelectorAll('.review-modal.open');
+    if (open.length) closeReviewModal(open[open.length - 1].id);
+});
 document.addEventListener('click', function (e) {
-    var toggleBtn = e.target.closest('.review-toggle-btn');
-    if (toggleBtn) {
-        var panel = document.getElementById(toggleBtn.getAttribute('data-panel'));
-        if (panel) {
-            var nowHidden = panel.classList.toggle('d-none');
-            toggleBtn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
-            var row = toggleBtn.closest('tr');
-            if (row) row.classList.toggle('row-open', !nowHidden);
-        }
+    var openBtn = e.target.closest('[data-review-open]');
+    if (openBtn) {
+        openReviewModal(openBtn.getAttribute('data-review-open'));
+        return;
+    }
+    var openModal = e.target.closest('.review-modal');
+    if (openModal && (e.target === openModal || e.target.closest('[data-review-close]'))) {
+        closeReviewModal(openModal.id);
         return;
     }
 

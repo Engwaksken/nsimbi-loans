@@ -226,6 +226,9 @@ if (!function_exists('loan_assessment')) {
         // With a client ID, approved credit documents (statements, bills,
         // licences), documents on file and repayment history also count:
         // see includes/credit_scoring.php.
+        // 'profile' carries the score breakdown for admin screens only; the
+        // app endpoints read just score and limit.
+        $p = null;
         if ($userId !== null && $userId > 0 && function_exists('credit_profile_compute') && ($db = credit_db()) !== null) {
             $p = credit_profile_compute($db, $businessType, $amountLast, $amountThis, credit_approved_evidence($db, $userId), $userId);
             if ($p['verified_income'] > 0 || abs($p['score'] - $p['base_score']) >= 0.05 || $p['repayment_factor'] < 1) {
@@ -236,6 +239,8 @@ if (!function_exists('loan_assessment')) {
                     'last'         => $p['income_used'],
                     'this'         => $p['income_used'],
                     'has_turnover' => $p['has_turnover'],
+                    'profile'      => $p,
+                    'source'       => 'profile',
                 ];
             }
         }
@@ -251,6 +256,8 @@ if (!function_exists('loan_assessment')) {
             'last'         => $last,
             'this'         => $this_,
             'has_turnover' => $has,
+            'profile'      => $p,
+            'source'       => 'formula',
         ];
     }
 
@@ -358,6 +365,13 @@ if (!function_exists('loan_assessment')) {
             'business_period' => (string)($customer['business_period'] ?? ''),
             'amount_last'     => (string)($customer['amount_last'] ?? ''),
             'amount_this'     => (string)($customer['amount_this'] ?? ''),
+            // How the limit was worked out (admin explanation only).
+            'matched_type'    => $matchedType,
+            'source'          => $calc['source'] ?? 'formula',
+            'income_last'     => (float)$calc['last'],
+            'income_this'     => (float)$calc['this'],
+            'limit_note'      => (string)($calc['limit_note'] ?? ''),
+            'profile'         => $calc['profile'] ?? null,
         ];
     }
 
