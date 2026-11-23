@@ -1,6 +1,17 @@
 <?php
 require_once dirname(__DIR__) . '/includes/site_cms.php';
 $brand = site_settings($conn);
+
+// Loan officers the client can name as their referrer (optional).
+// /apply?ref=<officer id> pre-selects one, so officers can share a link.
+require_once dirname(__DIR__) . '/includes/officer_referrals.php';
+$referralOfficers = [];
+try {
+  $referralOfficers = referral_officers($conn);
+} catch (Throwable $e) {
+  error_log('Apply: could not load loan officers: ' . $e->getMessage());
+}
+$referralPick = (int)($_GET['ref'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -310,6 +321,17 @@ $brand = site_settings($conn);
                           <label>Upload Your Image (Image/PDF)</label>
                           <input type="file" class="form-control" name="profile_img" accept="image/*,.pdf" required>
                         </div>
+                        <?php if ($referralOfficers): ?>
+                        <div class="col-md-6">
+                          <label for="referred_by">Which loan officer referred you? (optional)</label>
+                          <select class="form-control" name="referred_by" id="referred_by">
+                            <option value="">No one, I found you myself</option>
+                            <?php foreach ($referralOfficers as $officer): ?>
+                              <option value="<?= (int)$officer['id'] ?>"<?= $referralPick === (int)$officer['id'] ? ' selected' : '' ?>><?= site_e(trim($officer['fname'] . ' ' . $officer['lname'])) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        </div>
+                        <?php endif; ?>
                       </div>
                          <div class="col-md-6">
                           <label for="signature-pad">Draw your Signature (Mouse or Touch)</label>

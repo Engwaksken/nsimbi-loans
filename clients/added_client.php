@@ -127,6 +127,7 @@ function saveSignature($base64) {
 }
 
 require_once dirname(__DIR__) . '/includes/loan_assessment.php';
+require_once dirname(__DIR__) . '/includes/officer_referrals.php';
 
 function amountToNumber($value) {
     // Shared reader: range options, plain numbers, 200k, 1.5M, ...
@@ -241,6 +242,9 @@ try {
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
     $active = 1;
 
+    // Before the transaction: adding the column (first run only) would commit it.
+    referral_ensure_schema($conn);
+
     $conn->begin_transaction();
 
     $stmt = $conn->prepare("
@@ -352,6 +356,18 @@ try {
 
     $customer_id = $stmt->insert_id;
     $stmt->close();
+
+    // Optional: the loan officer who referred this client. Anything that is
+    // not an active loan officer is ignored rather than failing sign-up.
+    $referred_by = referral_valid_officer($conn, $_POST['referred_by'] ?? '');
+    if ($referred_by !== null) {
+        $stmt = $conn->prepare("UPDATE customers SET referred_by = ? WHERE id = ?");
+        $stmt->bind_param("ii", $referred_by, $customer_id);
+        if (!$stmt->execute()) {
+            throw new Exception($stmt->error);
+        }
+        $stmt->close();
+    }
 
     $conn->commit();
 
