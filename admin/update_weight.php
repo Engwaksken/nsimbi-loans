@@ -2,15 +2,17 @@
 declare(strict_types=1);
 
 /*
- * Score weights API for manage-score-weights.php.
+ * Score weights API for manage-score-weights.php. Reviewers (role 1) only.
  *
- *   {"action":"update","id":1,"weight":0.25}  change one weight
- *   {"action":"normalize"}                    scale all weights so they total 1.00
+ *   {"action":"save","weights":{"sectorRisk":0.3, ...}}  save every weight; must total 1.00
+ *   {"action":"normalize"}                              scale the current weights to total 1.00
  *
- * The total of all weights may never go above 1.00. Reviewers (role 1) only.
+ * Both also tidy the table: one row per component, no unused rows
+ * (includes/score_weights.php).
  */
 
 require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/score_weights.php';
 
 header('Content-Type: application/json');
 
@@ -36,92 +38,31 @@ if (!is_array($data)) {
     weights_respond(false, 'Invalid input data.', [], 422);
 }
 
-/** @return array<int, float> id => weight */
-function weights_load(mysqli $conn): array
-{
-    $out = [];
-    $res = $conn->query('SELECT id, weight FROM scoreWeights ORDER BY id ASC');
-    while ($res && ($r = $res->fetch_assoc())) {
-        $out[(int)$r['id']] = (float)$r['weight'];
-    }
-    return $out;
-}
+$action = (string)($data['action'] ?? '');
 
-$action = (string)($data['action'] ?? 'update');
-
-if ($action === 'normalize') {
-    $weights = weights_load($conn);
-    if (!$weights) {
-        weights_respond(false, 'No score weights found.');
+try {
+    if ($action === 'normalize') {
+        $state = score_weights_state($conn);
+        $new = score_weights_balance($state['weights']);
+    } elseif ($action === 'save') {
+        $new = is_array($data['weights'] ?? null) ? $data['weights'] : [];
+    } else {
+        weights_respond(false, 'Unknown action.', [], 422);
     }
 
-    $total = array_sum($weights);
-    $count = count($weights);
-
-    // Scale every weight by the same factor so their proportions stay the
-    // same. If everything is 0, share equally.
-    $new = [];
-    foreach ($weights as $id => $w) {
-        $new[$id] = $total > 0 ? round($w / $total, 2) : round(1 / $count, 2);
-    }
-    // Rounding can leave 0.99 or 1.01; put the difference on the largest weight.
-    $diff = round(1.0 - array_sum($new), 2);
-    if ($diff != 0.0) {
-        $largest = array_keys($new, max($new))[0];
-        $new[$largest] = round($new[$largest] + $diff, 2);
-    }
-
-    $stmt = $conn->prepare('UPDATE scoreWeights SET weight = ? WHERE id = ?');
-    $conn->begin_transaction();
-    try {
-        foreach ($new as $id => $w) {
-            $stmt->bind_param('di', $w, $id);
-            $stmt->execute();
-        }
-        $conn->commit();
-    } catch (Throwable $e) {
-        $conn->rollback();
-        error_log('Normalize score weights failed: ' . $e->getMessage());
-        weights_respond(false, 'Could not balance the weights. Please try again.', [], 500);
-    }
-    $stmt->close();
-
-    weights_respond(true, 'Weights balanced to a total of 1.00.', ['weights' => $new]);
+    $result = score_weights_save($conn, $new);
+} catch (DomainException $e) {
+    weights_respond(false, $e->getMessage(), [], 422);
+} catch (Throwable $e) {
+    error_log('Score weights: ' . $e->getMessage());
+    weights_respond(false, 'Could not save the weights. Please try again.', [], 500);
 }
 
-// ---- Update one weight ----
-$id = (int)($data['id'] ?? 0);
-$weight = round((float)($data['weight'] ?? -1), 2);
-
-if ($id <= 0) {
-    weights_respond(false, 'Invalid score component selected.', [], 422);
+$message = $action === 'normalize' ? 'Weights balanced to a total of 1.00.' : 'Weights saved. Total is 1.00.';
+if ($result['removed'] > 0) {
+    $message .= ' Removed ' . $result['removed'] . ' duplicate or unused row(s).';
 }
-if ($weight < 0 || $weight > 1) {
-    weights_respond(false, 'Weight must be between 0 and 1.', [], 422);
+if ($result['added'] > 0) {
+    $message .= ' Added ' . $result['added'] . ' missing component(s).';
 }
-
-$weights = weights_load($conn);
-if (!array_key_exists($id, $weights)) {
-    weights_respond(false, 'Score component not found.', [], 404);
-}
-
-$othersTotal = array_sum($weights) - $weights[$id];
-$newTotal = round($othersTotal + $weight, 2);
-if ($newTotal > 1.0) {
-    $max = max(0, round(1.0 - $othersTotal, 2));
-    weights_respond(false, sprintf(
-        'That would make the total %.2f. The total cannot go above 1.00, so this weight can be at most %.2f. Lower another component first.',
-        $newTotal,
-        $max
-    ), [], 422);
-}
-
-$stmt = $conn->prepare('UPDATE scoreWeights SET weight = ? WHERE id = ?');
-$stmt->bind_param('di', $weight, $id);
-if (!$stmt->execute()) {
-    error_log('Update score weight failed: ' . $stmt->error);
-    weights_respond(false, 'Could not save the weight. Please try again.', [], 500);
-}
-$stmt->close();
-
-weights_respond(true, sprintf('Weight updated. Total is now %.2f.', $newTotal), ['total' => $newTotal]);
+weights_respond(true, $message, ['weights' => score_weights_state($conn)['weights']]);

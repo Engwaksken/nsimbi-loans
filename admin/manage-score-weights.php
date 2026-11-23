@@ -1,765 +1,351 @@
 <?php
 declare(strict_types=1);
 
+/*
+ * System > Manage Score Weights: how much each component counts in a
+ * client's credit score. The weights always total 1.00 (100%). Reviewers
+ * (role 1) edit them; saving is refused unless they add up to 100%.
+ * Reading and tidying the table: includes/score_weights.php.
+ */
+
+$phead = 'Manage Score Weights';
 require "nav-head.php";
+require_once dirname(__DIR__) . '/includes/score_weights.php';
 
 if (!isset($conn)) {
     die("Database connection not established.");
 }
 
-function h($value): string
-{
-    return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+if (!function_exists('h')) {
+    function h($value): string
+    {
+        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+    }
 }
 
-$components = [
-    'esoRecommendation'        => 'ESO Recommendation',
-    'sectorRisk'               => 'Business Sector',
-    'mobileMoneyTransactions'  => 'Mobile Money Transactions',
-    'personalRecords'          => 'Water / Electricity Bills',
-    'businessRecords'          => 'Business Records and Licences',
-    'repaymentHistory'         => 'Repayment History',
-    'documentation'            => 'Documents on File',
-];
-
-$weights = [];
-
-$stmt = $conn->prepare("
-    SELECT id, name, weight
-    FROM scoreWeights
-    ORDER BY id ASC
-");
-
-if (!$stmt) {
-    die("Score weights query failed: " . h($conn->error));
+$loadError = '';
+try {
+    $state = score_weights_state($conn);
+} catch (Throwable $e) {
+    error_log('Manage score weights: ' . $e->getMessage());
+    $state = ['weights' => array_fill_keys(array_keys(CREDIT_COMPONENTS), 0.0), 'ids' => [], 'total' => 0.0,
+        'duplicates' => 0, 'unused' => [], 'missing' => [], 'raw_total' => 0.0];
+    $loadError = 'Could not load the score weights. Check the server log.';
 }
 
-$stmt->execute();
-$result = $stmt->get_result();
+$weights = $state['weights'];
+$total = (float)$state['total'];
+$isBalanced = abs($total - 1.0) < 0.001;
+$isOk = $loadError === '' && score_weights_ok($state);
+$canEdit = (int)($_SESSION['role'] ?? 0) === 1;
 
-while ($row = $result->fetch_assoc()) {
-    $weights[] = $row;
+arsort($weights);
+$largestName = (string)array_key_first($weights);
+$largest = $weights[$largestName] ?? 0.0;
+// Show in the scoring order, not by size.
+$weights = array_replace(array_fill_keys(array_keys(CREDIT_COMPONENTS), 0.0), $weights);
+
+// What is wrong, in plain words.
+$problems = [];
+if (!$isBalanced) {
+    $problems[] = sprintf('The weights add up to %.2f instead of 1.00.', $total);
 }
-
-$stmt->close();
-
-$totalWeight = 0;
-foreach ($weights as $weight) {
-    $totalWeight += (float)($weight['weight'] ?? 0);
+if ($state['duplicates'] > 0) {
+    $problems[] = $state['duplicates'] . ' component row(s) are stored twice.';
 }
-
-$weightPercent = $totalWeight * 100;
-$isBalanced = abs($totalWeight - 1.0) < 0.001;
-$canEditWeights = ((int)($_SESSION['role'] ?? 0) === 1);
+if ($state['unused']) {
+    $problems[] = 'Rows not used by scoring: ' . implode(', ', $state['unused']) . '.';
+}
+if ($state['missing']) {
+    $problems[] = 'No row yet for: ' . implode(', ', array_map(static fn($n) => CREDIT_COMPONENTS[$n]['label'], $state['missing'])) . '.';
+}
 ?>
-
 <style>
-.weight-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
-
-.weight-stat-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-left: 5px solid #2563eb;
-    border-radius: 16px;
-    padding: 1rem;
-    box-shadow: 0 8px 24px rgba(15,23,42,.05);
-}
-
-.weight-stat-card.success { border-left-color: #16a34a; }
-.weight-stat-card.warning { border-left-color: #f59e0b; }
-.weight-stat-card.danger { border-left-color: #dc2626; }
-
-.weight-stat-flex {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.weight-stat-label {
-    margin: 0;
-    font-size: .72rem;
-    font-weight: 800;
-    color: #64748b;
-    letter-spacing: .05em;
-    text-transform: uppercase;
-}
-
-.weight-stat-value {
-    margin: .35rem 0 0;
-    font-size: 1.3rem;
-    font-weight: 900;
-    color: #111827;
-}
-
-.weight-stat-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 14px;
-    background: #2563eb;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.weight-stat-card.success .weight-stat-icon { background: #16a34a; }
-.weight-stat-card.warning .weight-stat-icon { background: #f59e0b; }
-.weight-stat-card.danger .weight-stat-icon { background: #dc2626; }
-
-.weight-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 18px;
-    box-shadow: 0 8px 24px rgba(15,23,42,.06);
-    overflow: hidden;
-}
-
-.weight-card-header {
-    padding: 1rem 1.2rem;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.weight-card-title {
-    margin: 0;
-    font-weight: 900;
-    color: #111827;
-}
-
-.weight-card-sub {
-    margin: .2rem 0 0;
-    color: #64748b;
-    font-size: .85rem;
-}
-
-.weight-table-scroll {
-    width: 100%;
-    overflow-x: auto;
-}
-
-.weight-table {
-    width: 100%;
-    min-width: 760px;
-    margin: 0;
-    border-collapse: collapse;
-}
-
-.weight-table th {
-    background: #f8fafc;
-    color: #475569;
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    padding: .95rem 1rem;
-    border-bottom: 1px solid #e5e7eb;
-    text-align: left;
-}
-
-.weight-table td {
-    padding: .95rem 1rem;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: middle;
-}
-
-.weight-component {
-    font-weight: 800;
-    color: #111827;
-}
-
-.weight-key {
-    color: #64748b;
-    font-size: .78rem;
-}
-
-.weight-bar {
-    width: 180px;
-    height: 9px;
-    background: #e5e7eb;
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.weight-fill {
-    height: 100%;
-    border-radius: 999px;
-    background: #2563eb;
-}
-
-.weight-fill.warning { background: #f59e0b; }
-.weight-fill.danger { background: #dc2626; }
-
-.weight-alert {
-    padding: .85rem 1rem;
-    border-radius: 12px;
-    margin-bottom: 1rem;
-    font-size: .9rem;
-}
-
-.weight-alert.success {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.weight-alert-action {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.weight-alert.warning {
-    background: #fffbeb;
-    color: #92400e;
-}
-
-.weight-empty {
-    padding: 2.5rem;
-    text-align: center;
-    color: #64748b;
-}
-
-/* Modal */
-.weight-modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 99999;
-    background: rgba(15, 23, 42, .55);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-}
-
-.weight-modal-overlay.show {
-    display: flex;
-}
-
-.weight-modal-box {
-    width: 100%;
-    max-width: 520px;
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 24px 60px rgba(15,23,42,.25);
-    overflow: hidden;
-}
-
-.weight-modal-header {
-    padding: 1rem 1.2rem;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.weight-modal-title {
-    margin: 0;
-    font-weight: 900;
-    color: #111827;
-}
-
-.weight-modal-close {
-    border: 0;
-    background: #f3f4f6;
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 1.2rem;
-}
-
-.weight-modal-body {
-    padding: 1.2rem;
-}
-
-.weight-modal-footer {
-    padding: 1rem 1.2rem;
-    border-top: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: flex-end;
-    gap: .5rem;
-}
-
-.weight-form-label {
-    display: block;
-    font-weight: 800;
-    margin-bottom: .35rem;
-    color: #111827;
-}
-
-.weight-form-control {
-    width: 100%;
-    border: 1px solid #d1d5db;
-    border-radius: 10px;
-    padding: .7rem .8rem;
-}
-
-.weight-form-alert {
-    display: none;
-    padding: .75rem .9rem;
-    border-radius: 10px;
-    margin-bottom: 1rem;
-}
-
-.weight-form-alert.error {
-    display: block;
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-}
-
-.weight-form-alert.success {
-    display: block;
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-}
-
-@media (max-width: 992px) {
-    .weight-stats-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 576px) {
-    .weight-stats-grid {
-        grid-template-columns: 1fr;
-    }
-}
+.sw-table td { vertical-align: middle; }
+.sw-name { font-weight: 700; color: var(--text-dark); }
+.sw-key { font-size: .7rem; color: #94a3b8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sw-help { font-size: .76rem; color: #64748b; white-space: normal; max-width: 420px; }
+.sw-bar { height: 7px; border-radius: 99px; background: #eef2f7; overflow: hidden; min-width: 120px; }
+.sw-bar span { display: block; height: 100%; background: var(--primary, #2563eb); border-radius: 99px; }
+.sw-weight { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1rem; color: var(--text-dark); }
+.sw-alert { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-radius: 12px; padding: .85rem 1rem; margin-bottom: 1rem; font-size: .88rem; border: 1px solid; }
+.sw-alert.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.sw-alert.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.sw-alert ul { margin: .3rem 0 0; padding-left: 1.1rem; }
+.sw-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: .75rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid #f1f5f9; }
+.sw-edit-row:last-child { border-bottom: 0; }
+.sw-edit-row label { font-weight: 700; font-size: .85rem; margin: 0; }
+.sw-edit-row .sw-help { max-width: none; }
+.sw-input { position: relative; }
+.sw-input input { width: 100%; text-align: right; padding: .45rem 1.7rem .45rem .6rem; border: 1px solid #d1d5db; border-radius: 9px; font-weight: 700; }
+.sw-input span { position: absolute; right: .6rem; top: 50%; transform: translateY(-50%); color: #64748b; font-weight: 700; pointer-events: none; }
+.sw-total { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .7rem .9rem; border-radius: 10px; margin-top: .8rem; font-weight: 800; }
+.sw-total.ok { background: #f0fdf4; color: #166534; }
+.sw-total.bad { background: #fef2f2; color: #b91c1c; }
+.sw-form-error { color: #b91c1c; font-size: .82rem; margin-top: .5rem; }
+@media (max-width: 576px) { .sw-edit-row { grid-template-columns: minmax(0, 1fr) 92px; } }
 </style>
 
-<div class="container-fluid py-4">
-
-    <div class="page-header mb-4">
-        <div>
-            <div class="title">Manage Score Weights</div>
-            <div class="sub">Each weight sets how much a component counts in a client's credit score. Business Sector uses the business-type score. Mobile Money Transactions (6 months for the top score), Water / Electricity Bills (6 consecutive months on the same account) and Business Records and Licences (URSB, trading licence, TIN, permits, sales records) use approved credit documents (Loans &gt; Credit Documents). Documents on File counts the ID, photos, licence and signature given at registration or on the profile. These document components can only raise a score: without a document they count at the business-type score. Repayment History is how the client paid earlier and current loans; it can raise or lower the score, and a loan overdue more than 30 days caps the score at 4 (more than 90 days at 2). ESO Recommendation is not collected yet and counts at the business-type score.</div>
-        </div>
+<div class="page-header mb-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+        <div class="title">Manage Score Weights</div>
+        <div class="sub">How much each component counts in a client's credit score (0 to 10). The weights always add up to 100%.</div>
     </div>
-
-    <?php if ($isBalanced): ?>
-        <div class="weight-alert success">
-            <i class="fas fa-check-circle me-1"></i>
-            Total weight is balanced at 1.00.
-        </div>
-    <?php else: ?>
-        <div class="weight-alert warning weight-alert-action">
-            <div>
-                <i class="fas fa-exclamation-triangle me-1"></i>
-                Total weight is currently <?= number_format($totalWeight, 2) ?>. Recommended total is 1.00.
-                <?php if ($canEditWeights && !empty($weights)): ?>
-                    <div class="fs-sm mt-1">Balancing scales every weight by the same amount, so each component keeps its share.</div>
-                <?php endif; ?>
-            </div>
-            <?php if ($canEditWeights && !empty($weights)): ?>
-                <button type="button" class="btn btn-warning btn-sm" id="normalizeWeights">
-                    <i class="fas fa-balance-scale me-1"></i> Balance to 1.00
-                </button>
-            <?php endif; ?>
-        </div>
+    <?php if ($canEdit && $loadError === ''): ?>
+        <button type="button" class="btn btn-primary" data-sw-open><i class="fas fa-sliders-h"></i> Edit weights</button>
     <?php endif; ?>
+</div>
 
-    <div class="weight-stats-grid">
-        <div class="weight-stat-card">
-            <div class="weight-stat-flex">
-                <div>
-                    <p class="weight-stat-label">Components</p>
-                    <h4 class="weight-stat-value"><?= number_format(count($weights)) ?></h4>
-                </div>
-                <div class="weight-stat-icon">
-                    <i class="fas fa-layer-group"></i>
-                </div>
-            </div>
+<?php if ($loadError !== ''): ?>
+    <div class="alert alert-danger"><?= h($loadError) ?></div>
+<?php elseif ($isOk): ?>
+    <div class="sw-alert ok"><div><i class="fas fa-check-circle me-1"></i> The weights add up to 1.00 (100%) and each component is stored once.</div></div>
+<?php else: ?>
+    <div class="sw-alert warn">
+        <div>
+            <strong><i class="fas fa-exclamation-triangle me-1"></i> The score weights need fixing.</strong>
+            <ul><?php foreach ($problems as $p): ?><li><?= h($p) ?></li><?php endforeach; ?></ul>
+            <div class="mt-1">Fixing scales the weights below to total 1.00, keeping each component's share, and removes the extra rows. Scores already use these shares, so no client's score changes.</div>
         </div>
-
-        <div class="weight-stat-card <?= $isBalanced ? 'success' : 'warning' ?>">
-            <div class="weight-stat-flex">
-                <div>
-                    <p class="weight-stat-label">Total Weight</p>
-                    <h4 class="weight-stat-value" id="totalWeight"><?= number_format($totalWeight, 2) ?></h4>
-                </div>
-                <div class="weight-stat-icon">
-                    <i class="fas fa-balance-scale"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="weight-stat-card">
-            <div class="weight-stat-flex">
-                <div>
-                    <p class="weight-stat-label">Percentage</p>
-                    <h4 class="weight-stat-value" id="totalPercentage"><?= number_format($weightPercent, 0) ?>%</h4>
-                </div>
-                <div class="weight-stat-icon">
-                    <i class="fas fa-percentage"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="weight-stat-card <?= $isBalanced ? 'success' : 'danger' ?>">
-            <div class="weight-stat-flex">
-                <div>
-                    <p class="weight-stat-label">Status</p>
-                    <h4 class="weight-stat-value" id="weightStatus"><?= $isBalanced ? 'Balanced' : 'Review' ?></h4>
-                </div>
-                <div class="weight-stat-icon">
-                    <i class="fas <?= $isBalanced ? 'fa-check-circle' : 'fa-exclamation-circle' ?>"></i>
-                </div>
-            </div>
-        </div>
+        <?php if ($canEdit): ?>
+            <button type="button" class="btn btn-warning btn-sm" id="normalizeWeights"><i class="fas fa-balance-scale me-1"></i> Fix: balance to 1.00</button>
+        <?php endif; ?>
     </div>
+<?php endif; ?>
 
-    <div class="weight-card">
-        <div class="weight-card-header">
-            <div>
-                <h5 class="weight-card-title">Score Components</h5>
-                <p class="weight-card-sub">Each weight must be between 0 and 1. The total should equal 1.00.</p>
-            </div>
-
-            <button type="button" class="btn btn-sm btn-outline-success" onclick="downloadWeightsCSV()">
-                <i class="fas fa-file-csv me-1"></i> CSV
-            </button>
+<div class="stats-grid stats-compact">
+    <div class="stat-card c-blue">
+        <div class="stat-head"><div class="stat-ico c-blue"><i class="fas fa-layer-group"></i></div></div>
+        <div class="stat-value"><?= count(CREDIT_COMPONENTS) ?></div>
+        <div class="stat-label">Score components</div>
+        <div class="stat-foot"><i class="fas fa-calculator"></i> Score = sum of score &times; weight</div>
+    </div>
+    <div class="stat-card <?= $isBalanced ? 'c-green' : 'c-orange' ?>">
+        <div class="stat-head">
+            <div class="stat-ico <?= $isBalanced ? 'c-green' : 'c-orange' ?>"><i class="fas fa-balance-scale"></i></div>
+            <span class="stat-badge <?= $isBalanced ? 'up' : 'down' ?>"><?= round($total * 100) ?>%</span>
         </div>
+        <div class="stat-value"><?= number_format($total, 2) ?></div>
+        <div class="stat-label">Total weight</div>
+        <div class="stat-foot"><i class="fas fa-bullseye"></i> Must be 1.00</div>
+    </div>
+    <div class="stat-card <?= $isOk ? 'c-green' : 'c-red' ?>">
+        <div class="stat-head"><div class="stat-ico <?= $isOk ? 'c-green' : 'c-red' ?>"><i class="fas <?= $isOk ? 'fa-check-circle' : 'fa-exclamation-circle' ?>"></i></div></div>
+        <div class="stat-value"><?= $isOk ? 'Balanced' : 'Needs fixing' ?></div>
+        <div class="stat-label">Status</div>
+        <div class="stat-foot"><i class="fas fa-database"></i> <?= $state['duplicates'] + count($state['unused']) ?> extra row(s)</div>
+    </div>
+    <div class="stat-card c-purple">
+        <div class="stat-head"><div class="stat-ico c-purple"><i class="fas fa-crown"></i></div></div>
+        <div class="stat-value sm"><?= $total > 0 ? round($largest / $total * 100) : 0 ?>%</div>
+        <div class="stat-label">Largest share</div>
+        <div class="stat-foot"><i class="fas fa-tag"></i> <?= h(CREDIT_COMPONENTS[$largestName]['label'] ?? '-') ?></div>
+    </div>
+</div>
 
-        <div class="weight-table-scroll">
-            <table class="weight-table" id="weightsTable">
-                <thead>
+<div class="card mb-3">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-0">Score components</h5>
+            <small class="text-muted">Document components only raise a score: without a document they count at the business-type score. A loan overdue more than 30 days caps the score at 4 (more than 90 days at 2).</small>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-success" onclick="downloadWeightsCSV()"><i class="fas fa-file-csv me-1"></i> CSV</button>
+    </div>
+    <div class="table-wrap">
+        <table class="table sw-table" id="weightsTable">
+            <thead>
+                <tr><th>#</th><th>Component</th><th>Weight</th><th>Share of the score</th></tr>
+            </thead>
+            <tbody>
+            <?php $i = 0; foreach ($weights as $name => $w): $i++; $share = $total > 0 ? $w / $total : 0; ?>
                 <tr>
-                    <th>#</th>
-                    <th>Component</th>
-                    <th>Weight</th>
-                    <th>Contribution</th>
-                    <th class="text-center">Action</th>
+                    <td><?= $i ?></td>
+                    <td>
+                        <div class="sw-name"><?= h(CREDIT_COMPONENTS[$name]['label']) ?></div>
+                        <div class="sw-help"><?= h(SCORE_WEIGHT_HELP[$name] ?? '') ?></div>
+                        <div class="sw-key"><?= h($name) ?></div>
+                    </td>
+                    <td><span class="sw-weight"><?= number_format($w, 2) ?></span></td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <strong style="min-width:3ch"><?= round($share * 100) ?>%</strong>
+                            <div class="sw-bar flex-grow-1"><span style="width:<?= min(100, round($share * 100, 1)) ?>%"></span></div>
+                        </div>
+                    </td>
                 </tr>
-                </thead>
-
-                <tbody>
-                <?php if (!empty($weights)): ?>
-                    <?php foreach ($weights as $index => $weight): ?>
-                        <?php
-                        $id = (int)($weight['id'] ?? 0);
-                        $name = (string)($weight['name'] ?? '');
-                        $value = (float)($weight['weight'] ?? 0);
-                        $label = $components[$name] ?? $name;
-                        $percent = max(0, min(100, $value * 100));
-                        $fillClass = $value >= .4 ? 'danger' : ($value >= .2 ? 'warning' : '');
-                        ?>
-                        <tr>
-                            <td><?= number_format($index + 1) ?></td>
-
-                            <td>
-                                <div class="weight-component"><?= h($label) ?></div>
-                                <div class="weight-key"><?= h($name) ?></div>
-                            </td>
-
-                            <td>
-                                <strong class="weight-value" data-component="<?= h($name) ?>">
-                                    <?= number_format($value, 2) ?>
-                                </strong>
-                            </td>
-
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span><?= number_format($percent, 0) ?>%</span>
-                                    <div class="weight-bar">
-                                        <div class="weight-fill <?= h($fillClass) ?>"
-                                             style="width: <?= h($percent) ?>%;"></div>
-                                    </div>
-                                </div>
-                            </td>
-
-                            <td class="text-center">
-                                <?php if ($canEditWeights): ?>
-                                <button type="button"
-                                        class="btn btn-sm btn-info js-edit-weight"
-                                        data-component="<?= h($name) ?>"
-                                        data-label="<?= h($label) ?>"
-                                        data-weight="<?= h($value) ?>"
-                                        data-id="<?= h($id) ?>">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <?php else: ?>
-                                <span class="text-muted fs-xs">Reviewers only</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="5">
-                            <div class="weight-empty">
-                                <i class="fas fa-balance-scale fa-2x mb-2"></i>
-                                <h6>No score weights found</h6>
-                                <p class="mb-0">Add default weights into the scoreWeights table.</p>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
-<!-- Edit Weight Modal -->
-<div class="weight-modal-overlay" id="editWeightModal">
-    <div class="weight-modal-box">
-        <div class="weight-modal-header">
-            <h5 class="weight-modal-title">Edit Weight</h5>
-            <button type="button" class="weight-modal-close js-close-weight-modal">&times;</button>
+<?php if ($canEdit && $loadError === ''): ?>
+<div class="modal-overlay" id="swModal" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="swModalTitle">
+        <div class="modal-header">
+            <div class="modal-title"><div class="modal-ico"><i class="fas fa-sliders-h"></i></div><span class="modal-title-text" id="swModalTitle">Edit score weights</span></div>
+            <button type="button" class="modal-close" data-sw-close aria-label="Close"><i class="fas fa-times"></i></button>
         </div>
-
-        <div class="weight-modal-body">
-            <div id="weightFormAlert" class="weight-form-alert"></div>
-
-            <form id="weightForm">
-                <input type="hidden" id="componentName">
-                <input type="hidden" id="tableId">
-
-                <div class="mb-3">
-                    <label class="weight-form-label">Component</label>
-                    <input type="text" id="componentLabel" class="weight-form-control" readonly>
-                </div>
-
-                <div class="mb-3">
-                    <label class="weight-form-label">Weight Value</label>
-                    <input type="number"
-                           class="weight-form-control"
-                           id="weightValue"
-                           step="0.01"
-                           min="0"
-                           max="1"
-                           required>
-                    <small class="text-muted" id="weightHint">Enter a value from 0 to 1.</small>
-                </div>
-            </form>
-        </div>
-
-        <div class="weight-modal-footer">
-            <button type="button" class="btn btn-light js-close-weight-modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="saveWeight">
-                <i class="fas fa-save me-1"></i> Save Changes
-            </button>
-        </div>
+        <form id="swForm" novalidate>
+            <div class="modal-body">
+                <p class="text-muted fs-sm mt-0">Give each component a share of the score in whole percent. They must add up to 100%. <strong>Balance</strong> scales what you typed to 100% and keeps the proportions.</p>
+                <?php foreach ($weights as $name => $w): ?>
+                    <div class="sw-edit-row">
+                        <div>
+                            <label for="sw-<?= h($name) ?>"><?= h(CREDIT_COMPONENTS[$name]['label']) ?></label>
+                            <div class="sw-help"><?= h(SCORE_WEIGHT_HELP[$name] ?? '') ?></div>
+                        </div>
+                        <div class="sw-input">
+                            <input type="number" id="sw-<?= h($name) ?>" data-sw-name="<?= h($name) ?>" min="0" max="100" step="1" inputmode="numeric"
+                                   value="<?= $total > 0 ? round($w / $total * 100) : 0 ?>">
+                            <span>%</span>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                <div class="sw-total" id="swTotal"><span>Total</span><span id="swTotalValue">100%</span></div>
+                <div class="sw-form-error" id="swError" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-sw-close>Cancel</button>
+                <button type="button" class="btn btn-secondary" id="swBalance"><i class="fas fa-balance-scale me-1"></i> Balance to 100%</button>
+                <button type="submit" class="btn btn-primary" id="swSave"><i class="fas fa-save me-1"></i> Save</button>
+            </div>
+        </form>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const modal = document.getElementById('editWeightModal');
-    const formAlert = document.getElementById('weightFormAlert');
-
-    const componentName = document.getElementById('componentName');
-    const componentLabel = document.getElementById('componentLabel');
-    const tableId = document.getElementById('tableId');
-    const weightValue = document.getElementById('weightValue');
-
-    function openModal() {
-        modal.classList.add('show');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeModal() {
-        modal.classList.remove('show');
-        document.body.style.overflow = '';
-    }
-
-    function showAlert(message, type = 'error') {
-        formAlert.className = 'weight-form-alert ' + type;
-        formAlert.textContent = message;
-    }
-
-    function clearAlert() {
-        formAlert.className = 'weight-form-alert';
-        formAlert.textContent = '';
-    }
-
-    function updateTotalWeight() {
-        let total = 0;
-
-        document.querySelectorAll('.weight-value').forEach(el => {
-            total += parseFloat(el.textContent) || 0;
+    async function post(body) {
+        const response = await fetch('update_weight.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(body)
         });
-
-        const totalEl = document.getElementById('totalWeight');
-        const percentEl = document.getElementById('totalPercentage');
-        const statusEl = document.getElementById('weightStatus');
-
-        if (totalEl) totalEl.textContent = total.toFixed(2);
-        if (percentEl) percentEl.textContent = Math.round(total * 100) + '%';
-
-        if (statusEl) {
-            statusEl.textContent = Math.abs(total - 1) < 0.001 ? 'Balanced' : 'Review';
-        }
-
-        return total;
+        let data = {};
+        try { data = await response.json(); } catch (e) { /* not JSON */ }
+        if (!data.success) throw new Error(data.message || 'Could not save the weights.');
+        return data;
+    }
+    function busy(btn, text) {
+        const old = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> ' + text;
+        return function () { btn.disabled = false; btn.innerHTML = old; };
+    }
+    function notify(message) {
+        return window.Popup ? Popup.alert(message) : Promise.resolve(window.alert(message));
     }
 
-    document.querySelectorAll('.js-edit-weight').forEach(btn => {
-        btn.addEventListener('click', function () {
-            componentName.value = this.dataset.component || '';
-            componentLabel.value = this.dataset.label || '';
-            tableId.value = this.dataset.id || '';
-            weightValue.value = this.dataset.weight || 0;
-
-            let others = 0;
-            document.querySelectorAll('.weight-value').forEach(el => {
-                if (el.dataset.component !== this.dataset.component) {
-                    others += parseFloat(el.textContent) || 0;
-                }
-            });
-            const maxAllowed = Math.max(0, Math.min(1, 1 - others));
-            weightValue.max = maxAllowed.toFixed(2);
-            document.getElementById('weightHint').textContent =
-                'Other components total ' + others.toFixed(2) + ', so this can be at most ' + maxAllowed.toFixed(2) + ' (total 1.00).';
-
-            clearAlert();
-            openModal();
-        });
-    });
-
-    document.querySelectorAll('.js-close-weight-modal').forEach(btn => {
-        btn.addEventListener('click', closeModal);
-    });
-
-    modal?.addEventListener('click', function (event) {
-        if (event.target === modal) {
-            closeModal();
-        }
-    });
-
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') {
-            closeModal();
-        }
-    });
-
-    document.getElementById('saveWeight')?.addEventListener('click', async function () {
-        const component = componentName.value.trim();
-        const id = tableId.value.trim();
-        const weight = parseFloat(weightValue.value);
-
-        clearAlert();
-
-        if (!component || !id) {
-            showAlert('Invalid score component selected.');
-            return;
-        }
-
-        if (Number.isNaN(weight) || weight < 0 || weight > 1) {
-            showAlert('Weight must be between 0 and 1.');
-            return;
-        }
-
-        const btn = this;
-        const oldHtml = btn.innerHTML;
-
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
-
+    // One-click fix from the warning.
+    const fixBtn = document.getElementById('normalizeWeights');
+    fixBtn?.addEventListener('click', async function () {
+        const ok = window.Popup
+            ? await Popup.confirm('Scale all weights so they add up to 1.00 and remove duplicate or unused rows? Each component keeps the same share.')
+            : window.confirm('Scale all weights so they add up to 1.00?');
+        if (!ok) return;
+        const done = busy(fixBtn, 'Balancing...');
         try {
-            const response = await fetch('update_weight.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'update',
-                    weight: weight,
-                    id: id
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.message || 'Error updating weight.');
-            }
-
-            const valueEl = document.querySelector('.weight-value[data-component="' + component + '"]');
-
-            if (valueEl) {
-                valueEl.textContent = weight.toFixed(2);
-            }
-
-            showAlert(data.message || 'Weight updated successfully.', 'success');
-            updateTotalWeight();
-
-            setTimeout(() => {
-                window.location.reload();
-            }, 600);
-
-        } catch (error) {
-            showAlert(error.message || 'Error updating weight.');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = oldHtml;
-        }
-    });
-
-    document.getElementById('normalizeWeights')?.addEventListener('click', async function () {
-        if (!(await Popup.confirm('Scale all weights so they add up to 1.00? Each component keeps the same share.'))) {
-            return;
-        }
-        const btn = this;
-        const oldHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Balancing...';
-        try {
-            const response = await fetch('update_weight.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ action: 'normalize' })
-            });
-            const data = await response.json();
-            if (!data.success) {
-                throw new Error(data.message || 'Could not balance the weights.');
-            }
+            const data = await post({ action: 'normalize' });
+            await notify(data.message);
             window.location.reload();
         } catch (error) {
-            btn.disabled = false;
-            btn.innerHTML = oldHtml;
-            window.alert(error.message || 'Could not balance the weights.');
+            done();
+            notify(error.message);
         }
     });
 
-    updateTotalWeight();
+    // Edit modal.
+    const modal = document.getElementById('swModal');
+    if (!modal) return;
+    const form = document.getElementById('swForm');
+    const inputs = Array.from(form.querySelectorAll('[data-sw-name]'));
+    const totalBox = document.getElementById('swTotal');
+    const totalValue = document.getElementById('swTotalValue');
+    const errorBox = document.getElementById('swError');
+    const saveBtn = document.getElementById('swSave');
+    const initial = inputs.map(i => i.value);
+
+    function percent(input) {
+        const v = Math.round(parseFloat(input.value));
+        return Number.isFinite(v) ? v : 0;
+    }
+    function refresh() {
+        const total = inputs.reduce((sum, i) => sum + percent(i), 0);
+        const bad = inputs.some(i => percent(i) < 0 || percent(i) > 100);
+        totalValue.textContent = total + '%' + (total === 100 ? '' : (total > 100 ? ' (' + (total - 100) + '% too much)' : ' (' + (100 - total) + '% short)'));
+        totalBox.className = 'sw-total ' + (total === 100 && !bad ? 'ok' : 'bad');
+        saveBtn.disabled = total !== 100 || bad;
+        errorBox.hidden = true;
+        return total;
+    }
+    function open() {
+        inputs.forEach((i, n) => { i.value = initial[n]; });
+        refresh();
+        if (window.Modal) { Modal.open('swModal'); } else { modal.classList.add('open'); }
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(() => inputs[0]?.focus(), 80);
+    }
+    function close() {
+        if (window.Modal) { Modal.close('swModal'); } else { modal.classList.remove('open'); }
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    // Same rule as the server: whole percents, leftovers to the largest remainders.
+    document.getElementById('swBalance').addEventListener('click', function () {
+        const values = inputs.map(i => Math.max(0, percent(i)));
+        const sum = values.reduce((a, b) => a + b, 0);
+        const exact = values.map(v => sum > 0 ? v / sum * 100 : 100 / values.length);
+        const floors = exact.map(Math.floor);
+        let left = 100 - floors.reduce((a, b) => a + b, 0);
+        exact.map((e, n) => [e - floors[n], n]).sort((a, b) => b[0] - a[0]).forEach(([, n]) => {
+            if (left > 0) { floors[n]++; left--; }
+        });
+        inputs.forEach((i, n) => { i.value = floors[n]; });
+        refresh();
+    });
+
+    inputs.forEach(i => i.addEventListener('input', refresh));
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-sw-open]')) { open(); return; }
+        if (e.target.closest('[data-sw-close]') || e.target === modal) close();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) close();
+    });
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (refresh() !== 100) return;
+        const weights = {};
+        inputs.forEach(i => { weights[i.dataset.swName] = percent(i) / 100; });
+        const done = busy(saveBtn, 'Saving...');
+        try {
+            const data = await post({ action: 'save', weights: weights });
+            close();
+            await notify(data.message);
+            window.location.reload();
+        } catch (error) {
+            done();
+            errorBox.textContent = error.message;
+            errorBox.hidden = false;
+        }
+    });
 });
 
 function downloadWeightsCSV() {
     const rows = document.querySelectorAll('#weightsTable tr');
-    let csv = [];
-
+    const csv = [];
     rows.forEach(row => {
-        const cols = row.querySelectorAll('th,td');
-        let rowData = [];
-
-        cols.forEach(col => {
-            rowData.push('"' + col.innerText.replace(/"/g, '""') + '"');
-        });
-
-        csv.push(rowData.join(','));
+        const data = [];
+        row.querySelectorAll('th,td').forEach(col => data.push('"' + col.innerText.replace(/\s+/g, ' ').trim().replace(/"/g, '""') + '"'));
+        csv.push(data.join(','));
     });
-
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
     const link = document.createElement('a');
-
-    link.href = URL.createObjectURL(blob);
+    link.href = URL.createObjectURL(new Blob([csv.join('\n')], { type: 'text/csv' }));
     link.download = 'score_weights.csv';
     link.click();
 }
 </script>
-
-<?php require "footer.php"; ?>
+<?php require 'footer.php'; ?>

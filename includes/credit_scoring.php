@@ -439,7 +439,9 @@ function credit_weights(mysqli $conn): array
     $weights = array_fill_keys(array_keys(CREDIT_COMPONENTS), 0.0);
     $found = false;
     try {
-        $res = $conn->query('SELECT name, weight FROM scoreWeights');
+        // By id, so if a name is ever stored twice the newest row wins
+        // (the same row includes/score_weights.php keeps when it tidies up).
+        $res = $conn->query('SELECT name, weight FROM scoreWeights ORDER BY id ASC');
         while ($res && ($r = $res->fetch_assoc())) {
             if (array_key_exists($r['name'], $weights)) {
                 $weights[$r['name']] = max(0.0, (float)$r['weight']);
