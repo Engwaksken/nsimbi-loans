@@ -88,11 +88,41 @@ echo hr_styles();
         </div>
     </div>
 
-    <div class="hr-stats">
-        <div class="hr-stat"><div class="n"><?= $stats['missing'] ?></div><div class="l">Not yet submitted</div></div>
-        <div class="hr-stat"><div class="n"><?= $stats['review'] ?></div><div class="l">Waiting for review</div></div>
-        <div class="hr-stat"><div class="n"><?= $stats['payable'] ?></div><div class="l">Ready to pay</div></div>
-        <div class="hr-stat"><div class="n"><?= $stats['paid'] ?></div><div class="l">Paid (<?= hr_ugx($stats['paid_total']) ?>)</div></div>
+    <div class="stats-grid stats-compact">
+        <div class="stat-card c-red">
+            <div class="stat-head">
+                <div class="stat-ico c-red"><i class="fas fa-file-circle-exclamation"></i></div>
+                <span class="stat-badge flat"><i class="fas fa-users"></i> <?= number_format($stats['staff']) ?> staff</span>
+            </div>
+            <div class="stat-value"><?= number_format($stats['missing']) ?></div>
+            <div class="stat-label">Not yet submitted</div>
+            <div class="stat-foot"><i class="fas fa-file-lines"></i> Report or invoice missing</div>
+        </div>
+        <div class="stat-card c-orange">
+            <div class="stat-head">
+                <div class="stat-ico c-orange"><i class="fas fa-hourglass-half"></i></div>
+                <?php if ($waiting): ?><span class="stat-badge down"><i class="fas fa-clock"></i> +<?= count($waiting) ?> older</span><?php endif; ?>
+            </div>
+            <div class="stat-value"><?= number_format($stats['review']) ?></div>
+            <div class="stat-label">Waiting for review</div>
+            <div class="stat-foot"><i class="fas fa-clipboard-check"></i> Submitted, needs approval</div>
+        </div>
+        <div class="stat-card c-green">
+            <div class="stat-head">
+                <div class="stat-ico c-green"><i class="fas fa-circle-check"></i></div>
+            </div>
+            <div class="stat-value"><?= number_format($stats['payable']) ?></div>
+            <div class="stat-label">Ready to pay</div>
+            <div class="stat-foot"><i class="fas fa-thumbs-up"></i> All approvals in</div>
+        </div>
+        <div class="stat-card c-blue">
+            <div class="stat-head">
+                <div class="stat-ico c-blue"><i class="fas fa-money-bill-wave"></i></div>
+            </div>
+            <div class="stat-value"><?= number_format($stats['paid']) ?></div>
+            <div class="stat-label">Paid</div>
+            <div class="stat-foot"><i class="fas fa-coins"></i> <?= hr_ugx($stats['paid_total']) ?> this month</div>
+        </div>
     </div>
 
     <?php if ($waiting): ?>

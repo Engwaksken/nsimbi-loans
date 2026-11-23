@@ -523,30 +523,26 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     margin-top: .3rem;
 }
 
-.pending-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-left: 5px solid #f59e0b;
-    border-radius: 16px;
-    padding: 1rem;
-    margin-bottom: .9rem;
-    box-shadow: 0 6px 18px rgba(15,23,42,.05);
-}
-
-.pending-card.status-info_requested { border-left-color: #0ea5e9; }
-.pending-card.status-info_provided { border-left-color: #7e22ce; }
-
-.pending-card-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
+.pending-table-card { overflow: hidden; }
+.pending-table { margin: 0; }
+.pending-table thead th { white-space: nowrap; }
+.pending-table .col-pick { width: 44px; padding-right: 0; }
+.pending-table tr.loan-row td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
+.pending-table tr.loan-row.status-info_requested td:first-child { box-shadow: inset 4px 0 0 #0ea5e9; }
+.pending-table tr.loan-row.status-info_provided td:first-child { box-shadow: inset 4px 0 0 #7e22ce; }
+.pending-table tr.loan-row.selected-loan td { background: #eff6ff; }
+.pending-table tr.loan-row.row-open td { background: #f8fafc; border-bottom-color: transparent; }
+.pending-table tr.loan-detail-row td { background: #f8fafc; padding-top: 0; }
+.pending-table tr.loan-detail-row:hover { background: transparent; }
+.pending-table .applicant-name { font-weight: 700; color: var(--text-dark); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.pending-table .amount-main { font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; }
+.pending-table .ai-amount { font-weight: 700; color: #1d4ed8; }
+.pending-table .row-actions { display: inline-flex; gap: .35rem; flex-wrap: nowrap; justify-content: flex-end; }
 
 .cell-av {
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
+    font-size: .85rem;
     border-radius: 50%;
     background: #2563eb;
     color: #fff;
@@ -555,13 +551,6 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     justify-content: center;
     font-weight: 800;
     flex-shrink: 0;
-}
-
-.pending-meta {
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-    flex-wrap: wrap;
 }
 
 .search-box {
@@ -648,7 +637,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 .review-panel {
     border: 1px solid #e5e7eb;
     border-radius: 14px;
-    background: #fbfcfd;
+    background: #fff;
     padding: 1rem;
     margin-top: .75rem;
 }
@@ -701,11 +690,6 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     .stats-grid.g3 {
         grid-template-columns: 1fr;
     }
-
-    .pending-meta {
-        gap: 1rem;
-        width: 100%;
-    }
 }
 
 .bulk-bar [hidden], .bulk-fields[hidden] { display:none !important; }
@@ -713,7 +697,6 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     border:1px solid #cbd5e1; border-left:5px solid #2563eb; background:#eff6ff; border-radius:14px; margin-bottom:1rem; }
 .bulk-bar .selection-count { font-weight:800; color:#1d4ed8; }
 .loan-pick { width:19px; height:19px; accent-color:#2563eb; cursor:pointer; flex-shrink:0; }
-.pending-card.selected-loan { box-shadow:0 0 0 2px #2563eb; }
 .bulk-fields { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.7rem; }
 .bulk-fields label { font-size:.82rem; font-weight:700; }
 .bulk-fields .wide { grid-column:1 / -1; }
@@ -960,6 +943,23 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
 <?php else: ?>
 
+    <div class="card mb-3 pending-table-card">
+        <div class="table-wrap">
+            <table class="table pending-table">
+                <thead>
+                    <tr>
+                        <?php if ($isReviewer): ?><th class="col-pick"></th><?php endif; ?>
+                        <th>Applicant</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Requested</th>
+                        <th>Interest</th>
+                        <th>AI recommended</th>
+                        <th>Applied</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
     <?php foreach ($loans as $loan): ?>
         <?php
         $loanId = (int)$loan['id'];
@@ -1029,74 +1029,86 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
             (float)($loan['amount'] ?? 0)
         );
         ?>
-
-        <div class="pending-card status-<?= h(strtolower($status)) ?>">
-            <div class="pending-card-top">
-                <div class="d-flex align-center gap-3">
-                    <?php if ($isReviewer): ?>
-                        <input type="checkbox" class="loan-pick loan-row-check" form="bulkLoanForm"
-                               name="ids[]" value="<?= $loanId ?>" aria-label="Select loan #<?= $loanId ?>">
-                    <?php endif; ?>
-                    <div class="cell-av"><?= h($initials ?: 'U') ?></div>
-
-                    <div>
-                        <div style="font-weight:700;color:var(--text-dark);font-size:.9rem">
-                            <?= h($clientName) ?>
-                        </div>
-
-                        <div class="fs-sm text-muted">
-                            <?php if ($organization !== '' && $organization !== $clientName): ?>
-                                <?= h($organization) ?>
+        <?php
+        $hasNotes = in_array($status, ['INFO_PROVIDED', 'INFO_REQUESTED'], true);
+        $hasDetail = $isReviewer || $hasNotes || !empty($trail);
+        $colspan = $isReviewer ? 9 : 8;
+        ?>
+                    <tr class="loan-row status-<?= h(strtolower($status)) ?>">
+                        <?php if ($isReviewer): ?>
+                            <td class="col-pick">
+                                <input type="checkbox" class="loan-pick loan-row-check" form="bulkLoanForm"
+                                       name="ids[]" value="<?= $loanId ?>" aria-label="Select loan #<?= $loanId ?>">
+                            </td>
+                        <?php endif; ?>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="cell-av"><?= h($initials ?: 'U') ?></div>
+                                <div style="min-width:0">
+                                    <div class="applicant-name"><?= h($clientName) ?></div>
+                                    <div class="fs-xs text-muted">
+                                        <?php if ($organization !== '' && $organization !== $clientName): ?><?= h($organization) ?><?php endif; ?>
+                                        <?php if ($phone !== ''): ?><?= $organization !== '' && $organization !== $clientName ? ' | ' : '' ?><?= h($phone) ?><?php endif; ?>
+                                        <?php if ($organization === '' && $phone === ''): ?>Client ID: <?= h($loan['client_id'] ?? '') ?><?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge <?= typeBadge($clientType) ?>"><?= h(ucfirst($clientType)) ?></span></td>
+                        <td>
+                            <span class="badge <?= statusBadge($status) ?>"><?= h(statusLabel($status)) ?></span>
+                            <?php if ($status === 'INFO_PROVIDED'): ?>
+                                <div class="fs-xs text-muted mt-1"><i class="fas fa-reply"></i> Officer replied</div>
+                            <?php elseif ($status === 'INFO_REQUESTED'): ?>
+                                <div class="fs-xs text-muted mt-1"><i class="fas fa-user-clock"></i> <?= $officerName !== '' ? h($officerName) : 'With officer' ?></div>
                             <?php endif; ?>
-
-                            <?php if ($phone !== ''): ?>
-                                <?= $organization !== '' && $organization !== $clientName ? ' | ' : '' ?>
-                                <?= h($phone) ?>
+                        </td>
+                        <td class="text-nowrap">
+                            <div class="amount-main"><?= money((float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0)) ?></div>
+                            <div class="fs-xs text-muted"><?= h(loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'))) ?></div>
+                        </td>
+                        <td class="text-nowrap"><?= money($loan['interest'] ?? 0) ?></td>
+                        <td class="text-nowrap">
+                            <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
+                                <span class="ai-amount"><?= money($assessment['limit']) ?></span>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
                             <?php endif; ?>
-
-                            <?php if ($organization === '' && $phone === ''): ?>
-                                Loan Client ID: <?= h($loan['client_id'] ?? '') ?>
+                        </td>
+                        <td class="text-nowrap"><?= h($appliedDate) ?></td>
+                        <td class="text-end">
+                            <div class="row-actions">
+                                <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>" class="btn btn-ghost btn-sm" title="View loan">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                                <?php if ($isReviewer): ?>
+                                    <button type="button" class="btn btn-outline-primary btn-sm review-toggle-btn"
+                                            data-panel="detail-<?= $loanId ?>" aria-expanded="false" aria-controls="detail-<?= $loanId ?>">
+                                        <i class="fas fa-clipboard-check"></i> Review
+                                        <i class="fas fa-chevron-down fs-xs"></i>
+                                    </button>
+                                <?php else: ?>
+                                    <?php if ($isAssignedToMe && $status === 'INFO_REQUESTED'): ?>
+                                        <a href="officer_loan_requests.php" class="btn btn-info btn-sm">
+                                            <i class="fas fa-reply"></i> Respond
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($hasDetail): ?>
+                                        <button type="button" class="btn btn-ghost btn-sm review-toggle-btn"
+                                                data-panel="detail-<?= $loanId ?>" aria-expanded="false" aria-controls="detail-<?= $loanId ?>">
+                                            Details <i class="fas fa-chevron-down fs-xs"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (!$isReviewer && !($isAssignedToMe && $status === 'INFO_REQUESTED')): ?>
+                                <div class="fs-xs text-muted mt-1"><?= $isOfficer ? 'Read-only - not assigned to you' : 'Read-only for your role' ?></div>
                             <?php endif; ?>
-                        </div>
-
-                        <div class="mt-1">
-                            <span class="badge <?= typeBadge($clientType) ?>">
-                                <?= h(ucfirst($clientType)) ?>
-                            </span>
-                            <span class="badge <?= statusBadge($status) ?>">
-                                <?= h(statusLabel($status)) ?>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="pending-meta">
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Requested</div>
-                        <div style="font-weight:800;color:var(--primary);font-family:'Outfit',sans-serif">
-                            <?= money((float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0)) ?>
-                        </div>
-                        <div class="fs-xs text-muted"><?= h(loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'))) ?></div>
-                    </div>
-
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Interest</div>
-                        <div class="fs-sm text-muted"><?= money($loan['interest'] ?? 0) ?></div>
-                    </div>
-
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Applied</div>
-                        <div class="fs-sm text-muted"><?= h($appliedDate) ?></div>
-                    </div>
-                </div>
-            </div>
-
-            <?php if ($assessment['available'] && $assessment['limit'] > 0): ?>
-            <div class="ai-recommend">
-                AI recommended amount: <strong><?= money($assessment['limit']) ?></strong>
-            </div>
-            <?php endif; ?>
-
+                        </td>
+                    </tr>
+        <?php if ($hasDetail): ?>
+                    <tr class="loan-detail-row d-none" id="detail-<?= $loanId ?>">
+                        <td colspan="<?= $colspan ?>">
             <?php if ($status === 'INFO_PROVIDED'): ?>
                 <div class="workflow-note">
                     <strong><i class="fas fa-reply"></i> Loan officer response<?= $officerName !== '' ? ' from ' . h($officerName) : '' ?>:</strong>
@@ -1141,31 +1153,8 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                 </div>
             <?php endif; ?>
 
-            <div class="d-flex gap-2 flex-wrap mt-3">
-                <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>"
-                   class="btn btn-ghost btn-sm">
-                    <i class="fas fa-eye"></i> View
-                </a>
-
-                <?php if ($isReviewer): ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm review-toggle-btn"
-                            data-panel="reviewPanel-<?= $loanId ?>" aria-expanded="false">
-                        <i class="fas fa-clipboard-check"></i> Review Application
-                        <i class="fas fa-chevron-down fs-xs"></i>
-                    </button>
-                <?php elseif ($isAssignedToMe && $status === 'INFO_REQUESTED'): ?>
-                    <a href="officer_loan_requests.php" class="btn btn-info btn-sm">
-                        <i class="fas fa-reply"></i> Respond to Request
-                    </a>
-                <?php elseif ($isOfficer): ?>
-                    <span class="fs-xs text-muted align-self-center">Read-only - not assigned to you</span>
-                <?php else: ?>
-                    <span class="fs-xs text-muted align-self-center">Read-only for your role</span>
-                <?php endif; ?>
-            </div>
-
             <?php if ($isReviewer): ?>
-                <div id="reviewPanel-<?= $loanId ?>" class="review-panel d-none">
+                <div id="reviewPanel-<?= $loanId ?>" class="review-panel">
                     <div class="review-tabs" role="tablist">
                         <button type="button" class="review-tab-btn tab-approve active" data-tab="approve-<?= $loanId ?>">
                             <i class="fas fa-check"></i> Approve
@@ -1289,9 +1278,15 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     </div>
                 </div>
             <?php endif; ?>
-        </div>
+                        </td>
+                    </tr>
+        <?php endif; ?>
 
     <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <?php if ($totalPages > 1): ?>
         <?php
@@ -1359,6 +1354,8 @@ document.addEventListener('click', function (e) {
         if (panel) {
             var nowHidden = panel.classList.toggle('d-none');
             toggleBtn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+            var row = toggleBtn.closest('tr');
+            if (row) row.classList.toggle('row-open', !nowHidden);
         }
         return;
     }
@@ -1402,7 +1399,7 @@ document.addEventListener('DOMContentLoaded', function () {
         counter.textContent = `${count} selected`;
         selectAll.checked = checks.length > 0 && count === checks.length;
         selectAll.indeterminate = count > 0 && count < checks.length;
-        checks.forEach(x => x.closest('.pending-card')?.classList.toggle('selected-loan', x.checked));
+        checks.forEach(x => x.closest('tr')?.classList.toggle('selected-loan', x.checked));
         submit.disabled = count === 0 || action.value === '';
     }
     function updateAction() {
