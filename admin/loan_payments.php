@@ -721,6 +721,19 @@ repaymentForm?.addEventListener('submit', async function (e) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
 
+    // Open the receipt tab now, while the click still counts as the user's:
+    // browsers block a tab opened later, after the save finishes.
+    let receiptTab = null;
+    try {
+        receiptTab = window.open('', '_blank');
+        if (receiptTab) {
+            receiptTab.document.write('<p style="font:16px system-ui;padding:24px">Saving the payment and preparing the receipt...</p>');
+        }
+    } catch (ignored) {
+        receiptTab = null;
+    }
+    const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
     try {
         const res = await fetch(repaymentForm.action, {
             method: 'POST',
@@ -737,20 +750,27 @@ repaymentForm?.addEventListener('submit', async function (e) {
             throw new Error(data.message || 'Repayment failed.');
         }
 
-        repaymentMessage.innerHTML =
-            '<div class="alert alert-success">' + data.message + '</div>';
+        const receiptUrl = data.receipt_url
+            || (data.payment_id ? 'receipt.php?payment_id=' + encodeURIComponent(data.payment_id) : '');
 
-        if (data.receipt_url) {
-            window.open(data.receipt_url, '_blank');
+        if (receiptUrl && receiptTab && !receiptTab.closed) {
+            receiptTab.location.href = receiptUrl;
+            repaymentMessage.innerHTML = '<div class="alert alert-success">' + escapeHtml(data.message)
+                + ' The receipt opened in a new tab.</div>';
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            // Tab blocked: keep the page (no reload) so the link stays.
+            if (receiptTab && !receiptTab.closed) receiptTab.close();
+            repaymentMessage.innerHTML = '<div class="alert alert-success">' + escapeHtml(data.message)
+                + (receiptUrl ? ' <a class="btn btn-sm btn-primary ms-2" target="_blank" href="' + escapeHtml(receiptUrl)
+                    + '"><i class="fas fa-receipt"></i> View / print receipt</a>' : '')
+                + ' <button type="button" class="btn btn-sm btn-light ms-1" onclick="location.reload()">Refresh list</button></div>';
         }
 
-        setTimeout(() => {
-            window.location.reload();
-        }, 900);
-
     } catch (err) {
+        if (receiptTab && !receiptTab.closed) receiptTab.close();
         repaymentMessage.innerHTML =
-            '<div class="alert alert-danger">' + err.message + '</div>';
+            '<div class="alert alert-danger">' + escapeHtml(err.message) + '</div>';
     } finally {
         btn.disabled = false;
         btn.innerHTML = oldHtml;
