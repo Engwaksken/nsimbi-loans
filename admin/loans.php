@@ -64,6 +64,7 @@ if (!in_array($filter, $allowedFilters, true)) {
 /* ---- Search ---- */
 $search = trim((string)($_GET['q'] ?? ''));
 $districtFilter = trim((string)($_GET['district'] ?? ''));
+$activeTab = ($_GET['tab'] ?? '') === 'districts' ? 'districts' : 'records';
 $likeSearch = '%' . $conn->real_escape_string($search) . '%';
 
 /* ---- Pagination ---- */
@@ -287,6 +288,51 @@ function pageUrl(int $p, string $filter, string $search): string
 ?>
 
 <style>
+.loan-tabs {
+    display: flex;
+    gap: .25rem;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    margin-bottom: 1rem;
+    overflow-x: auto;
+}
+
+.loan-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .6rem .95rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: none;
+    color: var(--text-secondary, #64748b);
+    font-weight: 600;
+    font-size: .86rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.loan-tab:hover {
+    color: var(--primary, #123299);
+}
+
+.loan-tab.active {
+    color: var(--primary, #123299);
+    border-bottom-color: var(--primary, #123299);
+}
+
+.loan-tab-count {
+    font-size: .7rem;
+    padding: .05rem .45rem;
+    border-radius: 999px;
+    background: var(--primary-xlight, #eef2ff);
+    color: var(--primary, #123299);
+}
+
+.loan-tab-panel[hidden] {
+    display: none !important;
+}
+
 .loan-table-card {
     overflow: hidden;
 }
@@ -528,43 +574,18 @@ function pageUrl(int $p, string $filter, string $search): string
     </div>
 </div>
 
-<?php if ($districtStats): ?>
-<div class="card mb-4">
-    <div class="card-header">
-        <div class="card-title"><span class="card-dot"></span>Paid-out loans by district</div>
-        <div class="card-sub">
-            Loans paid out (outstanding, overdue, active or cleared)<?= $filter !== 'all' || $search !== '' ? ' for the current filter' : '' ?>.
-            Click a district to list its loans.
-        </div>
-    </div>
-    <div class="card-body no-pad">
-        <div class="loan-table-scroll">
-            <table class="table">
-                <thead>
-                <tr><th>District</th><th>Loans paid out</th><th>Amount paid out</th><th>Balance</th><th>All loans</th></tr>
-                </thead>
-                <tbody>
-                <?php foreach (array_slice($districtStats, 0, 10, true) as $name => $row): ?>
-                    <tr class="<?= strcasecmp((string)$name, $districtFilter) === 0 ? 'table-active' : '' ?>">
-                        <td><a href="?<?= e(http_build_query(array_filter(['filter' => $filter, 'q' => $search, 'district' => (string)$name], 'strlen'))) ?>" class="fw-600"><?= e((string)$name) ?></a></td>
-                        <td class="td-dark"><?= number_format($row['paid_out']) ?></td>
-                        <td><?= money($row['amount']) ?></td>
-                        <td><?= money($row['balance']) ?></td>
-                        <td class="text-muted"><?= number_format($row['loans']) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <?php if (count($districtStats) > 10): ?>
-            <div class="card-sub" style="padding:.6rem 1rem">
-                <?= number_format(count($districtStats) - 10) ?> more district(s): use the District filter below.
-            </div>
-        <?php endif; ?>
-    </div>
+<div class="loan-tabs" role="tablist" aria-label="Loan views">
+    <button type="button" class="loan-tab <?= $activeTab === 'records' ? 'active' : '' ?>" role="tab" id="tabbtn-records"
+            aria-controls="tab-records" aria-selected="<?= $activeTab === 'records' ? 'true' : 'false' ?>" data-loan-tab="records">
+        <i class="fas fa-list"></i> Loan Records <span class="loan-tab-count"><?= number_format($totalLoans) ?></span>
+    </button>
+    <button type="button" class="loan-tab <?= $activeTab === 'districts' ? 'active' : '' ?>" role="tab" id="tabbtn-districts"
+            aria-controls="tab-districts" aria-selected="<?= $activeTab === 'districts' ? 'true' : 'false' ?>" data-loan-tab="districts">
+        <i class="fas fa-map-marker-alt"></i> Paid-out loans by district <span class="loan-tab-count"><?= number_format(count($districtStats)) ?></span>
+    </button>
 </div>
-<?php endif; ?>
 
+<div class="loan-tab-panel" id="tab-records" role="tabpanel" aria-labelledby="tabbtn-records" <?= $activeTab === 'records' ? '' : 'hidden' ?>>
 <div class="d-flex align-center justify-between flex-wrap gap-3 mb-4">
     <div class="pills">
         <?php foreach ([
@@ -822,5 +843,75 @@ function pageUrl(int $p, string $filter, string $search): string
         <?php endif; ?>
     </div>
 </div>
+</div>
+
+<div class="loan-tab-panel" id="tab-districts" role="tabpanel" aria-labelledby="tabbtn-districts" <?= $activeTab === 'districts' ? '' : 'hidden' ?>>
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><span class="card-dot"></span>Paid-out loans by district</div>
+            <div class="card-sub">
+                Loans paid out (outstanding, overdue, active or cleared)<?= $filter !== 'all' || $search !== '' ? ' for the current filter' : '' ?>.
+                Click a district to see its loans.
+            </div>
+        </div>
+        <div class="card-body no-pad">
+            <?php if ($districtStats): ?>
+                <div class="loan-table-scroll">
+                    <table class="table" id="tbl-districts">
+                        <thead>
+                        <tr><th>District</th><th>Loans paid out</th><th>Amount paid out</th><th>Balance</th><th>All loans</th></tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($districtStats as $name => $row): ?>
+                            <tr class="<?= strcasecmp((string)$name, $districtFilter) === 0 ? 'table-active' : '' ?>">
+                                <td><a href="?<?= e(http_build_query(array_filter(['filter' => $filter, 'q' => $search, 'district' => (string)$name], 'strlen'))) ?>" class="fw-600"><?= e((string)$name) ?></a></td>
+                                <td class="td-dark"><?= number_format($row['paid_out']) ?></td>
+                                <td><?= money($row['amount']) ?></td>
+                                <td><?= money($row['balance']) ?></td>
+                                <td class="text-muted"><?= number_format($row['loans']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="empty-state">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <h3>No loans found</h3>
+                    <p>Try a different filter.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var tabs = document.querySelectorAll('[data-loan-tab]');
+    function show(name, updateUrl) {
+        tabs.forEach(function (tab) {
+            var on = tab.getAttribute('data-loan-tab') === name;
+            tab.classList.toggle('active', on);
+            tab.setAttribute('aria-selected', on ? 'true' : 'false');
+            document.getElementById('tab-' + tab.getAttribute('data-loan-tab')).hidden = !on;
+        });
+        if (updateUrl && window.history && history.replaceState) {
+            var url = new URL(window.location.href);
+            if (name === 'districts') { url.searchParams.set('tab', 'districts'); } else { url.searchParams.delete('tab'); }
+            history.replaceState(null, '', url.toString());
+        }
+    }
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () { show(tab.getAttribute('data-loan-tab'), true); });
+        tab.addEventListener('keydown', function (e) {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+            var list = Array.prototype.slice.call(tabs);
+            var next = list[(list.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length];
+            next.focus();
+            show(next.getAttribute('data-loan-tab'), true);
+        });
+    });
+})();
+</script>
 
 <?php require "footer.php"; ?>
