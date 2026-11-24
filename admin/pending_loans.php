@@ -9,6 +9,7 @@ require_once __DIR__ . "/../includes/loan_workflow.php";
 require_once __DIR__ . "/../includes/loan_assessment.php";
 require_once __DIR__ . "/../includes/loan_offers.php";
 require_once __DIR__ . "/../includes/loan_products.php";
+require_once __DIR__ . "/../includes/districts.php";
 loan_products_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -426,14 +427,13 @@ $sql = "
 
         COALESCE(
             NULLIF(c.location, ''),
-            NULLIF(m.department, ''),
+            NULLIF(m.home_address, ''),
             NULLIF(st.company_location, ''),
             ''
         ) AS client_location,
 
         COALESCE(
             NULLIF(c.district, ''),
-            NULLIF(m.home_address, ''),
             ''
         ) AS client_district,
 
@@ -1106,6 +1106,9 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
         }
 
         $initials = strtoupper(substr($clientName, 0, 1));
+        $districtName = location_district((string)($loan['client_district'] ?? ''), (string)($loan['client_location'] ?? ''));
+        $locationText = trim((string)($loan['client_location'] ?? ''));
+        $placeLabel = trim($districtName . ($locationText !== '' && strcasecmp($locationText, $districtName) !== 0 ? ' - ' . $locationText : ''), ' -');
 
         $appliedDate = !empty($loan['datetime'])
             ? date('M j, Y', strtotime((string)$loan['datetime']))
@@ -1177,6 +1180,9 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                         <?php if ($phone !== ''): ?><?= $organization !== '' && $organization !== $clientName ? ' | ' : '' ?><?= h($phone) ?><?php endif; ?>
                                         <?php if ($organization === '' && $phone === ''): ?>Client ID: <?= h($loan['client_id'] ?? '') ?><?php endif; ?>
                                     </div>
+                                    <?php if ($placeLabel !== ''): ?>
+                                        <div class="fs-xs text-muted"><i class="fas fa-map-marker-alt"></i> <?= h($placeLabel) ?></div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </td>
@@ -1251,6 +1257,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                     <div class="rs-label">Applicant</div>
                     <div class="rs-value"><?= h($clientName) ?></div>
                     <div class="fs-xs text-muted"><?= $phone !== '' ? h($phone) : 'Client ID: ' . h($loan['client_id'] ?? '') ?></div>
+                    <div class="fs-xs text-muted"><i class="fas fa-map-marker-alt"></i> <?= h($placeLabel !== '' ? $placeLabel : 'Location not recorded') ?></div>
                 </div>
                 <div>
                     <div class="rs-label">Requested</div>

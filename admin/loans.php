@@ -4,6 +4,7 @@ declare(strict_types=1);
 $phead = 'Loans';
 require "nav-head.php";
 require "services_check.php";
+require_once dirname(__DIR__) . '/includes/districts.php';
 
 function e($v): string
 {
@@ -62,6 +63,7 @@ if (!in_array($filter, $allowedFilters, true)) {
 
 /* ---- Search ---- */
 $search = trim((string)($_GET['q'] ?? ''));
+$districtFilter = trim((string)($_GET['district'] ?? ''));
 $likeSearch = '%' . $conn->real_escape_string($search) . '%';
 
 /* ---- Pagination ---- */
@@ -122,8 +124,8 @@ $memberSql = "
         m.phone AS client_phone,
         m.nin AS client_nin,
         m.employer AS organization_name,
-        m.department AS client_location,
-        m.home_address AS client_district
+        m.home_address AS client_location,
+        '' AS client_district
     FROM loan l
     INNER JOIN members m ON l.client_id = m.user_id
     INNER JOIN user u ON m.user_id = u.id
@@ -146,7 +148,7 @@ $startupSql = "
         '' AS client_nin,
         st.company_name AS organization_name,
         st.company_location AS client_location,
-        st.status AS startup_status
+        '' AS client_district
     FROM loan l
     INNER JOIN startups st ON l.client_id = st.startup_id
     WHERE $wsql $startupSearch
@@ -162,7 +164,10 @@ if ($filter === 'customer') {
     $baseSql = "($customerSql) UNION ALL ($memberSql) UNION ALL ($startupSql)";
 }
 
-$sql = "SELECT * FROM ($baseSql) x ORDER BY id DESC";
+// No derived table: l.* already has client_type on newer databases, and a
+// derived table rejects the duplicate name. In a plain SELECT the literal
+// type column (listed after l.*) wins when rows are fetched.
+$sql = "$baseSql ORDER BY id DESC";
 
 $stmt = $conn->prepare($sql);
 
@@ -177,6 +182,39 @@ $allLoans = [];
 
 while ($row = $result->fetch_assoc()) {
     $allLoans[] = $row;
+}
+
+/* ---- District: from the client's district field or their address ---- */
+$paidOutStatuses = ['OUTSTANDING', 'OVERDUE', 'ACTIVE', 'CLEARED'];
+$districtStats = [];
+
+foreach ($allLoans as $i => $loan) {
+    $district = location_district(
+        (string)($loan['client_district'] ?? ''),
+        (string)($loan['client_location'] ?? '')
+    );
+    $allLoans[$i]['district_name'] = $district;
+
+    $key = $district !== '' ? $district : 'Not recorded';
+    $districtStats[$key] ??= ['loans' => 0, 'paid_out' => 0, 'amount' => 0.0, 'balance' => 0.0];
+    $districtStats[$key]['loans']++;
+
+    if (in_array(strtoupper((string)($loan['status'] ?? '')), $paidOutStatuses, true)) {
+        $districtStats[$key]['paid_out']++;
+        $districtStats[$key]['amount'] += (float)($loan['amount'] ?? 0);
+        $districtStats[$key]['balance'] += (float)($loan['loan_balance'] ?? 0);
+    }
+}
+
+uasort($districtStats, static fn(array $a, array $b): int => $b['paid_out'] <=> $a['paid_out'] ?: $b['loans'] <=> $a['loans']);
+
+if ($districtFilter !== '') {
+    $allLoans = array_values(array_filter(
+        $allLoans,
+        static fn(array $loan): bool => $districtFilter === 'Not recorded'
+            ? $loan['district_name'] === ''
+            : strcasecmp($loan['district_name'], $districtFilter) === 0
+    ));
 }
 
 $totalLoans = count($allLoans);
@@ -232,10 +270,16 @@ $loans = array_slice($allLoans, $offset, $perPage);
 
 function pageUrl(int $p, string $filter, string $search): string
 {
+    global $districtFilter;
+
     $params = ['filter' => $filter, 'page' => $p];
 
     if ($search !== '') {
         $params['q'] = $search;
+    }
+
+    if ($districtFilter !== '') {
+        $params['district'] = $districtFilter;
     }
 
     return '?' . http_build_query($params);
@@ -484,6 +528,43 @@ function pageUrl(int $p, string $filter, string $search): string
     </div>
 </div>
 
+<?php if ($districtStats): ?>
+<div class="card mb-4">
+    <div class="card-header">
+        <div class="card-title"><span class="card-dot"></span>Paid-out loans by district</div>
+        <div class="card-sub">
+            Loans paid out (outstanding, overdue, active or cleared)<?= $filter !== 'all' || $search !== '' ? ' for the current filter' : '' ?>.
+            Click a district to list its loans.
+        </div>
+    </div>
+    <div class="card-body no-pad">
+        <div class="loan-table-scroll">
+            <table class="table">
+                <thead>
+                <tr><th>District</th><th>Loans paid out</th><th>Amount paid out</th><th>Balance</th><th>All loans</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach (array_slice($districtStats, 0, 10, true) as $name => $row): ?>
+                    <tr class="<?= strcasecmp((string)$name, $districtFilter) === 0 ? 'table-active' : '' ?>">
+                        <td><a href="?<?= e(http_build_query(array_filter(['filter' => $filter, 'q' => $search, 'district' => (string)$name], 'strlen'))) ?>" class="fw-600"><?= e((string)$name) ?></a></td>
+                        <td class="td-dark"><?= number_format($row['paid_out']) ?></td>
+                        <td><?= money($row['amount']) ?></td>
+                        <td><?= money($row['balance']) ?></td>
+                        <td class="text-muted"><?= number_format($row['loans']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php if (count($districtStats) > 10): ?>
+            <div class="card-sub" style="padding:.6rem 1rem">
+                <?= number_format(count($districtStats) - 10) ?> more district(s): use the District filter below.
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="d-flex align-center justify-between flex-wrap gap-3 mb-4">
     <div class="pills">
         <?php foreach ([
@@ -496,7 +577,7 @@ function pageUrl(int $p, string $filter, string $search): string
             'outstanding' => 'Outstanding',
             'overdue'     => 'Overdue'
         ] as $k => $lbl): ?>
-            <a href="?filter=<?= e($k) ?><?= $search !== '' ? '&q=' . e($search) : '' ?>" class="pill <?= $filter === $k ? 'active' : '' ?>">
+            <a href="?<?= e(http_build_query(array_filter(['filter' => $k, 'q' => $search, 'district' => $districtFilter], 'strlen'))) ?>" class="pill <?= $filter === $k ? 'active' : '' ?>">
                 <?= e($lbl) ?>
             </a>
         <?php endforeach; ?>
@@ -504,6 +585,14 @@ function pageUrl(int $p, string $filter, string $search): string
 
     <form method="GET" class="loan-search-form">
         <input type="hidden" name="filter" value="<?= e($filter) ?>">
+        <select name="district" class="form-select form-select-sm" style="max-width:200px" onchange="this.form.submit()" aria-label="District">
+            <option value="">All districts</option>
+            <?php foreach (array_keys($districtStats) as $name): ?>
+                <option value="<?= e((string)$name) ?>" <?= strcasecmp((string)$name, $districtFilter) === 0 ? 'selected' : '' ?>>
+                    <?= e((string)$name) ?> (<?= number_format($districtStats[$name]['loans']) ?>)
+                </option>
+            <?php endforeach; ?>
+        </select>
         <input
             type="text"
             name="q"
@@ -513,7 +602,7 @@ function pageUrl(int $p, string $filter, string $search): string
         <button type="submit" class="btn btn-primary btn-sm">
             <i class="fas fa-search"></i> Search
         </button>
-        <?php if ($search !== ''): ?>
+        <?php if ($search !== '' || $districtFilter !== ''): ?>
             <a href="?filter=<?= e($filter) ?>" class="btn btn-ghost btn-sm">
                 <i class="fas fa-times"></i> Clear
             </a>
@@ -532,6 +621,9 @@ function pageUrl(int $p, string $filter, string $search): string
                     Scroll sideways to view all columns.
                     <?php if ($search !== ''): ?>
                         Showing results for "<strong><?= e($search) ?></strong>".
+                    <?php endif; ?>
+                    <?php if ($districtFilter !== ''): ?>
+                        District: <strong><?= e($districtFilter) ?></strong>.
                     <?php endif; ?>
                 </div>
             </div>
@@ -554,6 +646,7 @@ function pageUrl(int $p, string $filter, string $search): string
                     <th class="client-col">Client</th>
                     <th>Type</th>
                     <th class="contact-col">Contact</th>
+                    <th>District</th>
                     <th>Amount</th>
                     <th>Interest</th>
                     <th>Balance</th>
@@ -613,6 +706,11 @@ function pageUrl(int $p, string $filter, string $search): string
                             <span class="cell-sub"><?= e($loan['client_email'] ?? '') ?></span>
                         </td>
 
+                        <td>
+                            <div class="td-dark"><?= e($loan['district_name'] !== '' ? $loan['district_name'] : '-') ?></div>
+                            <span class="cell-sub"><?= e($loan['client_location'] ?? '') ?></span>
+                        </td>
+
                         <td class="td-dark"><?= money($loan['amount'] ?? 0) ?></td>
 
                         <td><?= money($loan['interest'] ?? 0) ?></td>
@@ -665,7 +763,7 @@ function pageUrl(int $p, string $filter, string $search): string
 
                 <?php if (empty($loans)): ?>
                     <tr>
-                        <td colspan="11">
+                        <td colspan="12">
                             <div class="empty-state">
                                 <i class="fas fa-search"></i>
                                 <h3>No loans found</h3>
