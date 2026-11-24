@@ -62,13 +62,6 @@ $loan_period = max(1, (int)$loan['loan_period']);
 $is_weekly = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month')) === 'week';
 $step_label = $is_weekly ? 'Week' : 'Month';
 
-// ? Limit loan period to a maximum of 3 months (month terms only)
-if (!$is_weekly && $loan_period > 3) {
-    $loan_period = 3;
-    $loan_period_capped = true;
-} else {
-    $loan_period_capped = false;
-}
 
 // ? Fixed (Flat) Interest Calculation
 $total_interest = ($amount * $interest_rate) / 100;
@@ -84,7 +77,6 @@ $start_date = new DateTime(!empty($loan['disbursed_at']) ? $loan['disbursed_at']
 $schedule_rows = [];
 $product_terms = loan_product_terms_from_loan($loan);
 if ($product_terms) {
-    $loan_period_capped = false;
     $schedule_rows = loan_product_schedule($product_terms, $amount, DateTimeImmutable::createFromMutable($start_date));
     $total_interest = array_sum(array_column($schedule_rows, 'interest'));
     $total_repayable = $amount + $total_interest;
@@ -126,12 +118,6 @@ $loanTitle = "Repayment Plan for $full_name";
 
                 <div class="card-body px-0 pt-0 pb-2">
                     <div class="table-responsive p-3">
-                        <?php if ($loan_period_capped): ?>
-                            <div class="alert alert-warning text-sm">
-                                <strong>Note:</strong> The maximum loan period allowed is <strong>3 months</strong>. 
-                                Schedule has been adjusted accordingly.
-                            </div>
-                        <?php endif; ?>
 
                         <table class="table align-items-center mb-0" id="report">
                             <thead>
