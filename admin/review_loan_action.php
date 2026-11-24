@@ -223,6 +223,15 @@ foreach ($ids as $id) {
             $s->bind_param('sisi', $newStatus, $officerId, $infoDetails, $id);
             $auditAction = 'info_requested'; $auditReason = null;
             $officerNotification = [$officerId, 'loan_info_requested', "Please gather information for loan #{$id} ({$clientName}): {$infoDetails}"];
+            $officerName = trim((string)$officer['fname'].' '.(string)$officer['lname']) ?: 'Your loan officer';
+            $officerEmail = (string)($officer['email'] ?? '');
+            $notification = ['More Information Needed for Your Loan Request - Nsimbi Impact',
+                '<h3>Dear '.htmlValue($clientName).',</h3>'
+                .'<p>Thank you for your loan request of UGX '.htmlValue($amount).'. Before we can make a decision, we need some more information from you:</p>'
+                .'<p style="background:#f6f7fb;border-left:3px solid #5e72e4;padding:10px 12px">'.nl2br(htmlValue($infoDetails)).'</p>'
+                .'<p>Your loan officer, <strong>'.htmlValue($officerName).'</strong>, will contact you to collect it.'
+                .($officerEmail !== '' ? ' You can also reach them at <a href="mailto:'.htmlValue($officerEmail).'">'.htmlValue($officerEmail).'</a>.' : '')
+                .'</p><p>Nsimbi Impact</p>'];
         } else {
             // Soft delete, preserving the loan and audit trail for accountability.
             // The loan.status column must accept the value DELETED (VARCHAR or suitable ENUM).
