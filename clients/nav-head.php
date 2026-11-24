@@ -11,6 +11,8 @@ $fname    = $_SESSION['fname'] ?? '';
 $lname    = $_SESSION['lname'] ?? '';
 $uname    = htmlspecialchars(trim("$fname $lname"));
 $initials = strtoupper(substr($fname,0,1).substr($lname,0,1));
+require_once dirname(__DIR__) . '/includes/profile_photo.php';
+$profile_photo = profile_photo_path($conn, $user_id);
 $cp       = basename($_SERVER['PHP_SELF']);
 /* .htaccess caches css/js as immutable for a year, so shared assets are
    versioned by modification time or browsers keep stale copies. */
@@ -45,7 +47,7 @@ function cn($p,$c){ return $p===$c?' active':''; }
     <div class="brand-text"><?= str_replace(['<b>', '</b>'], ['<span>', '</span>'], site_wordmark_html()) ?></div>
   </div>
   <div class="sidebar-user">
-    <div class="s-avatar"><?= $initials ?></div>
+    <?= profile_avatar($profile_photo, $initials, 's-avatar') ?>
     <div><div class="s-name"><?= $uname ?></div><div class="s-role">Client Portal</div></div>
   </div>
   <nav class="sidebar-nav">

@@ -51,7 +51,7 @@ function formatPhone($phone) {
     return $phone;
 }
 
-function uploadFile($field, $folder = 'uploads') {
+function uploadFile($field, $folder = 'uploads', $allowPdf = true) {
     if (!isset($_FILES[$field]) || $_FILES[$field]['error'] === UPLOAD_ERR_NO_FILE) {
         return '';
     }
@@ -76,8 +76,12 @@ function uploadFile($field, $folder = 'uploads') {
     $mime = finfo_file($finfo, $_FILES[$field]['tmp_name']);
     finfo_close($finfo);
 
+    if (!$allowPdf) {
+        unset($allowed['application/pdf']);
+    }
+
     if (!isset($allowed[$mime])) {
-        jsonResponse("error", $field . " must be JPG, PNG or PDF.", 400);
+        jsonResponse("error", $allowPdf ? $field . " must be JPG, PNG or PDF." : "Your selfie must be a JPG or PNG photo.", 400);
     }
 
     $ext = $allowed[$mime];
@@ -225,7 +229,11 @@ try {
     }
 
     $applicant_signature = saveSignature($_POST["applicant_signature"] ?? "");
-    $profile_img = uploadFile("profile_img");
+    // The selfie must be a photo (it is shown as the profile picture).
+    $profile_img = uploadFile("profile_img", 'uploads', false);
+    if ($profile_img === '') {
+        jsonResponse("error", "Please take a selfie.", 400);
+    }
     $id_front = uploadFile("uploadid1");
     $id_back = uploadFile("uploadid2");
     $stock = uploadFile("stock");

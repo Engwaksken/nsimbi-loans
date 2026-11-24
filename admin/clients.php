@@ -2,6 +2,7 @@
 $phead = 'Clients';
 require "nav-head.php";
 require "services_check.php";
+require_once dirname(__DIR__) . '/includes/profile_photo.php';
 
 function e($v) {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -61,6 +62,7 @@ $sql = "
         u.id,
         u.fname,
         u.lname,
+        u.image_url,
         u.email,
         u.status,
         c.phone,
@@ -266,9 +268,7 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 
                                 <td>
                                     <div class="cell-user">
-                                        <div class="cell-av">
-                                            <?= e($initials ?: 'CL') ?>
-                                        </div>
+                                        <?= profile_avatar($c['image_url'] ?? '', $initials ?: 'CL', 'cell-av') ?>
 
                                         <div>
                                             <div class="cell-name"><?= e($fullName ?: 'Unnamed Client') ?></div>

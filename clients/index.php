@@ -324,8 +324,15 @@ $applyAsset = static function (string $path): string {
                           <input type="text" class="form-control" name="nok_rel" placeholder="Relationship to Next of Kin" required>
                         </div>
                          <div class="col-md-6">
-                          <label>Upload Your Image (Image/PDF)</label>
-                          <input type="file" class="form-control" name="profile_img" accept="image/*,.pdf" required>
+                          <label>Your photo (selfie)</label>
+                          <div class="selfie-box" data-selfie>
+                            <div class="selfie-preview"><img alt="Your selfie" hidden><i class="fas fa-user"></i></div>
+                            <div class="selfie-body">
+                              <button type="button" class="btn btn-sm btn-primary mb-0" data-selfie-start><i class="fas fa-camera"></i> Take a selfie</button>
+                              <div class="selfie-help" data-selfie-help>Use your phone or computer camera. Face the camera in good light, with no sunglasses or hat.</div>
+                            </div>
+                            <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your selfie">
+                          </div>
                         </div>
                         <?php if ($referralOfficers): ?>
                         <div class="col-md-6">
@@ -389,6 +396,7 @@ $applyAsset = static function (string $path): string {
     </section>
   </main>
 <script src="<?= site_e($applyAsset('assets/js/client-registration.js')) ?>" defer></script>
+<script src="<?= site_e($applyAsset('assets/js/selfie-capture.js')) ?>" defer></script>
 
 </body>
 </html>

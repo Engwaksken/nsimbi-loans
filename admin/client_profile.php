@@ -16,6 +16,7 @@ function money($amount): string {
 }
 
 require_once dirname(__DIR__) . '/includes/file_links.php';
+require_once dirname(__DIR__) . '/includes/profile_photo.php';
 
 /** Link to a client's uploaded file wherever it was saved ('' if none or missing). */
 function client_file_url(?string $path): string {
@@ -386,6 +387,10 @@ $generatedAt = date('d M Y, H:i');
 
     <div class="doc-header">
         <div>
+            <?php if (profile_photo_url($client['image_url'] ?? '') !== ''): ?>
+                <img src="<?= h(profile_photo_url($client['image_url'])) ?>" alt="Photo of <?= h($fullName) ?>"
+                     style="float:left;width:84px;height:84px;margin-right:1rem;border-radius:50%;object-fit:cover;border:2px solid #e5e7eb">
+            <?php endif; ?>
             <h1><?= h($fullName ?: 'Unknown Client') ?></h1>
             <div class="sub"><?= h($client['business_name'] ?: 'No business name on file') ?></div>
             <span class="status-pill <?= $isActive ? 'status-active' : 'status-blocked' ?>">

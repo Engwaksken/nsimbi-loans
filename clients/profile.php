@@ -276,7 +276,7 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
 <?php endif; ?>
 
 <div class="pf-hero">
-    <div class="pf-avatar"><?= esc($initials); ?></div>
+    <?= profile_avatar($profile_photo ?? '', $initials, 'pf-avatar'); ?>
     <div class="pf-hero-main">
         <h2><?= esc($full_name); ?></h2>
         <div class="pf-meta">
@@ -292,6 +292,7 @@ if ($flash_message !== '' && $flash_type !== 'success' && in_array($flash_target
     </div>
     <div class="pf-actions">
         <button type="button" class="btn btn-sm" data-open="editProfileModal"><i class="fas fa-user-edit"></i> Edit Profile</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-open="photoModal"><i class="fas fa-camera"></i> <?= ($profile_photo ?? '') !== '' ? 'Change Photo' : 'Add Photo'; ?></button>
         <button type="button" class="btn btn-sm btn-ghost" data-open="passwordModal"><i class="fas fa-key"></i> Change Password</button>
     </div>
 </div>
@@ -792,6 +793,38 @@ $locked   = '<span class="pf-lock"><i class="fas fa-lock"></i> Managed by staff<
 </div>
 
 <!-- Change Password Modal -->
+<div class="modal-overlay" id="photoModal">
+    <div class="modal-box sm">
+        <form method="post" action="profile_photo_action.php" enctype="multipart/form-data" id="photoForm" novalidate>
+            <input type="hidden" name="csrf" value="<?= esc($docs_csrf); ?>">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span class="modal-ico"><i class="fas fa-camera"></i></span>
+                    Profile Photo
+                </div>
+                <button type="button" class="modal-close" data-close aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="modal-body">
+                <p class="form-help mt-0">Take a clear selfie: face the camera in good light, with no sunglasses or hat. Our team uses it to recognise you.</p>
+                <div class="selfie-box" data-selfie>
+                    <div class="selfie-preview"><img alt="Your selfie" hidden><i class="fas fa-user"></i></div>
+                    <div class="selfie-body">
+                        <button type="button" class="btn btn-sm btn-primary" data-selfie-start><i class="fas fa-camera"></i> Take a selfie</button>
+                        <div class="selfie-help" data-selfie-help>Uses your phone or computer camera.</div>
+                    </div>
+                    <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your selfie">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="photoSave" disabled><i class="fas fa-check"></i> Save Photo</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="modal-overlay" id="passwordModal">
     <div class="modal-box sm">
         <form method="post" action="user_settings.php" id="passwordForm" novalidate autocomplete="off">
@@ -1099,4 +1132,19 @@ document.querySelectorAll('.js-credit-upload').forEach(function (form) {
 });
 </script>
 
+<script src="<?= esc(client_asset('assets/js/selfie-capture.js')); ?>"></script>
+<script>
+(function () {
+    var form = document.getElementById('photoForm');
+    var save = document.getElementById('photoSave');
+    if (!form || !save) return;
+    form.addEventListener('selfie:change', function () { save.disabled = false; });
+    form.addEventListener('submit', function (e) {
+        var input = form.querySelector('.selfie-input');
+        if (!input.files || !input.files.length) { e.preventDefault(); return; }
+        save.disabled = true;
+        save.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    });
+})();
+</script>
 <?php require "footer.php"; ?>

@@ -10,6 +10,7 @@ require_once __DIR__ . "/../includes/loan_assessment.php";
 require_once __DIR__ . "/../includes/loan_offers.php";
 require_once __DIR__ . "/../includes/loan_products.php";
 require_once __DIR__ . "/../includes/districts.php";
+require_once __DIR__ . "/../includes/profile_photo.php";
 loan_products_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -395,6 +396,8 @@ $sql = "
             NULLIF(um.lname, ''),
             ''
         ) AS lname,
+
+        COALESCE(NULLIF(uc.image_url, ''), NULLIF(um.image_url, ''), '') AS client_photo,
 
         COALESCE(
             NULLIF(c.email, ''),
@@ -1172,7 +1175,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                         <?php endif; ?>
                         <td>
                             <div class="d-flex align-items-center gap-2">
-                                <div class="cell-av"><?= h($initials ?: 'U') ?></div>
+                                <?= profile_avatar($loan['client_photo'] ?? '', $initials ?: 'U', 'cell-av') ?>
                                 <div style="min-width:0">
                                     <div class="applicant-name"><?= h($clientName) ?></div>
                                     <div class="fs-xs text-muted">
@@ -1255,6 +1258,11 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
             <div class="review-summary">
                 <div>
                     <div class="rs-label">Applicant</div>
+                    <?php if (profile_photo_url($loan['client_photo'] ?? '') !== ''): ?>
+                        <a href="<?= h(profile_photo_url($loan['client_photo'])) ?>" target="_blank" rel="noopener" title="Open photo">
+                            <?= profile_avatar($loan['client_photo'], $initials ?: 'U', 'review-photo', 'Photo of ' . $clientName) ?>
+                        </a>
+                    <?php endif; ?>
                     <div class="rs-value"><?= h($clientName) ?></div>
                     <div class="fs-xs text-muted"><?= $phone !== '' ? h($phone) : 'Client ID: ' . h($loan['client_id'] ?? '') ?></div>
                     <div class="fs-xs text-muted"><i class="fas fa-map-marker-alt"></i> <?= h($placeLabel !== '' ? $placeLabel : 'Location not recorded') ?></div>
