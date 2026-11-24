@@ -103,6 +103,7 @@ register_shutdown_function(static function (): void {
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../../includes/loan_workflow.php';
+require_once __DIR__ . '/../../includes/loan_products.php';
 
 date_default_timezone_set('Africa/Kampala');
 
@@ -237,6 +238,7 @@ if ($clientId <= 0) {
 $amount     = loanPostFloat('amount');
 $loanPeriod = loanPostInt('loan_period');
 $notes      = loanPostString('notes');
+$productId  = loanPostInt('product_id');
 
 $allowedClientTypes = [
     'customer',
@@ -269,6 +271,53 @@ if ($amount <= 0) {
         false,
         'The loan amount must be greater than zero.'
     );
+}
+
+/*
+|--------------------------------------------------------------------------
+| Customer loans use a loan product (Loans > Loan Products)
+|--------------------------------------------------------------------------
+| The product sets the period, interest, processing fee and penalty; it must
+| be active, available to the customer's category and cover the amount.
+|--------------------------------------------------------------------------
+*/
+$product = null;
+
+if ($clientType === 'customer') {
+    $customerCategory = 'business';
+
+    if (loanTableHasColumn($conn, 'customers', 'client_category')) {
+        $categoryStatement = $conn->prepare(
+            'SELECT client_category FROM customers WHERE user_id = ? LIMIT 1'
+        );
+        $categoryStatement->bind_param('i', $clientId);
+        $categoryStatement->execute();
+        $customerCategory = (string)(
+            $categoryStatement->get_result()->fetch_assoc()['client_category'] ?? 'business'
+        );
+        $categoryStatement->close();
+    }
+
+    $product = loan_product_for_request(
+        $conn,
+        $productId,
+        $customerCategory === 'new_onboarded' ? 'new_onboarded' : 'business'
+    );
+
+    if (!$product) {
+        loanRespond(
+            false,
+            'Please choose a loan product available to this client.'
+        );
+    }
+
+    $productError = loan_product_amount_error($product, $amount);
+
+    if ($productError !== '') {
+        loanRespond(false, $productError);
+    }
+
+    $loanPeriod = $product['period'];
 }
 
 if ($loanPeriod <= 0) {
@@ -305,16 +354,8 @@ switch ($clientType) {
         break;
 
     case 'customer':
-        if ($loanPeriod < 1 || $loanPeriod > 6) {
-            loanRespond(
-                false,
-                'Customer loans must have a period between 1 and 6 months.'
-            );
-        }
-
-        $interestRate = $loanPeriod === 1
-            ? 10.0
-            : 6.6;
+        // Provisional; replaced by the product's terms after the insert.
+        $interestRate = $product['interest_rate'];
         break;
 
     case 'startup':
@@ -753,6 +794,34 @@ try {
         );
     }
 
+    // Customer loans: save the product's terms and figures on the loan.
+    if ($product) {
+        [$productColumns, $productTypes, $productValues] = loan_product_existing_columns(
+            $conn,
+            loan_product_request_columns($product, $amount) + ['requested_amount' => ['d', $amount]]
+        );
+
+        $productStatement = $conn->prepare(
+            'UPDATE loan SET ' . implode(' = ?, ', $productColumns) . ' = ? WHERE id = ?'
+        );
+
+        $productValues[] = $loanId;
+        loanBindParams($productStatement, $productTypes . 'i', $productValues);
+
+        if (!$productStatement->execute()) {
+            throw new RuntimeException(
+                'The loan product terms could not be saved: ' . $productStatement->error
+            );
+        }
+
+        $productStatement->close();
+
+        $productQuote = loan_product_quote($product, $amount);
+        $interest     = $productQuote['interest'];
+        $loanBalance  = $productQuote['total_repayment'];
+        $dueDate      = loan_term_due_date($product['period'], $product['period_unit']);
+    }
+
     // Automatically assign the least-busy loan officer so the new request does
     // not sit unassigned in the reviewer queue.
     $assignedOfficerId = loan_finalize_new_request($conn, $loanId, $clientType);
@@ -774,6 +843,7 @@ try {
             'interest'      => $interest,
             'loan_balance'  => $loanBalance,
             'loan_period'   => $loanPeriod,
+            'loan_product'  => $product ? $product['name'] : null,
             'status'        => $status,
             'due_date'      => $dueDate,
             'redirect'      => 'pending_loans.php',

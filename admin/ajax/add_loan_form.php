@@ -12,6 +12,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../../includes/loan_products.php';
 
 if (empty($_SESSION['logged_in'])) {
     http_response_code(403);
@@ -167,8 +168,13 @@ if ($loanHasClientType) {
     ";
 }
 
+$customerCategorySql = addLoanTableHasColumn($conn, 'customers', 'client_category')
+    ? "COALESCE(c.client_category, 'business')"
+    : "'business'";
+
 $customerSql = "
     SELECT
+        {$customerCategorySql} AS client_category,
         c.user_id AS client_id,
         TRIM(
             CONCAT(
@@ -219,9 +225,10 @@ if ($customerResult) {
         }
 
         $customers[] = [
-            'id'    => $clientId,
-            'label' => $label,
-            'limit' => (float)($row['loan_limit'] ?? 0),
+            'id'       => $clientId,
+            'label'    => $label,
+            'limit'    => (float)($row['loan_limit'] ?? 0),
+            'category' => ($row['client_category'] ?? '') === 'new_onboarded' ? 'new_onboarded' : 'business',
         ];
     }
 
@@ -472,6 +479,19 @@ if (addLoanTableHasColumn($conn, 'organisations', 'id')) {
     }
 }
 $totalEligible += count($organisations);
+
+/*
+|--------------------------------------------------------------------------
+| Loan products for customer loans
+|--------------------------------------------------------------------------
+*/
+$loanProducts = [];
+
+foreach (['business', 'new_onboarded'] as $productCategory) {
+    foreach (loan_products_for_client($conn, $productCategory) as $productRow) {
+        $loanProducts[$productRow['id']] = $productRow;
+    }
+}
 ?>
 
 <form
@@ -522,22 +542,44 @@ $totalEligible += count($organisations);
          * Member / Staff: fixed at 3 months
          * Startup: 24-36 months (2-3 years)
          */
+        var productSelect = form.querySelector('[name=product_id]');
+        var productOption = productSelect && productSelect.selectedOptions
+            ? productSelect.selectedOptions[0]
+            : null;
+
         if (
             clientType.value === 'customer' &&
-            (
-                !selectedPeriod ||
-                selectedPeriod < 1 ||
-                selectedPeriod > 6
-            )
+            (!productOption || !productOption.value)
         ) {
             messageBox.className = 'alert alert-danger';
             messageBox.textContent =
-                'Customer loans must use a period between 1 and 6 months.';
+                'Please choose a loan product for this customer.';
             messageBox.style.display = 'block';
 
-            loanPeriod.focus();
+            if (productSelect && productSelect.focus) productSelect.focus();
 
             return false;
+        }
+
+        if (clientType.value === 'customer') {
+            var chosenProduct = JSON.parse(productOption.getAttribute('data-product'));
+            var chosenAmount = parseFloat(amount.value) || 0;
+            var productMax = chosenProduct.maximum_amount;
+
+            if (
+                chosenAmount < chosenProduct.minimum_amount ||
+                (productMax > 0 && chosenAmount > productMax)
+            ) {
+                messageBox.className = 'alert alert-danger';
+                messageBox.textContent = chosenProduct.name + ' allows UGX '
+                    + Number(chosenProduct.minimum_amount).toLocaleString()
+                    + (productMax > 0 ? ' to UGX ' + Number(productMax).toLocaleString() : ' or more') + '.';
+                messageBox.style.display = 'block';
+
+                amount.focus();
+
+                return false;
+            }
         }
 
         if (
@@ -718,6 +760,29 @@ $totalEligible += count($organisations);
                     var loanPeriod = form.querySelector('[name=loan_period]');
                     var rateDisplay = form.querySelector('[data-interest-rate]');
                     var periodHelp = form.querySelector('[data-period-help]');
+                    var productGroup = form.querySelector('[data-product-group]');
+                    var productSelect = form.querySelector('[name=product_id]');
+                    var periodGroup = form.querySelector('[data-period-group]');
+                    var isCustomer = clientType === 'customer';
+                    var category = isCustomer && this.selectedOptions[0]
+                        ? (this.selectedOptions[0].getAttribute('data-category') || 'business')
+                        : '';
+
+                    productGroup.style.display = isCustomer ? '' : 'none';
+                    periodGroup.style.display = isCustomer ? 'none' : '';
+                    productSelect.required = isCustomer;
+                    loanPeriod.required = !isCustomer;
+                    productSelect.value = '';
+                    form.querySelector('[data-product-help]').textContent = isCustomer
+                        ? 'The product sets the period, interest, processing fee and late penalty.'
+                        : '';
+                    Array.prototype.forEach.call(productSelect.options, function (option) {
+                        var cat = option.getAttribute('data-category');
+                        if (!cat) return;
+                        var show = cat === 'all' || cat === category;
+                        option.hidden = !show;
+                        option.disabled = !show;
+                    });
 
                     form.querySelector('[name=client_type]').value =
                         clientType;
@@ -753,15 +818,8 @@ $totalEligible += count($organisations);
                         periodHelp.textContent =
                             'Staff and member loans are fixed at 3 months.';
                     } else if (clientType === 'customer') {
-                        for (var month = 1; month <= 6; month++) {
-                            addMonth(month);
-                        }
-
-                        rateDisplay.value =
-                            'Select loan period';
-
-                        periodHelp.textContent =
-                            'Customer loans can run from 1 to 6 months.';
+                        rateDisplay.value = 'Select a loan product';
+                        periodHelp.textContent = '';
                     } else if (clientType === 'startup' || clientType === 'organisation') {
                         /*
                          * Startup financing runs from 2 to 3 years.
@@ -798,6 +856,7 @@ $totalEligible += count($organisations);
                         <?php foreach ($customers as $customer): ?>
                             <option
                                 value="customer:<?= (int)$customer['id'] ?>"
+                                data-category="<?= addLoanEscape($customer['category']) ?>"
                             >
                                 <?= addLoanEscape($customer['label']) ?>
 
@@ -866,6 +925,67 @@ $totalEligible += count($organisations);
             >
         </div>
 
+        <!-- Loan product (customers) -->
+        <div
+            class="form-group"
+            style="grid-column:1/-1;display:none"
+            data-product-group
+        >
+            <label
+                class="form-label"
+                for="loan_product_id"
+            >
+                Loan Product
+                <span class="text-danger">*</span>
+            </label>
+
+            <?php if ($loanProducts): ?>
+                <select
+                    name="product_id"
+                    id="loan_product_id"
+                    class="form-select"
+                    onchange="
+                        var option = this.selectedOptions[0];
+                        var form = this.form;
+                        var help = form.querySelector('[data-product-help]');
+                        var rateDisplay = form.querySelector('[data-interest-rate]');
+                        if (!option || !option.value) {
+                            rateDisplay.value = 'Select a loan product';
+                            help.textContent = 'The product sets the period, interest, processing fee and late penalty.';
+                            return;
+                        }
+                        var p = JSON.parse(option.getAttribute('data-product'));
+                        rateDisplay.value = (+p.interest_rate.toFixed(2)) + '% per month (' + p.interest_type + ')';
+                        help.textContent = p.term_label + ', ' + p.repayment_frequency + ' repayments, processing fee UGX '
+                            + Number(p.processing_fee).toLocaleString() + ', ' + p.penalty_note + '. Amount: UGX '
+                            + Number(p.minimum_amount).toLocaleString()
+                            + (p.maximum_amount > 0 ? ' to UGX ' + Number(p.maximum_amount).toLocaleString() : ' or more') + '.';
+                        var amount = form.querySelector('[name=amount]');
+                        amount.min = p.minimum_amount;
+                        if (p.maximum_amount > 0) { amount.max = p.maximum_amount; } else { amount.removeAttribute('max'); }
+                    "
+                >
+                    <option value="">Select a loan product</option>
+                    <?php foreach ($loanProducts as $loanProduct): ?>
+                        <option
+                            value="<?= (int)$loanProduct['id'] ?>"
+                            data-category="<?= addLoanEscape($loanProduct['client_category']) ?>"
+                            data-product="<?= addLoanEscape(json_encode(loan_product_public($loanProduct))) ?>"
+                        >
+                            <?= addLoanEscape(loan_product_label($loanProduct)) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            <?php else: ?>
+                <div class="alert alert-warning mb-0">
+                    No active loan products. Add one under Loans &gt; Loan Products before issuing customer loans.
+                </div>
+                <input type="hidden" name="product_id" value="">
+            <?php endif; ?>
+
+            <small class="form-help" data-product-help></small>
+        </div>
+
         <!-- Amount -->
         <div class="form-group">
             <label
@@ -888,8 +1008,8 @@ $totalEligible += count($organisations);
             >
         </div>
 
-        <!-- Loan period -->
-        <div class="form-group">
+        <!-- Loan period (members, startups, organisations) -->
+        <div class="form-group" data-period-group>
             <label
                 class="form-label"
                 for="loan_period"
