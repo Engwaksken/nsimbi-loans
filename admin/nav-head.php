@@ -155,6 +155,7 @@ $navSections = [
     ['clients.php', 'fa-users', 'Clients'],
     ['staff.php', 'fa-user-tie', 'Staff'],
     ['startups.php', 'fa-building', 'Startups'],
+    ['organisations.php', 'fa-city', 'Organisations'],
     ['users.php', 'fa-user-shield', 'Users'],
   ]],
   'staffhr' => ['Staff HR', $hrLinks],

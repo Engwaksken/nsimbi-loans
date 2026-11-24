@@ -288,14 +288,6 @@ require 'nav-head.php';
     </div>
 </div>
 
-<p class="ref-help">
-    <i class="fas fa-circle-info"></i>
-    <strong>Got a loan</strong> = clients with at least one loan paid out (active, outstanding, overdue or cleared).
-    <strong>Overdue</strong> = paid-out loans now overdue; a lower rate means the officer brings in clients who repay.
-    <?= number_format($unreferred) ?> client(s) in this period said no one referred them.
-    <strong>Copy link</strong> gives the officer a sign-up link with their name already chosen.
-</p>
-
 <?php foreach ($rows as $r): ?>
     <?php if (empty($clientLists[(int)$r['id']])) continue; ?>
     <?php $name = trim($r['fname'] . ' ' . $r['lname']) ?: 'User #' . (int)$r['id']; ?>

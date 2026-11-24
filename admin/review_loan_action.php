@@ -177,6 +177,11 @@ foreach ($ids as $id) {
 
             $period = max(1, (int)($loan['loan_period'] ?? 1));
             $unit = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month'));
+            // The product's current processing fee applies when the offer is sent,
+            // so fee changes on Loan Products reach requests still pending.
+            if ($product) {
+                $loan['processing_fee'] = $product['processing_fee'];
+            }
             $quote = loan_quote_for_loan($conn, $loan, $offer);
             $rate = $quote['interest_rate'];
             $rateText = rtrim(rtrim(number_format($rate, 2), '0'), '.') . '%'

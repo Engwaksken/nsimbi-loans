@@ -1,33 +1,203 @@
 <?php
 declare(strict_types=1);
-if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+
+/*
+ * People > Organisations: companies that can be given loans. Once added, an
+ * organisation appears under "Organisations" when adding a loan.
+ */
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 require_once __DIR__ . '/db.php';
-if (empty($_SESSION['logged_in'])) { http_response_code(403); exit('Sign in required.'); }
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    header('Location: ../login.php');
+    exit;
+}
 $conn->set_charset('utf8mb4');
+
+// Same table as admin/organisation-loans.sql, created on first use.
+$conn->query("
+    CREATE TABLE IF NOT EXISTS organisations (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        company_name VARCHAR(190) NOT NULL,
+        ceo_name VARCHAR(190) NOT NULL,
+        phone VARCHAR(40) NOT NULL,
+        email VARCHAR(190) NOT NULL,
+        bank VARCHAR(190) NOT NULL,
+        account_name VARCHAR(190) NOT NULL,
+        account_number VARCHAR(100) NOT NULL,
+        bank_branch VARCHAR(190) NOT NULL,
+        company_location VARCHAR(255) NOT NULL,
+        status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_organisations_status_name (status, company_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+");
+
+const ORG_FIELDS = [
+    'company_name'     => 'Company name',
+    'ceo_name'         => 'Name of CEO',
+    'phone'            => 'Phone number',
+    'email'            => 'Email',
+    'bank'             => 'Bank',
+    'account_name'     => 'Account name',
+    'account_number'   => 'Account number',
+    'bank_branch'      => 'Bank branch',
+    'company_location' => 'Company location',
+];
+
+if (empty($_SESSION['org_csrf'])) {
+    $_SESSION['org_csrf'] = bin2hex(random_bytes(32));
+}
+$csrf = $_SESSION['org_csrf'];
 $error = '';
+$values = array_fill_keys(array_keys(ORG_FIELDS), '');
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $fields = ['company_name','ceo_name','phone','email','bank','account_name','account_number','bank_branch','company_location'];
-    $values = [];
-    foreach ($fields as $field) $values[$field] = trim((string)($_POST[$field] ?? ''));
-    foreach ($values as $value) if ($value === '') { $error = 'Please complete all organisation details.'; break; }
-    if (!$error && !filter_var($values['email'], FILTER_VALIDATE_EMAIL)) $error = 'Enter a valid email address.';
-    if (!$error) {
-        $stmt = $conn->prepare('INSERT INTO organisations (company_name,ceo_name,phone,email,bank,account_name,account_number,bank_branch,company_location) VALUES (?,?,?,?,?,?,?,?,?)');
-        $stmt->bind_param('sssssssss', $values['company_name'], $values['ceo_name'], $values['phone'], $values['email'], $values['bank'], $values['account_name'], $values['account_number'], $values['bank_branch'], $values['company_location']);
-        if ($stmt->execute()) { header('Location: organisations.php?created=1'); exit; }
-        $error = 'Could not save the organisation profile. Confirm the database setup script has been run.';
+    if (!hash_equals($csrf, (string)($_POST['csrf_token'] ?? ''))) {
+        $error = 'Your session expired. Please try again.';
+    } elseif (($_POST['action'] ?? '') === 'toggle') {
+        $id = (int)($_POST['id'] ?? 0);
+        $stmt = $conn->prepare("UPDATE organisations SET status = IF(status = 'active', 'inactive', 'active') WHERE id = ?");
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $stmt->close();
+        header('Location: organisations.php?updated=1', true, 303);
+        exit;
+    } else {
+        foreach (ORG_FIELDS as $field => $label) {
+            $values[$field] = mb_substr(trim((string)($_POST[$field] ?? '')), 0, 190, 'UTF-8');
+            if ($values[$field] === '' && $error === '') {
+                $error = 'Please complete all organisation details (' . $label . ' is missing).';
+            }
+        }
+        if ($error === '' && !filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
+            $error = 'Enter a valid email address.';
+        }
+        if ($error === '') {
+            try {
+                $stmt = $conn->prepare('INSERT INTO organisations (company_name, ceo_name, phone, email, bank, account_name, account_number, bank_branch, company_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('sssssssss', ...array_values($values));
+                $stmt->execute();
+                $stmt->close();
+                header('Location: organisations.php?created=1', true, 303);
+                exit;
+            } catch (Throwable $e) {
+                error_log('Organisation save failed: ' . $e->getMessage());
+                $error = 'Could not save the organisation. Please try again.';
+            }
+        }
     }
 }
-$rows = $conn->query('SELECT id, company_name, ceo_name, phone, email, bank, account_number, bank_branch, company_location FROM organisations ORDER BY company_name');
-function orgEscape(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
+
+$organisations = [];
+try {
+    $result = $conn->query("
+        SELECT o.*,
+               (SELECT COUNT(*) FROM loan l WHERE l.client_id = o.id AND LOWER(COALESCE(l.client_type, '')) = 'organisation') AS loans
+        FROM organisations o
+        ORDER BY o.status = 'active' DESC, o.company_name
+    ");
+    $organisations = $result->fetch_all(MYSQLI_ASSOC);
+} catch (Throwable $e) {
+    // Older databases without loan.client_type: list without the loan count.
+    $result = $conn->query("SELECT o.*, NULL AS loans FROM organisations o ORDER BY o.status = 'active' DESC, o.company_name");
+    $organisations = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+}
+
+function org_e($value): string
+{
+    return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+}
+
+$phead = 'Organisations';
+require 'nav-head.php';
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Organisations</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"></head>
-<body class="bg-light"><main class="container py-4"><h1 class="h3 mb-3">Organisation profiles</h1>
-<?php if ($error): ?><div class="alert alert-danger"><?= orgEscape($error) ?></div><?php endif; ?>
-<?php if (isset($_GET['created'])): ?><div class="alert alert-success">Organisation profile saved. It is now available when adding a loan.</div><?php endif; ?>
-<div class="card mb-4"><div class="card-body"><h2 class="h5">Add organisation</h2><form method="post" class="row g-3">
-<?php foreach (['company_name'=>'Company name','ceo_name'=>'Name of CEO','phone'=>'Phone number','email'=>'Email','bank'=>'Bank','account_name'=>'Account name','account_number'=>'Account number','bank_branch'=>'Bank branch','company_location'=>'Company location'] as $key=>$label): ?><div class="col-md-6"><label class="form-label" for="<?= $key ?>"><?= $label ?></label><input class="form-control" id="<?= $key ?>" name="<?= $key ?>" required type="<?= $key === 'email' ? 'email' : 'text' ?>" value="<?= orgEscape((string)($_POST[$key] ?? '')) ?>"></div><?php endforeach; ?>
-<div class="col-12"><button class="btn btn-primary">Save organisation</button> <a class="btn btn-outline-secondary" href="pending_loans.php">Back to loans</a></div></form></div></div>
-<h2 class="h5">Registered organisations</h2><div class="table-responsive bg-white"><table class="table table-striped"><thead><tr><th>Company</th><th>CEO</th><th>Phone</th><th>Email</th><th>Bank</th><th>Account</th><th>Branch</th><th>Location</th></tr></thead><tbody>
-<?php if ($rows): while ($org = $rows->fetch_assoc()): ?><tr><td><?= orgEscape((string)$org['company_name']) ?></td><td><?= orgEscape((string)$org['ceo_name']) ?></td><td><?= orgEscape((string)$org['phone']) ?></td><td><?= orgEscape((string)$org['email']) ?></td><td><?= orgEscape((string)$org['bank']) ?></td><td><?= orgEscape((string)$org['account_number']) ?></td><td><?= orgEscape((string)$org['bank_branch']) ?></td><td><?= orgEscape((string)$org['company_location']) ?></td></tr><?php endwhile; endif; ?>
-</tbody></table></div></main><script src="../assets/js/table-pager.js"></script></body></html>
+
+<style>
+.org-page { padding: 1rem; }
+.org-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 1.1rem; margin-bottom: 1rem; }
+.org-card h5 { font-weight: 800; margin: 0 0 .75rem; }
+.org-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+.org-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.org-table th, .org-table td { padding: .55rem .6rem; border-bottom: 1px solid #f0f1f3; text-align: left; vertical-align: middle; }
+.org-table th { font-size: .74rem; text-transform: uppercase; color: #64748b; background: #f8fafc; }
+.org-muted { color: #64748b; font-size: .8rem; }
+</style>
+
+<div class="org-page">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h4 class="mb-0 fw-bold">Organisations</h4>
+            <div class="org-muted">Active organisations appear under "Organisations" in the New Loan form (Loans &gt; All Loans &gt; New Loan).</div>
+        </div>
+        <a href="loans.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-file-invoice-dollar me-1"></i> Go to loans</a>
+    </div>
+
+    <?php if ($error !== ''): ?>
+        <div class="alert alert-danger"><?= org_e($error) ?></div>
+    <?php elseif (isset($_GET['created'])): ?>
+        <div class="alert alert-success">Organisation saved. Choose it under "Organisations" in the New Loan form.</div>
+    <?php elseif (isset($_GET['updated'])): ?>
+        <div class="alert alert-success">Organisation status updated.</div>
+    <?php endif; ?>
+
+    <div class="org-card">
+        <h5><i class="fas fa-plus-circle text-primary me-2"></i>Add organisation</h5>
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="<?= org_e($csrf) ?>">
+            <div class="org-grid">
+                <?php foreach (ORG_FIELDS as $key => $label): ?>
+                    <div>
+                        <label class="form-label fs-sm" for="<?= $key ?>"><?= org_e($label) ?></label>
+                        <input class="form-control" id="<?= $key ?>" name="<?= $key ?>" required maxlength="190"
+                               type="<?= $key === 'email' ? 'email' : 'text' ?>" value="<?= org_e($values[$key]) ?>">
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <button class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i> Save organisation</button>
+        </form>
+    </div>
+
+    <div class="org-card">
+        <h5><i class="fas fa-city text-primary me-2"></i>Registered organisations (<?= count($organisations) ?>)</h5>
+        <div class="table-responsive">
+            <table class="org-table">
+                <thead>
+                <tr><th>Company</th><th>CEO</th><th>Contact</th><th>Bank</th><th>Location</th><th>Loans</th><th>Status</th><th></th></tr>
+                </thead>
+                <tbody>
+                <?php if (!$organisations): ?>
+                    <tr><td colspan="8" class="text-center org-muted py-4">No organisations yet. Add one above.</td></tr>
+                <?php endif; ?>
+                <?php foreach ($organisations as $org): $active = $org['status'] === 'active'; ?>
+                    <tr>
+                        <td><strong><?= org_e($org['company_name']) ?></strong></td>
+                        <td><?= org_e($org['ceo_name']) ?></td>
+                        <td><?= org_e($org['phone']) ?><div class="org-muted"><?= org_e($org['email']) ?></div></td>
+                        <td><?= org_e($org['bank']) ?><div class="org-muted"><?= org_e($org['account_name']) ?> &middot; <?= org_e($org['account_number']) ?> &middot; <?= org_e($org['bank_branch']) ?></div></td>
+                        <td><?= org_e($org['company_location']) ?></td>
+                        <td><?= $org['loans'] === null ? '-' : (int)$org['loans'] ?></td>
+                        <td><span class="badge <?= $active ? 'bg-success' : 'bg-secondary' ?>"><?= $active ? 'Active' : 'Inactive' ?></span></td>
+                        <td class="text-end">
+                            <form method="post" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="<?= org_e($csrf) ?>">
+                                <input type="hidden" name="action" value="toggle">
+                                <input type="hidden" name="id" value="<?= (int)$org['id'] ?>">
+                                <button class="btn btn-sm <?= $active ? 'btn-outline-secondary' : 'btn-outline-success' ?>">
+                                    <?= $active ? 'Deactivate' : 'Activate' ?>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<?php require 'footer.php'; ?>

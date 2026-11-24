@@ -1359,7 +1359,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                     <?= h(loan_product_term_label($product)) ?>,
                                     <?= h(rtrim(rtrim(number_format((float)($loan['interest_rate'] ?? 0), 2), '0'), '.')) ?>% per month (<?= h((string)($loan['interest_type'] ?? 'flat')) ?>),
                                     <?= h((string)($loan['repayment_frequency'] ?? 'monthly')) ?> repayments,
-                                    fee <?= money((float)($loan['processing_fee'] ?? 0)) ?>,
+                                    fee <?= money($product['processing_fee']) ?>,
                                     penalty <?= h(rtrim(rtrim(number_format((float)($loan['penalty_rate'] ?? 0), 2), '0'), '.')) ?>% / 30 days late.
                                     <div class="text-muted fs-xs">Offer between <?= money($offerMin) ?> and <?= $offerMax > 0 ? money($offerMax) : 'any amount' ?>.</div>
                                 </div>
@@ -1380,7 +1380,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                             </div>
                             <div class="fs-xs text-muted mb-3">
                                 The client sees this offer in the app and accepts or rejects it. A processing fee of
-                                <?= money($product || !empty($loan['loan_product_id']) ? (float)($loan['processing_fee'] ?? 0) : loan_processing_fee($conn)) ?> is taken from the payout; repayments are on the full amount.
+                                <?= money($product ? $product['processing_fee'] : (!empty($loan['loan_product_id']) ? (float)($loan['processing_fee'] ?? 0) : loan_processing_fee($conn))) ?> is taken from the payout; repayments are on the full amount.
                             </div>
 
                             <?php if ($ninDone): ?>
