@@ -3,6 +3,8 @@ $phead = "Pending Loans";
 
 require "nav-head.php";
 require_once __DIR__ . '/../includes/loan_workflow.php';
+require_once __DIR__ . '/../includes/loan_products.php';
+loan_products_ensure_schema($conn);
 
 /*
  * Client portal styling comes from assets/css/loanpro.css and
@@ -54,7 +56,7 @@ try {
         $loan_client_id = (int)$client['user_id'];
 
         $stmt = $conn->prepare("
-            SELECT id, amount, interest, loan_balance, loan_period, loan_method,
+            SELECT id, amount, interest, loan_balance, loan_period, loan_period_unit, loan_product_id, loan_product_name, loan_method,
                    phone, bank_name, bank_account, status, due_date, datetime
             FROM loan
             WHERE client_id = ?
@@ -86,7 +88,7 @@ if ($full_name === '') {
 
 $loan_limit       = (float)($client['loan_limit'] ?? 0);
 $is_new_onboarded = ($client['client_category'] ?? 'business') === 'new_onboarded';
-$period_options   = $is_new_onboarded ? [8, 9, 10, 11, 12] : [1, 2, 3, 6];
+$loan_products    = loan_products_for_client($conn, $is_new_onboarded ? 'new_onboarded' : 'business');
 
 $total_amount = 0.0;
 $total_repayable = 0.0;
@@ -198,20 +200,20 @@ unset($_SESSION['message'], $_SESSION['message_type']);
                             $loan_json = json_encode([
                                 'id'           => (int)$loan['id'],
                                 'amount'       => (float)$loan['amount'],
-                                'loan_period'  => (int)$loan['loan_period'],
+                                'product_id'   => (int)($loan['loan_product_id'] ?? 0),
                                 'loan_method'  => (string)($loan['loan_method'] ?? ''),
                                 'phone'        => (string)($loan['phone'] ?? ''),
                                 'bank_name'    => (string)($loan['bank_name'] ?? ''),
                                 'bank_account' => (string)($loan['bank_account'] ?? ''),
                             ]);
-                            $period = (int)$loan['loan_period'];
+                            $period_label = loan_term_label((int)$loan['loan_period'], (string)($loan['loan_period_unit'] ?? 'month'));
                             ?>
                             <tr>
                                 <td><?= $i + 1; ?></td>
                                 <td class="fw-600"><?= money($loan['amount']); ?></td>
                                 <td><?= money($loan['interest']); ?></td>
                                 <td class="fw-600"><?= money($loan['loan_balance']); ?></td>
-                                <td><?= $period; ?> <?= $period === 1 ? 'Month' : 'Months'; ?></td>
+                                <td><?= esc($period_label); ?><?= !empty($loan['loan_product_name']) ? '<div class="text-muted small">' . esc($loan['loan_product_name']) . '</div>' : ''; ?></td>
                                 <td><?= esc($loan['loan_method'] ?: '-'); ?></td>
                                 <td><span class="badge badge-warning"><?= esc($loan['status']); ?></span></td>
                                 <td><?= esc($loan['datetime'] ? date('d M Y, H:i', strtotime((string)$loan['datetime'])) : '-'); ?></td>
@@ -264,13 +266,11 @@ unset($_SESSION['message'], $_SESSION['message_type']);
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label" for="edit_period">Loan Period</label>
-                        <select class="form-select" id="edit_period" name="loan_period" required>
-                            <?php foreach ($period_options as $months): ?>
-                                <option value="<?= $months; ?>">
-                                    <?= $months; ?> <?= $months === 1 ? 'Month' : 'Months'; ?>
-                                    - <?= $is_new_onboarded ? '3% monthly' : ($months === 1 ? '10%' : '6.6%'); ?> interest
-                                </option>
+                        <label class="form-label" for="edit_period">Loan Product</label>
+                        <select class="form-select" id="edit_period" name="product_id" required>
+                            <option value="">Select a loan product</option>
+                            <?php foreach ($loan_products as $product): ?>
+                                <option value="<?= (int)$product['id']; ?>"><?= esc(loan_product_label($product)); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -351,6 +351,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
     </div>
 </div>
 
+<?= loan_products_script($loan_products); ?>
 <script>
 (function () {
     const PROCESS_URL = 'includes/process-loans.php';
@@ -367,12 +368,10 @@ unset($_SESSION['message'], $_SESSION['message_type']);
         return 'UGX ' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    // Same rules as clients/requested_loan.php and includes/process-loans.php.
-    function interestFor(amount, period) {
-        if (IS_NEW_ONBOARDED) return amount * 0.03 * period;
-        if (period === 1) return amount * 0.10;
-        if ([2, 3, 6].includes(period)) return amount * 0.066;
-        return 0;
+    // Same pricing as the server (includes/loan_products.php).
+    function interestFor(amount, productId) {
+        const q = LoanProducts.quote(LoanProducts.get(productId), amount);
+        return q ? q.interest : 0;
     }
 
     function showError(form, message) {
@@ -408,7 +407,7 @@ unset($_SESSION['message'], $_SESSION['message_type']);
 
     function updateSummary() {
         const amount = toNumber($('edit_amount').value);
-        const interest = interestFor(amount, parseInt($('edit_period').value, 10));
+        const interest = interestFor(amount, $('edit_period').value);
         $('edit_sum_interest').textContent = formatMoney(interest);
         $('edit_sum_total').textContent = formatMoney(amount + interest);
     }
@@ -419,8 +418,8 @@ unset($_SESSION['message'], $_SESSION['message_type']);
 
             $('edit_loan_id').value = loan.id;
             $('edit_amount').value = Number(loan.amount).toLocaleString(undefined, { maximumFractionDigits: 2 });
-            $('edit_period').value = String(loan.loan_period);
-            if (!$('edit_period').value) $('edit_period').selectedIndex = 0;
+            // Requests made before products existed have none: the client picks one.
+            $('edit_period').value = loan.product_id ? String(loan.product_id) : '';
             $('edit_method').value = loan.loan_method === 'Bank Transfer' ? 'Bank Transfer' : 'Mobile Money';
             $('edit_phone').value = loan.phone;
             $('edit_bank_name').value = loan.bank_name;
@@ -444,6 +443,10 @@ unset($_SESSION['message'], $_SESSION['message_type']);
 
         if (amount <= 0) return showError(editForm, 'Please enter a valid loan amount.');
         if (LOAN_LIMIT > 0 && amount > LOAN_LIMIT) return showError(editForm, 'Amount cannot exceed your loan limit of ' + formatMoney(LOAN_LIMIT) + '.');
+        const product = LoanProducts.get($('edit_period').value);
+        if (!product) return showError(editForm, 'Please choose a loan product.');
+        const productError = LoanProducts.amountError(product, amount);
+        if (productError) return showError(editForm, productError);
         if (method === 'Mobile Money' && !$('edit_phone').value.trim()) return showError(editForm, 'Please enter your Mobile Money number.');
         if (method === 'Bank Transfer' && (!$('edit_bank_name').value.trim() || !$('edit_bank_account').value.trim())) {
             return showError(editForm, 'Please enter both bank name and account number.');

@@ -6,6 +6,7 @@ session_start();
 require_once __DIR__ . '/../php/db.php';
 require_once __DIR__ . '/../includes/loan_workflow.php';
 require_once __DIR__ . '/../includes/loan_offers.php';
+require_once __DIR__ . '/../includes/loan_products.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection error.');
@@ -196,14 +197,8 @@ $phone            = trim((string)($customer['phone'] ?? ''));
 $bank_name        = trim((string)($customer['bank_name'] ?? ''));
 $bank_account     = trim((string)($customer['bank_account'] ?? ''));
 
-if ($is_new_onboarded) {
-    $period_options = [];
-    foreach ([8, 9, 10, 11, 12] as $m) {
-        $period_options[$m] = "{$m} months | 3% per month";
-    }
-} else {
-    $period_options = [1 => '1 month | 10% interest', 2 => '2 months | 6.6% interest', 3 => '3 months | 6.6% interest', 6 => '6 months | 6.6% interest'];
-}
+// Loan products this client may choose (Admin > Loan Products).
+$loan_products = loan_products_for_client($conn, $is_new_onboarded ? 'new_onboarded' : 'business');
 
 // An offer from staff waiting for the client's answer.
 loan_offers_ensure_schema($conn);
@@ -215,7 +210,7 @@ $pending_offer = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 if ($pending_offer) {
     $offer_principal = (float)($pending_offer['offer_amount'] ?? 0) ?: (float)$pending_offer['amount'];
-    $offer_quote = loan_quote($conn, $offer_principal, (int)$pending_offer['loan_period'], (string)($pending_offer['loan_period_unit'] ?? 'month'));
+    $offer_quote = loan_quote_for_loan($conn, $pending_offer, $offer_principal);
     if ($pending_offer['processing_fee'] !== null) {
         $offer_quote['processing_fee'] = (float)$pending_offer['processing_fee'];
         $offer_quote['net_disbursement'] = max(0.0, $offer_principal - (float)$pending_offer['processing_fee']);
@@ -579,7 +574,13 @@ if (file_exists(__DIR__ . '/services_check.php')) {
             We can offer you <strong><?= money($offer_principal); ?></strong> for <?= esc($offer_quote['term_label']); ?>.
         </p>
         <ul style="margin:0 0 .8rem;padding-left:1.1rem;font-size:.9rem">
-            <li>You repay <strong><?= money($offer_quote['total_repayment']); ?></strong> (including <?= esc(rtrim(rtrim(number_format($offer_quote['interest_rate'], 2), '0'), '.')); ?>% interest)</li>
+            <li>You repay <strong><?= money($offer_quote['total_repayment']); ?></strong> (including <?= esc(rtrim(rtrim(number_format($offer_quote['interest_rate'], 2), '0'), '.')); ?>%<?= ($offer_quote['interest_rate_basis'] ?? '') === 'per_month' ? ' per month' : ''; ?> interest)</li>
+            <?php if (($offer_quote['installments'] ?? 1) > 1): ?>
+                <li><?= (int)$offer_quote['installments']; ?> <?= esc($offer_quote['installment_unit']); ?> installments of about <?= money($offer_quote['installment_amount']); ?></li>
+            <?php endif; ?>
+            <?php if (($offer_quote['penalty_rate'] ?? 0) > 0): ?>
+                <li>Late payment: <?= esc(rtrim(rtrim(number_format($offer_quote['penalty_rate'], 2), '0'), '.')); ?>% of the unpaid balance for every 30 days overdue</li>
+            <?php endif; ?>
             <li>Processing fee: <?= money($offer_quote['processing_fee']); ?>, taken from the payout</li>
             <li>You receive <strong><?= money($offer_quote['net_disbursement']); ?></strong></li>
         </ul>
@@ -887,13 +888,19 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                         </div>
 
                         <div class="form-group">
-                            <label for="loan_period" class="form-label">Repayment period</label>
-                            <select class="form-select" id="loan_period" name="loan_period" required>
-                                <option value="">Select a period</option>
-                                <?php foreach ($period_options as $months => $label): ?>
-                                    <option value="<?= $months; ?>"><?= esc($label); ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label for="loan_product" class="form-label">Loan product</label>
+                            <?php if ($loan_products): ?>
+                                <select class="form-select" id="loan_product" name="product_id" required>
+                                    <option value="">Select a loan product</option>
+                                    <?php foreach ($loan_products as $product): ?>
+                                        <option value="<?= (int)$product['id']; ?>"><?= esc(loan_product_label($product)); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="form-help" id="lrProductHelp"></div>
+                            <?php else: ?>
+                                <div class="alert alert-warning mb-0">No loan products are available right now. Please contact us.</div>
+                                <input type="hidden" id="loan_product" name="product_id" value="">
+                            <?php endif; ?>
                         </div>
 
                         <div class="lr-section"><i class="fas fa-wallet"></i> Receive money via</div>
@@ -946,6 +953,10 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                             <div class="lr-row"><span>Period</span><b id="sumPeriod">-</b></div>
                             <div class="lr-row"><span>Interest rate</span><b id="sumRate">-</b></div>
                             <div class="lr-row"><span>Interest</span><b id="sumInterest">UGX 0.00</b></div>
+                            <div class="lr-row"><span>Processing fee</span><b id="sumFee">-</b></div>
+                            <div class="lr-row"><span>You receive</span><b id="sumNet">-</b></div>
+                            <div class="lr-row"><span>Installments</span><b id="sumInstallments">-</b></div>
+                            <div class="lr-row"><span>Late penalty</span><b id="sumPenalty">-</b></div>
                             <div class="lr-row total"><span>Total repayable</span><b id="sumTotal">UGX 0.00</b></div>
                             <div class="lr-note">
                                 <i class="fas fa-info-circle"></i>
@@ -967,6 +978,7 @@ if (file_exists(__DIR__ . '/services_check.php')) {
     </div>
 </div>
 
+<?= loan_products_script($loan_products); ?>
 <script>
 (function () {
     const LOAN_LIMIT = <?= json_encode($loan_limit); ?>;
@@ -975,7 +987,7 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
     const form = document.getElementById('loanRequestForm');
     const amountInput = document.getElementById('amount');
-    const periodInput = document.getElementById('loan_period');
+    const periodInput = document.getElementById('loan_product');
     const errorBox = document.getElementById('lrError');
     const submitBtn = document.getElementById('lrSubmit');
     const limitBar = document.getElementById('lrLimitBar');
@@ -985,13 +997,6 @@ if (file_exists(__DIR__ . '/services_check.php')) {
     const toNumber = (v) => parseFloat(String(v || '').replace(/[^\d.]/g, '')) || 0;
     const money = (v) => 'UGX ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Same rules as requested_loan.php. Returns the total % for the period.
-    function totalRate(period) {
-        if (IS_NEW_ONBOARDED) return period >= 8 && period <= 12 ? 3 * period : 0;
-        if (period === 1) return 10;
-        if ([2, 3, 6].includes(period)) return 6.6;
-        return 0;
-    }
 
     function method() {
         const checked = form.querySelector('input[name="loan_method"]:checked');
@@ -1018,15 +1023,25 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
     function update() {
         const amount = toNumber(amountInput.value);
-        const period = parseInt(periodInput.value, 10) || 0;
-        const rate = totalRate(period);
-        const interest = amount * rate / 100;
+        const product = LoanProducts.get(periodInput.value);
+        const q = LoanProducts.quote(product, amount);
+        const help = $id('lrProductHelp');
 
         $id('sumAmount').textContent = money(amount);
-        $id('sumPeriod').textContent = period ? period + (period === 1 ? ' month' : ' months') : '-';
-        $id('sumRate').textContent = !rate ? '-' : (IS_NEW_ONBOARDED ? '3% × ' + period + ' = ' + rate + '%' : rate + '%');
-        $id('sumInterest').textContent = money(interest);
-        $id('sumTotal').textContent = money(amount + interest);
+        $id('sumPeriod').textContent = product ? product.term_label : '-';
+        $id('sumRate').textContent = product ? LoanProducts.rateLabel(product) : '-';
+        $id('sumInterest').textContent = money(q ? q.interest : 0);
+        $id('sumFee').textContent = product ? money(q ? q.fee : product.processing_fee) : '-';
+        $id('sumNet').textContent = q ? money(q.net) : '-';
+        $id('sumInstallments').textContent = q ? q.installments + ' × ' + money(q.installment) + ' (' + product.repayment_frequency + ')' : '-';
+        $id('sumPenalty').textContent = product ? (product.penalty_rate > 0 ? product.penalty_rate + '% / 30 days late' : 'None') : '-';
+        $id('sumTotal').textContent = money(q ? q.total : amount);
+        if (help) {
+            help.textContent = product
+                ? (product.description ? product.description + ' ' : '') + 'Amount: UGX ' + Number(product.minimum_amount).toLocaleString()
+                    + (product.maximum_amount > 0 ? ' to UGX ' + Number(product.maximum_amount).toLocaleString() : ' or more') + '.'
+                : '';
+        }
 
         if (limitBar && LOAN_LIMIT > 0) {
             const pct = Math.min(100, amount / LOAN_LIMIT * 100);
@@ -1058,7 +1073,9 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
         if (amount <= 0) { e.preventDefault(); return showError('Please enter the amount you want to borrow.', amountInput); }
         if (LOAN_LIMIT > 0 && amount > LOAN_LIMIT) { e.preventDefault(); return showError('The amount cannot exceed your loan limit of ' + money(LOAN_LIMIT) + '.', amountInput); }
-        if (!periodInput.value) { e.preventDefault(); return showError('Please choose a repayment period.', periodInput); }
+        if (!periodInput.value) { e.preventDefault(); return showError('Please choose a loan product.', periodInput); }
+        const productError = LoanProducts.amountError(LoanProducts.get(periodInput.value), amount);
+        if (productError) { e.preventDefault(); return showError(productError, amountInput); }
         if (m === 'Mobile Money' && !$id('phone').value.trim()) { e.preventDefault(); return showError('Please enter your Mobile Money number.', $id('phone')); }
         if (m === 'Bank Transfer') {
             if (!$id('bank_name').value.trim()) { e.preventDefault(); return showError('Please enter your bank name.', $id('bank_name')); }
@@ -1118,11 +1135,11 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Loan Period</label>
-                            <select class="form-select period-input" name="loan_period" id="edit_loan_period" required>
-                                <option value="">Select period</option>
-                                <?php foreach ($period_options as $months => $label): ?>
-                                    <option value="<?= $months; ?>"><?= esc($label); ?></option>
+                            <label class="form-label">Loan Product</label>
+                            <select class="form-select period-input" name="product_id" id="edit_loan_period" required>
+                                <option value="">Select a loan product</option>
+                                <?php foreach ($loan_products as $product): ?>
+                                    <option value="<?= (int)$product['id']; ?>"><?= esc(loan_product_label($product)); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -1269,16 +1286,6 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
     const IS_NEW_ONBOARDED_CLIENT = <?= json_encode($is_new_onboarded); ?>;
 
-    // Total interest % for the period (matches requested_loan.php / process-loans.php).
-    function interestRate(period) {
-        period = parseInt(period || 0, 10);
-
-        if (IS_NEW_ONBOARDED_CLIENT) return period >= 8 && period <= 12 ? 3 * period : 0;
-        if (period === 1) return 10;
-        if (period === 2 || period === 3 || period === 6) return 6.6;
-
-        return 0;
-    }
 
     function showAlert(container, message, type = 'danger') {
         if (!container) return;
@@ -1372,13 +1379,13 @@ if (file_exists(__DIR__ . '/services_check.php')) {
 
         function updateSummary() {
             const amount = toNumber(amountInput?.value);
-            const rate = interestRate(periodInput?.value);
-            const interest = amount * (rate / 100);
+            const product = LoanProducts.get(periodInput?.value);
+            const q = LoanProducts.quote(product, amount);
 
             if (summaryAmount) summaryAmount.textContent = formatMoney(amount);
-            if (summaryRate) summaryRate.textContent = rate + '%';
-            if (summaryInterest) summaryInterest.textContent = formatMoney(interest);
-            if (summaryTotal) summaryTotal.textContent = formatMoney(amount + interest);
+            if (summaryRate) summaryRate.textContent = product ? LoanProducts.rateLabel(product) : '-';
+            if (summaryInterest) summaryInterest.textContent = formatMoney(q ? q.interest : 0);
+            if (summaryTotal) summaryTotal.textContent = formatMoney(q ? q.total : amount);
         }
 
         function toggleMethodFields() {
@@ -1505,7 +1512,8 @@ if (file_exists(__DIR__ . '/services_check.php')) {
                 const loan = data.loan || {};
 
                 document.getElementById('edit_loan_id').value = loan.id || '';
-                document.getElementById('edit_loan_period').value = loan.loan_period || '';
+                // Pending requests made before products existed have none: the client picks one.
+                document.getElementById('edit_loan_period').value = loan.loan_product_id || '';
                 document.getElementById('edit_loan_method').value = loan.loan_method || '';
                 document.getElementById('edit_phone').value = loan.phone || '';
                 document.getElementById('edit_bank_name').value = loan.bank_name || '';

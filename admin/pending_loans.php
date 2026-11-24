@@ -8,6 +8,8 @@ require_once __DIR__ . "/loan_audit.php";
 require_once __DIR__ . "/../includes/loan_workflow.php";
 require_once __DIR__ . "/../includes/loan_assessment.php";
 require_once __DIR__ . "/../includes/loan_offers.php";
+require_once __DIR__ . "/../includes/loan_products.php";
+loan_products_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -1346,20 +1348,39 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                 $sysAmount = (float)($loan['system_amount'] ?? 0) ?: (float)($loan['assess_loan_limit'] ?? 0);
                                 $termLabel = loan_term_label((int)($loan['loan_period'] ?? 1), (string)($loan['loan_period_unit'] ?? 'month'));
                                 $ninDone = !empty($loan['assess_nin_verified_at']);
+                                $product = loan_product_get($conn, (int)($loan['loan_product_id'] ?? 0));
+                                $offerMin = $product ? max(10000.0, $product['minimum_amount']) : 10000.0;
+                                $offerMax = $product ? $product['maximum_amount'] : 0.0;
+                                $outside = static fn(float $a): bool => $product !== null && loan_product_amount_error($product, $a) !== '';
                             ?>
+                            <?php if ($product): ?>
+                                <div class="fs-sm mb-2 p-2" style="background:#f1f5ff;border-radius:8px">
+                                    <strong><?= h($product['name']) ?></strong>:
+                                    <?= h(loan_product_term_label($product)) ?>,
+                                    <?= h(rtrim(rtrim(number_format((float)($loan['interest_rate'] ?? 0), 2), '0'), '.')) ?>% per month (<?= h((string)($loan['interest_type'] ?? 'flat')) ?>),
+                                    <?= h((string)($loan['repayment_frequency'] ?? 'monthly')) ?> repayments,
+                                    fee <?= money((float)($loan['processing_fee'] ?? 0)) ?>,
+                                    penalty <?= h(rtrim(rtrim(number_format((float)($loan['penalty_rate'] ?? 0), 2), '0'), '.')) ?>% / 30 days late.
+                                    <div class="text-muted fs-xs">Offer between <?= money($offerMin) ?> and <?= $offerMax > 0 ? money($offerMax) : 'any amount' ?>.</div>
+                                </div>
+                            <?php elseif (!empty($loan['loan_product_name'])): ?>
+                                <div class="fs-sm mb-2 text-warning">Product "<?= h($loan['loan_product_name']) ?>" no longer exists; the terms saved on the loan are used.</div>
+                            <?php else: ?>
+                                <div class="fs-xs mb-2 text-muted">Requested before loan products: priced with the standard rates.</div>
+                            <?php endif; ?>
                             <label class="form-label fs-sm">Amount to offer <span class="text-muted">(term: <?= h($termLabel) ?>)</span></label>
                             <div class="mb-2">
-                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="requested" checked
-                                    data-amount="<?= (int)$reqAmount ?>"> Applicant's request: <strong><?= money($reqAmount) ?></strong></label>
+                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="requested" <?= $outside($reqAmount) ? 'disabled' : 'checked' ?>
+                                    data-amount="<?= (int)$reqAmount ?>"> Applicant's request: <strong><?= money($reqAmount) ?></strong><?= $outside($reqAmount) ? ' <span class="text-danger fs-xs">outside product limits</span>' : '' ?></label>
                                 <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="system"
-                                    data-amount="<?= (int)$sysAmount ?>" <?= $sysAmount <= 0 ? 'disabled' : '' ?>> System-calculated: <strong><?= money($sysAmount) ?></strong></label>
-                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="custom"> Custom amount:</label>
-                                <input type="number" name="custom_amount" class="form-control form-control-sm mt-1" min="10000" step="1000"
+                                    data-amount="<?= (int)$sysAmount ?>" <?= $sysAmount <= 0 || $outside($sysAmount) ? 'disabled' : '' ?>> System-calculated: <strong><?= money($sysAmount) ?></strong><?= $sysAmount > 0 && $outside($sysAmount) ? ' <span class="text-danger fs-xs">outside product limits</span>' : '' ?></label>
+                                <label class="d-block fs-sm"><input type="radio" name="offer_choice" value="custom" <?= $outside($reqAmount) ? 'checked' : '' ?>> Custom amount:</label>
+                                <input type="number" name="custom_amount" class="form-control form-control-sm mt-1" min="<?= (int)$offerMin ?>" <?= $offerMax > 0 ? 'max="' . (int)$offerMax . '"' : '' ?> step="1000"
                                        placeholder="e.g. 300000" style="max-width:220px">
                             </div>
                             <div class="fs-xs text-muted mb-3">
                                 The client sees this offer in the app and accepts or rejects it. A processing fee of
-                                <?= money(loan_processing_fee($conn)) ?> is taken from the payout; repayments are on the full amount.
+                                <?= money($product || !empty($loan['loan_product_id']) ? (float)($loan['processing_fee'] ?? 0) : loan_processing_fee($conn)) ?> is taken from the payout; repayments are on the full amount.
                             </div>
 
                             <?php if ($ninDone): ?>

@@ -3,6 +3,9 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/site_cms.php';
 $brand = site_settings($conn);
+// Late penalties on overdue product loans (at most once an hour; see includes/loan_products.php).
+require_once dirname(__DIR__) . '/includes/loan_products.php';
+loan_penalties_maybe_run($conn);
 if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1','2',1,2])) {
     header('Location: ../login.php'); exit();
 }

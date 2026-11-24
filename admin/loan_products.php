@@ -11,6 +11,15 @@ function lp_money($value): string
     return 'UGX ' . number_format((float)$value);
 }
 
+require_once dirname(__DIR__) . '/includes/loan_products.php';
+loan_products_ensure_schema($conn);
+
+$can_edit_products = (int)$role === 1;
+if (empty($_SESSION['loan_product_csrf'])) {
+    $_SESSION['loan_product_csrf'] = bin2hex(random_bytes(32));
+}
+$lp_csrf = $_SESSION['loan_product_csrf'];
+
 $products = mysqli_query($conn, "
     SELECT *
     FROM loan_products
@@ -351,17 +360,19 @@ select.lp-form-control {
     <div class="lp-page-header">
         <div>
             <h3 class="lp-page-title">Loan Products</h3>
-            <p class="lp-page-subtitle">Manage loan periods, interest rates, charges, and repayment rules.</p>
+            <p class="lp-page-subtitle">Clients pick one of these when they request a loan. The product sets the period, interest (per month), processing fee and late penalty. Editing a product does not change loans already requested.</p>
         </div>
 
+        <?php if ($can_edit_products): ?>
         <button type="button" class="btn btn-primary" onclick="openProductModal('addProductModal')">
             <i class="fas fa-plus-circle me-1"></i> Add Loan Product
         </button>
+        <?php endif; ?>
     </div>
 
     <?php if (isset($_GET['success'])): ?>
         <div class="lp-alert lp-alert-success">
-            <i class="fas fa-check-circle me-1"></i> Loan product saved successfully.
+            <i class="fas fa-check-circle me-1"></i> <?= $_GET['success'] === '1' ? 'Loan product saved successfully.' : lp_e($_GET['success']) ?>
         </div>
     <?php endif; ?>
 
@@ -386,12 +397,13 @@ select.lp-form-control {
                     <th>Code</th>
                     <th>Product</th>
                     <th>Period</th>
-                    <th>Interest</th>
+                    <th>Interest / month</th>
                     <th>Amount Range</th>
                     <th>Processing Fee</th>
                     <th>Penalty</th>
                     <th>Frequency</th>
                     <th>Type</th>
+                    <th>Available to</th>
                     <th>Status</th>
                     <th class="text-end">Action</th>
                 </tr>
@@ -411,23 +423,25 @@ select.lp-form-control {
                             <span class="lp-muted"><?= lp_e($row['description'] ?? '') ?></span>
                         </td>
 
-                        <td><?= (int)$row['loan_period_months'] ?> Month(s)</td>
+                        <td><?= lp_e(loan_term_label((int)$row['loan_period_months'], (string)($row['period_unit'] ?? 'month'))) ?></td>
 
                         <td><?= number_format((float)$row['interest_rate'], 2) ?>%</td>
 
                         <td>
                             <?= lp_money($row['minimum_amount']) ?>
                             -
-                            <?= lp_money($row['maximum_amount']) ?>
+                            <?= (float)$row['maximum_amount'] > 0 ? lp_money($row['maximum_amount']) : 'No maximum' ?>
                         </td>
 
                         <td><?= lp_money($row['processing_fee']) ?></td>
 
-                        <td><?= number_format((float)$row['penalty_rate'], 2) ?>%</td>
+                        <td><?= number_format((float)$row['penalty_rate'], 2) ?>% <span class="lp-muted">/ 30 days late</span></td>
 
                         <td><?= lp_e(ucfirst((string)$row['repayment_frequency'])) ?></td>
 
                         <td><?= lp_e(ucfirst((string)$row['interest_type'])) ?></td>
+
+                        <td><?= lp_e(LOAN_PRODUCT_CATEGORIES[$row['client_category'] ?? 'all'] ?? 'All clients') ?></td>
 
                         <td>
                             <span class="lp-badge <?= $row['status'] === 'active' ? 'lp-badge-success' : 'lp-badge-danger' ?>">
@@ -437,6 +451,7 @@ select.lp-form-control {
 
                         <td class="text-end">
                             <div class="lp-actions">
+                                <?php if ($can_edit_products): ?>
                                 <button type="button"
                                         class="btn btn-sm btn-info"
                                         data-product='<?= lp_e(json_encode($row, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE)) ?>'
@@ -444,11 +459,14 @@ select.lp-form-control {
                                     <i class="fas fa-edit"></i>
                                 </button>
 
-                                <a href="includes/process-loan-product.php?action=delete&id=<?= (int)$row['id'] ?>"
-                                   onclick="return confirm('Delete this loan product?')"
-                                   class="btn btn-sm btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                </a>
+                                <form method="POST" action="includes/process-loan-product.php" class="d-inline"
+                                      onsubmit="return confirm('Delete this loan product?')">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= lp_e($lp_csrf) ?>">
+                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                                </form>
+                                <?php endif; ?>
                             </div>
                         </td>
                     </tr>
@@ -464,6 +482,7 @@ select.lp-form-control {
     <div class="lp-modal-box">
         <form method="POST" action="includes/process-loan-product.php">
             <input type="hidden" name="action" value="create">
+            <input type="hidden" name="csrf_token" value="<?= lp_e($lp_csrf) ?>">
 
             <div class="lp-modal-header">
                 <h5 class="lp-modal-title">
@@ -494,12 +513,27 @@ select.lp-form-control {
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Loan Period Months</label>
-                        <input type="number" name="loan_period_months" class="lp-form-control" min="1" required>
+                        <label class="lp-form-label">Loan Period</label>
+                        <div style="display:flex;gap:.5rem">
+                            <input type="number" name="loan_period_months" class="lp-form-control" min="1" max="120" required>
+                            <select name="period_unit" class="lp-form-control">
+                                <option value="month">Months</option>
+                                <option value="week">Weeks</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Interest Rate (%)</label>
+                        <label class="lp-form-label">Available To</label>
+                        <select name="client_category" class="lp-form-control">
+                            <?php foreach (LOAN_PRODUCT_CATEGORIES as $value => $label): ?>
+                                <option value="<?= lp_e($value) ?>"><?= lp_e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="lp-form-label">Interest Rate (% per month)</label>
                         <input type="number" name="interest_rate" class="lp-form-control" step="0.01" min="0" required>
                     </div>
 
@@ -509,17 +543,17 @@ select.lp-form-control {
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Maximum Amount</label>
+                        <label class="lp-form-label">Maximum Amount (0 = no maximum)</label>
                         <input type="number" name="maximum_amount" class="lp-form-control" step="0.01" min="0" value="0">
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Processing Fee</label>
+                        <label class="lp-form-label">Processing Fee (UGX, taken off the payout)</label>
                         <input type="number" name="processing_fee" class="lp-form-control" step="0.01" min="0" value="0">
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Penalty Rate (%)</label>
+                        <label class="lp-form-label">Penalty Rate (% of unpaid balance per 30 days late)</label>
                         <input type="number" name="penalty_rate" class="lp-form-control" step="0.01" min="0" value="0">
                     </div>
 
@@ -571,6 +605,7 @@ select.lp-form-control {
     <div class="lp-modal-box">
         <form method="POST" action="includes/process-loan-product.php">
             <input type="hidden" name="action" value="update">
+            <input type="hidden" name="csrf_token" value="<?= lp_e($lp_csrf) ?>">
             <input type="hidden" name="id" id="edit_id">
 
             <div class="lp-modal-header">
@@ -602,12 +637,27 @@ select.lp-form-control {
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Loan Period Months</label>
-                        <input type="number" name="loan_period_months" id="edit_loan_period_months" class="lp-form-control" min="1" required>
+                        <label class="lp-form-label">Loan Period</label>
+                        <div style="display:flex;gap:.5rem">
+                            <input type="number" name="loan_period_months" id="edit_loan_period_months" class="lp-form-control" min="1" max="120" required>
+                            <select name="period_unit" id="edit_period_unit" class="lp-form-control">
+                                <option value="month">Months</option>
+                                <option value="week">Weeks</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Interest Rate (%)</label>
+                        <label class="lp-form-label">Available To</label>
+                        <select name="client_category" id="edit_client_category" class="lp-form-control">
+                            <?php foreach (LOAN_PRODUCT_CATEGORIES as $value => $label): ?>
+                                <option value="<?= lp_e($value) ?>"><?= lp_e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="lp-form-label">Interest Rate (% per month)</label>
                         <input type="number" name="interest_rate" id="edit_interest_rate" class="lp-form-control" step="0.01" min="0" required>
                     </div>
 
@@ -617,17 +667,17 @@ select.lp-form-control {
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Maximum Amount</label>
+                        <label class="lp-form-label">Maximum Amount (0 = no maximum)</label>
                         <input type="number" name="maximum_amount" id="edit_maximum_amount" class="lp-form-control" step="0.01" min="0">
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Processing Fee</label>
+                        <label class="lp-form-label">Processing Fee (UGX, taken off the payout)</label>
                         <input type="number" name="processing_fee" id="edit_processing_fee" class="lp-form-control" step="0.01" min="0">
                     </div>
 
                     <div>
-                        <label class="lp-form-label">Penalty Rate (%)</label>
+                        <label class="lp-form-label">Penalty Rate (% of unpaid balance per 30 days late)</label>
                         <input type="number" name="penalty_rate" id="edit_penalty_rate" class="lp-form-control" step="0.01" min="0">
                     </div>
 
@@ -711,6 +761,8 @@ function editProductFromButton(button) {
         setField('edit_product_name', row.product_name);
         setField('edit_description', row.description || '');
         setField('edit_loan_period_months', row.loan_period_months);
+        setField('edit_period_unit', row.period_unit || 'month');
+        setField('edit_client_category', row.client_category || 'all');
         setField('edit_interest_rate', row.interest_rate);
         setField('edit_minimum_amount', row.minimum_amount);
         setField('edit_maximum_amount', row.maximum_amount);

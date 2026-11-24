@@ -55,6 +55,7 @@ require_once __DIR__ . '/includes/loan_workflow.php';
 require_once __DIR__ . '/includes/auth_lookup.php';
 require_once __DIR__ . '/includes/loan_assessment.php';
 require_once __DIR__ . '/includes/loan_offers.php';
+require_once __DIR__ . '/includes/loan_products.php';
 require_once __DIR__ . '/includes/payment_slips.php';
 
 header("Content-Type: application/json; charset=utf-8");
@@ -705,10 +706,16 @@ function getClient(mysqli $conn, array $user): void
             GREATEST(COALESCE(c.loan_limit, 0) - COALESCE(l.loan_balance, 0), 0) AS available_balance,
 
             CASE
+                WHEN COALESCE(l.installment_amount, 0) > 0 THEN l.installment_amount
                 WHEN COALESCE(l.loan_period, 0) > 0
                 THEN ROUND((COALESCE(l.amount, 0) + COALESCE(l.interest, 0) + COALESCE(l.sur_charge, 0)) / l.loan_period, 0)
                 ELSE 0
             END AS monthly_installment,
+            l.loan_product_id,
+            l.loan_product_name,
+            l.repayment_frequency,
+            l.installment_count,
+            COALESCE(l.penalty_rate, 0) AS penalty_rate,
 
             COALESCE(l.loan_period, 0) AS loan_period,
             l.datetime AS loan_start_date,
@@ -785,7 +792,13 @@ function getClient(mysqli $conn, array $user): void
     $row["offer"] = null;
     if (strtoupper((string)($row["loan_status"] ?? "")) === "OFFERED" && !empty($row["loan_id"])) {
         $principal = (float)$row["offer_amount"] ?: (float)$row["loan_amount"];
-        $quote = loan_quote($conn, $principal, (int)$row["loan_period"], (string)$row["loan_period_unit"]);
+        $offerLoanId = (int)$row["loan_id"];
+        $stmt = $conn->prepare("SELECT * FROM loan WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $offerLoanId);
+        $stmt->execute();
+        $offerLoan = $stmt->get_result()->fetch_assoc() ?: [];
+        $stmt->close();
+        $quote = loan_quote_for_loan($conn, $offerLoan + ["loan_period" => $row["loan_period"], "loan_period_unit" => $row["loan_period_unit"]], $principal);
         if ($row["processing_fee"] !== null) {
             $quote["processing_fee"] = (float)$row["processing_fee"];
             $quote["net_disbursement"] = max(0.0, $principal - (float)$row["processing_fee"]);
@@ -852,10 +865,16 @@ function getLoans(mysqli $conn, array $user): void
                 ELSE COALESCE(status, 'CLEARED')
             END AS loan_status,
             CASE
+                WHEN COALESCE(installment_amount, 0) > 0 THEN installment_amount
                 WHEN COALESCE(loan_period, 0) > 0
                 THEN ROUND((COALESCE(amount, 0) + COALESCE(interest, 0) + COALESCE(sur_charge, 0)) / loan_period, 0)
                 ELSE 0
-            END AS monthly_installment
+            END AS monthly_installment,
+            loan_product_id,
+            loan_product_name,
+            repayment_frequency,
+            installment_count,
+            COALESCE(penalty_rate, 0) AS penalty_rate
         FROM loan
         WHERE client_id = ?
         ORDER BY COALESCE(due_date, datetime) DESC, id DESC
@@ -1060,19 +1079,53 @@ function getCreditScore(mysqli $conn, array $user): void
 function getLoanTerms(mysqli $conn, array $user): void
 {
     loan_offers_ensure_schema($conn);
+    $products = loan_products_for_client($conn, apiClientCategory($conn, (int)$user["sub"]));
+
+    // "products" is what the app should show: the client picks one and sends
+    // its id as product_id. "terms" is kept for older app versions; each term
+    // is priced by the active product with the same period when there is one.
+    $productList = [];
+    foreach ($products as $product) {
+        $productList[] = loan_product_public($product);
+    }
     $terms = [];
     foreach (loan_term_options() as $opt) {
-        $terms[] = $opt + ["interest_rate" => loan_interest_rate($opt["count"], $opt["unit"])];
+        $match = null;
+        foreach ($products as $product) {
+            if ($product["period"] === $opt["count"] && $product["period_unit"] === $opt["unit"]) {
+                $match = $product;
+                break;
+            }
+        }
+        $terms[] = $opt + [
+            "interest_rate" => $match ? round($match["interest_rate"] * loan_product_term_months($opt["count"], $opt["unit"]), 2) : loan_interest_rate($opt["count"], $opt["unit"]),
+            "product_id" => $match ? $match["id"] : null,
+        ];
     }
     $fee = loan_processing_fee($conn);
     respond([
         "status" => "success",
         "data" => [
+            "products" => $productList,
             "terms" => $terms,
             "processing_fee" => $fee,
-            "fee_note" => "A processing fee of " . loan_money($fee) . " is taken from the amount sent to you. You repay the full approved amount plus interest.",
+            "fee_note" => "A processing fee is taken from the amount sent to you. You repay the full approved amount plus interest.",
         ],
     ]);
+}
+
+/** customers.client_category for product filtering: business or new_onboarded. */
+function apiClientCategory(mysqli $conn, int $clientId): string
+{
+    if (!loan_table_has_column($conn, "customers", "client_category")) {
+        return "business";
+    }
+    $stmt = $conn->prepare("SELECT client_category FROM customers WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $clientId);
+    $stmt->execute();
+    $category = (string)($stmt->get_result()->fetch_assoc()["client_category"] ?? "business");
+    $stmt->close();
+    return $category === "new_onboarded" ? "new_onboarded" : "business";
 }
 
 /**
@@ -1085,6 +1138,7 @@ function requestLoan(mysqli $conn, array $user, array $input): void
 
     $client_id = (int)$user["sub"];
     $amount = moneyValue($input["amount"] ?? 0);
+    $product_id = (int)clean($input["product_id"] ?? $input["loan_product_id"] ?? 0);
     $loan_period = (int)clean($input["loan_period"] ?? $input["period"] ?? 1);
     $period_unit = loan_term_unit(clean($input["loan_period_unit"] ?? $input["period_unit"] ?? "month"));
     $loan_method = clean($input["loan_method"] ?? "");
@@ -1098,8 +1152,30 @@ function requestLoan(mysqli $conn, array $user, array $input): void
     if ($amount < 10000) {
         respond(["status" => "error", "message" => "The smallest loan is UGX 10,000"], 422);
     }
-    if (!loan_term_is_valid($loan_period, $period_unit)) {
-        respond(["status" => "error", "message" => "Please choose a repayment period between 2 weeks and 6 months"], 422);
+    // The product sets the period, interest, fee and penalty. Older app versions
+    // send only a period: use the active product with that period when there is one.
+    $category = apiClientCategory($conn, $client_id);
+    if ($product_id > 0) {
+        $product = loan_product_for_request($conn, $product_id, $category);
+        if (!$product) {
+            respond(["status" => "error", "message" => "That loan product is not available. Please choose another."], 422);
+        }
+    } else {
+        $product = loan_product_matching_term($conn, $category, $loan_period, $period_unit);
+        if (!$product && loan_products_for_client($conn, $category)) {
+            respond(["status" => "error", "message" => "Please update the app and choose a loan product"], 422);
+        }
+        if (!$product && !loan_term_is_valid($loan_period, $period_unit)) {
+            respond(["status" => "error", "message" => "Please choose a repayment period between 2 weeks and 6 months"], 422);
+        }
+    }
+    if ($product) {
+        $productError = loan_product_amount_error($product, $amount);
+        if ($productError !== "") {
+            respond(["status" => "error", "message" => $productError], 422);
+        }
+        $loan_period = $product["period"];
+        $period_unit = $product["period_unit"];
     }
 
     $stmt = $conn->prepare("SELECT loan_limit FROM customers WHERE user_id = ? LIMIT 1");
@@ -1187,6 +1263,17 @@ function requestLoan(mysqli $conn, array $user, array $input): void
     $stmt->execute();
     $loan_id = (int)$stmt->insert_id;
     $stmt->close();
+
+    // Product loans: replace the provisional figures with the product's terms.
+    if ($product) {
+        [$names, $types, $values] = loan_product_existing_columns($conn, loan_product_request_columns($product, $amount));
+        $stmt = $conn->prepare("UPDATE loan SET " . implode(" = ?, ", $names) . " = ? WHERE id = ?");
+        $types .= "i";
+        $values[] = $loan_id;
+        $stmt->bind_param($types, ...$values);
+        $stmt->execute();
+        $stmt->close();
+    }
 
     // Tag the request and assign a loan officer so it shows in Pending Loans.
     $assignedOfficerId = loan_finalize_new_request($conn, $loan_id, "customer");
@@ -1431,6 +1518,10 @@ function getCreditEvidence(mysqli $conn, array $user): void
 
 // Bookkeeping (ledger) actions - soft-loaded from books_api.php.
 require_once __DIR__ . '/books_api.php';
+
+// Product columns must exist before the queries below; late penalties run at most hourly.
+loan_products_ensure_schema($conn);
+loan_penalties_maybe_run($conn);
 
 /**
  * Route request.

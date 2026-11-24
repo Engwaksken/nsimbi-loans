@@ -6,6 +6,7 @@ require 'db.php';
 require_once __DIR__ . '/loan_audit.php';
 require_once __DIR__ . '/../php/mail-function.php';
 require_once __DIR__ . '/../includes/loan_offers.php';
+require_once __DIR__ . '/../includes/loan_products.php';
 require_once __DIR__ . '/../includes/loan_notifications.php';
 
 function finishReview(string $message): never {
@@ -66,6 +67,7 @@ if ($action === 'approve') {
     if (!in_array($offerChoice, ['requested', 'system', 'custom'], true)) finishReview('Choose the amount to offer.');
     if ($offerChoice === 'custom' && $customAmount < 10000) finishReview('Enter the amount to offer (at least UGX 10,000).');
     loan_offers_ensure_schema($conn);
+    loan_products_ensure_schema($conn);
 }
 if ($action === 'reject' && $reason === '') finishReview('A rejection reason is required.');
 if ($action === 'delete' && $deleteReason === '') finishReview('A deletion reason is required.');
@@ -148,6 +150,17 @@ foreach ($ids as $id) {
                 throw new RuntimeException("offer amount {$offer} too small ({$offerChoice})");
             }
 
+            // Offers must stay within the loan product's minimum and maximum.
+            $product = loan_product_get($conn, (int)($loan['loan_product_id'] ?? 0));
+            if ($product) {
+                $limitError = loan_product_amount_error($product, $offer);
+                if ($limitError !== '') {
+                    $conn->rollback(); $skipped++;
+                    if (count($errors) < 5) $errors[] = '#'.$id.' ('.$limitError.')';
+                    continue;
+                }
+            }
+
             // NIN must be checked (Laboremus STREAMLINE Flex) once per client.
             $s = $conn->prepare('SELECT nin, nin_verified_at FROM customers WHERE user_id = ? LIMIT 1');
             $s->bind_param('i', $clientId); $s->execute();
@@ -164,8 +177,12 @@ foreach ($ids as $id) {
 
             $period = max(1, (int)($loan['loan_period'] ?? 1));
             $unit = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month'));
-            $quote = loan_quote($conn, $offer, $period, $unit);
+            $quote = loan_quote_for_loan($conn, $loan, $offer);
             $rate = $quote['interest_rate'];
+            $rateText = rtrim(rtrim(number_format($rate, 2), '0'), '.') . '%'
+                . (($quote['interest_rate_basis'] ?? '') === 'per_month' ? ' per month' : '') . ' interest';
+            $installments = (int)$quote['installments'];
+            $installmentAmount = (float)$quote['installment_amount'];
             $interest = $quote['interest'];
             $total = $quote['total_repayment'];
             $fee = min($quote['processing_fee'], $offer);
@@ -177,14 +194,15 @@ foreach ($ids as $id) {
                 SET status = ?, amount = ?, offer_amount = ?, offer_choice = ?, offered_by = ?, offered_at = NOW(),
                     requested_amount = COALESCE(requested_amount, ?), system_amount = COALESCE(system_amount, ?),
                     principal_balance = ?, interest = ?, interest_balance = ?, interest_rate = ?,
-                    outstanding_balance = ?, loan_balance = ?, processing_fee = ?, due_date = ?, updated_at = NOW()
+                    outstanding_balance = ?, loan_balance = ?, processing_fee = ?, due_date = ?,
+                    installment_count = ?, installment_amount = ?, updated_at = NOW()
                 WHERE id = ? AND UPPER(TRIM(status)) IN ('PENDING','INFO_PROVIDED')
             ");
-            $s->bind_param('sddsidddddddddsi',
+            $s->bind_param('sddsidddddddddsidi',
                 $newStatus, $offer, $offer, $offerChoice, $actorId,
                 $requested, $system,
                 $offer, $interest, $interest, $rate,
-                $total, $total, $fee, $dueDate, $id);
+                $total, $total, $fee, $dueDate, $installments, $installmentAmount, $id);
             $auditAction = 'approved';
             $auditReason = 'Offer ' . loan_money($offer) . ' (' . $offerChoice . '; requested ' . loan_money($requested)
                 . ', system ' . loan_money($system) . ')' . ($ninRef !== '' ? '; NIN ref ' . $ninRef : '');
@@ -192,7 +210,9 @@ foreach ($ids as $id) {
                 'title' => 'Your loan offer is ready - Nsimbi Impact',
                 'body'  => "Dear {$clientName}, we can offer you a loan of " . loan_money($offer)
                     . ' for ' . $quote['term_label'] . '. You will repay ' . loan_money($total)
-                    . ' (including ' . rtrim(rtrim(number_format($rate, 2), '0'), '.') . '% interest).'
+                    . ' (including ' . $rateText . ')'
+                    . ($installments > 1 ? ', in ' . $installments . ' ' . ($quote['repayment_frequency'] ?? 'monthly') . ' installments of about ' . loan_money($installmentAmount) : '') . '.'
+                    . (($quote['penalty_rate'] ?? 0) > 0 ? ' Late payment: ' . rtrim(rtrim(number_format((float)$quote['penalty_rate'], 2), '0'), '.') . '% of the unpaid balance for every 30 days overdue.' : '')
                     . ' A processing fee of ' . loan_money($fee) . ' is taken from the payout, so you will receive '
                     . loan_money($offer - $fee) . '. Open the Nsimbi app to accept or reject this offer.'
                     . ($comments !== '' ? "\n\n" . $comments : ''),
@@ -276,4 +296,7 @@ foreach ($ids as $id) {
         if (count($errors) < 5) $errors[] = '#'.$id;
     }
 }
-finishReview("{$success} loan(s) processed. {$skipped} skipped (not pending or not found). {$failed} failed." . ($errors ? ' Failed IDs: '.implode(', ', $errors).'. Check server logs.' : ''));
+finishReview("{$success} loan(s) processed. {$skipped} skipped. {$failed} failed."
+    . ($errors ? ' Not processed: '.implode(', ', $errors).'.' : '')
+    . ($failed ? ' Check server logs.' : '')
+    . ($skipped > count(array_filter($errors, static fn($e) => str_contains($e, '('))) ? ' Loans that are no longer pending are skipped.' : ''));

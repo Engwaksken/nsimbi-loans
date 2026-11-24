@@ -19,6 +19,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require "db.php";
 require_once __DIR__ . '/../php/mail-function.php';
 require_once __DIR__ . '/../includes/loan_workflow.php';
+require_once __DIR__ . '/../includes/loan_products.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -80,7 +81,7 @@ if (empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
  * Input
  * ------------------------------------------------------------------- */
 $amount       = normalize_money($_POST['amount'] ?? 0);
-$loan_period  = (int)($_POST['loan_period'] ?? 0);
+$product_id   = (int)($_POST['product_id'] ?? 0);
 $loan_method  = clean_text($_POST['loan_method'] ?? '');
 $phone        = clean_text($_POST['phone'] ?? '');
 $bank_name    = clean_text($_POST['bank_name'] ?? '');
@@ -147,9 +148,14 @@ try {
         redirect_with_message("Your customer profile is inactive. Please contact the administrator.");
     }
 
-    $allowed_periods = $is_new_onboarded ? [8, 9, 10, 11, 12] : [1, 2, 3, 6];
-    if (!in_array($loan_period, $allowed_periods, true)) {
-        redirect_with_message("Please select a valid loan period.");
+    // The product sets the period, interest, processing fee and penalty.
+    $product = loan_product_for_request($conn, $product_id, $is_new_onboarded ? 'new_onboarded' : 'business');
+    if (!$product) {
+        redirect_with_message("Please choose a loan product.");
+    }
+    $product_error = loan_product_amount_error($product, $amount);
+    if ($product_error !== '') {
+        redirect_with_message($product_error);
     }
 
     if ($loan_limit > 0 && $amount > $loan_limit) {
@@ -220,16 +226,7 @@ if ($is_new_onboarded) {
 /* ---------------------------------------------------------------------
  * Loan figures
  * ------------------------------------------------------------------- */
-if ($is_new_onboarded) {
-    $interest_rate = 3.0; // per month
-    $interest = round($amount * 0.03 * $loan_period, 2);
-} else {
-    $interest_rate = ($loan_period === 1) ? 10.0 : 6.6;
-    $interest = round($amount * ($interest_rate / 100), 2);
-}
-$loan_balance  = round($amount + $interest, 2);
 $status        = 'PENDING';
-$due_date      = (new DateTime())->modify("+{$loan_period} months")->format('Y-m-d H:i:s');
 $loan_category = $is_new_onboarded ? 'new_onboarded' : 'business';
 
 /* ---------------------------------------------------------------------
@@ -250,13 +247,13 @@ try {
     $upd->close();
 
     // Required columns.
-    $columns = ['amount', 'client_id', 'status', 'interest', 'due_date', 'loan_balance', 'loan_period', 'loan_method'];
-    $types   = 'disdsdis';
-    $values  = [$amount, $client_id, $status, $interest, $due_date, $loan_balance, $loan_period, $loan_method];
+    $columns = ['amount', 'client_id', 'status', 'loan_method'];
+    $types   = 'diss';
+    $values  = [$amount, $client_id, $status, $loan_method];
 
-    // Optional columns, only when present in this database.
-    $optional = [
-        'interest_rate'          => ['d', $interest_rate],
+    // Product terms and figures, plus optional columns, when present in this database.
+    $optional = loan_product_request_columns($product, $amount) + [
+        'requested_amount'       => ['d', $amount],
         'phone'                  => ['s', $phone],
         'bank_name'              => ['s', $bank_name],
         'bank_account'           => ['s', $bank_account],

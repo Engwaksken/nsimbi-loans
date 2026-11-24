@@ -9,9 +9,9 @@ if (!isset($_SESSION['logged_in'])) {
 $client_id = mysqli_real_escape_string($conn, $_SESSION['logged_in']);
 $phead = "Repayment Schedule";
 
-require_once dirname(__DIR__) . '/includes/loan_offers.php';
-loan_offers_ensure_schema($conn);
-$query = "SELECT amount, interest, interest_rate, loan_period, loan_period_unit, datetime, disbursed_at FROM loan WHERE client_id='$client_id' AND status = 'OUTSTANDING' ORDER BY id DESC";
+require_once dirname(__DIR__) . '/includes/loan_products.php';
+loan_products_ensure_schema($conn);
+$query = "SELECT * FROM loan WHERE client_id='$client_id' AND status = 'OUTSTANDING' ORDER BY id DESC";
 $loan_results = mysqli_query($conn, $query);
 ?>
 
@@ -42,6 +42,28 @@ $loan_results = mysqli_query($conn, $query);
                                 if (mysqli_num_rows($loan_results) > 0) {
                                     while ($loan = mysqli_fetch_assoc($loan_results)) {
                                         $amount = (float)$loan['amount'];
+
+                                        // Product loans: installments from the product's terms.
+                                        $terms = loan_product_terms_from_loan($loan);
+                                        if ($terms) {
+                                            $start = new DateTimeImmutable(!empty($loan['disbursed_at']) ? $loan['disbursed_at'] : $loan['datetime']);
+                                            $plan = loan_product_schedule($terms, $amount, $start);
+                                            $n = count($plan);
+                                            foreach ($plan as $k => $row) {
+                                                echo "<tr>";
+                                                if ($k === 0) {
+                                                    echo "<td rowspan='{$n}'>" . number_format($amount) . "</td>";
+                                                    echo "<td rowspan='{$n}'>" . number_format((float)$loan['interest'], 2) . "</td>";
+                                                    echo "<td rowspan='{$n}'>" . htmlspecialchars(loan_term_label((int)$terms['period'], $terms['period_unit'])
+                                                        . ' (' . ($loan['loan_product_name'] ?? 'product') . ')') . "</td>";
+                                                }
+                                                echo "<td>" . number_format($row['payment'], 2) . "</td>";
+                                                echo "<td>" . date('d M Y', strtotime($row['due_date'])) . "</td>";
+                                                echo "</tr>";
+                                            }
+                                            continue;
+                                        }
+
                                         $interest_rate = (float)$loan['interest_rate'];
                                         $loan_period = max(1, (int)$loan['loan_period']);
                                         $is_weekly = loan_term_unit((string)($loan['loan_period_unit'] ?? 'month')) === 'week';

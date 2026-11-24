@@ -1,8 +1,8 @@
 <?php
 require "nav-head.php";
 require "services_check.php";
-require_once dirname(__DIR__) . '/includes/loan_offers.php';
-loan_offers_ensure_schema($conn);
+require_once dirname(__DIR__) . '/includes/loan_products.php';
+loan_products_ensure_schema($conn);
 
 if (!isset($_SESSION['logged_in'])) {
     exit("User not logged in.");
@@ -79,6 +79,30 @@ $monthly_principal = $amount / $loan_period;
 
 // The term starts when the money is sent; older loans fall back to the request date.
 $start_date = new DateTime(!empty($loan['disbursed_at']) ? $loan['disbursed_at'] : $loan['datetime']);
+
+// Installment rows. Product loans follow the product's frequency and interest type.
+$schedule_rows = [];
+$product_terms = loan_product_terms_from_loan($loan);
+if ($product_terms) {
+    $loan_period_capped = false;
+    $schedule_rows = loan_product_schedule($product_terms, $amount, DateTimeImmutable::createFromMutable($start_date));
+    $total_interest = array_sum(array_column($schedule_rows, 'interest'));
+    $total_repayable = $amount + $total_interest;
+    $step_label = ['daily' => 'Day', 'weekly' => 'Week', 'monthly' => 'Month', 'quarterly' => 'Quarter', 'yearly' => 'Year'][$product_terms['repayment_frequency']] ?? 'No.';
+} else {
+    $balance = $amount;
+    for ($i = 1; $i <= $loan_period; $i++) {
+        $balance -= $monthly_principal;
+        $schedule_rows[] = [
+            'number'    => $i,
+            'due_date'  => (clone $start_date)->modify($is_weekly ? "+$i week" : "+$i month")->format('Y-m-d'),
+            'payment'   => $monthly_payment,
+            'principal' => $monthly_principal,
+            'interest'  => $monthly_interest,
+            'balance'   => max($balance, 0),
+        ];
+    }
+}
 $loanTitle = "Repayment Plan for $full_name";
 ?>
 
@@ -114,7 +138,7 @@ $loanTitle = "Repayment Plan for $full_name";
                                 <tr>
                                     <th><?= $step_label ?></th>
                                     <th>Payment Date</th>
-                                    <th><?= $is_weekly ? 'Weekly' : 'Monthly' ?> Payment</th>
+                                    <th>Payment</th>
                                     <th>Principal</th>
                                     <th>Interest</th>
                                     <th>Balance</th>
@@ -122,18 +146,14 @@ $loanTitle = "Repayment Plan for $full_name";
                             </thead>
                             <tbody>
                                 <?php
-                                $balance = $amount;
-                                for ($i = 1; $i <= $loan_period; $i++) {
-                                    $balance -= $monthly_principal;
-                                    $repayment_date = (clone $start_date)->modify($is_weekly ? "+$i week" : "+$i month");
-
+                                foreach ($schedule_rows as $row) {
                                     echo "<tr>
-                                            <td>$i</td>
-                                            <td>" . $repayment_date->format('d M Y') . "</td>
-                                            <td>" . number_format($monthly_payment, 2) . "</td>
-                                            <td>" . number_format($monthly_principal, 2) . "</td>
-                                            <td>" . number_format($monthly_interest, 2) . "</td>
-                                            <td>" . number_format(max($balance, 0), 2) . "</td>
+                                            <td>" . (int)$row['number'] . "</td>
+                                            <td>" . date('d M Y', strtotime($row['due_date'])) . "</td>
+                                            <td>" . number_format($row['payment'], 2) . "</td>
+                                            <td>" . number_format($row['principal'], 2) . "</td>
+                                            <td>" . number_format($row['interest'], 2) . "</td>
+                                            <td>" . number_format($row['balance'], 2) . "</td>
                                           </tr>";
                                 }
                                 ?>

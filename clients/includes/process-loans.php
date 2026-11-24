@@ -7,6 +7,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../php/db.php';
 require_once __DIR__ . '/../../includes/loan_workflow.php';
+require_once __DIR__ . '/../../includes/loan_products.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     json_response(false, 'Database connection error.');
@@ -60,37 +61,18 @@ function table_has_column(mysqli $conn, string $table, string $column): bool
     return (int)($row['total'] ?? 0) > 0;
 }
 
-/** Allowed repayment periods (months) for a client category. */
-function allowed_loan_periods(bool $is_new_onboarded): array
+/** The product the client picked, if they may use it; otherwise a JSON error. */
+function require_loan_product(mysqli $conn, int $product_id, bool $is_new_onboarded, float $amount): array
 {
-    return $is_new_onboarded ? [8, 9, 10, 11, 12] : [1, 2, 3, 6];
-}
-
-/**
- * Interest rate stored on the loan: per month (3%) for new onboarded clients,
- * flat for the whole period otherwise. Matches clients/requested_loan.php.
- */
-function get_interest_rate(int $period, bool $is_new_onboarded = false): float
-{
-    if ($is_new_onboarded) {
-        return 3.0;
+    $product = loan_product_for_request($conn, $product_id, $is_new_onboarded ? 'new_onboarded' : 'business');
+    if (!$product) {
+        json_response(false, 'Please choose a loan product.');
     }
-
-    if ($period === 1) {
-        return 10.0;
+    $error = loan_product_amount_error($product, $amount);
+    if ($error !== '') {
+        json_response(false, $error);
     }
-
-    if (in_array($period, [2, 3, 6], true)) {
-        return 6.6;
-    }
-
-    return 0.0;
-}
-
-function get_interest_amount(float $amount, int $period, bool $is_new_onboarded = false): float
-{
-    $rate = get_interest_rate($period, $is_new_onboarded);
-    return round($amount * ($rate / 100) * ($is_new_onboarded ? $period : 1), 2);
+    return $product;
 }
 
 function get_client(mysqli $conn, int $user_id): array
@@ -134,14 +116,10 @@ function get_client(mysqli $conn, int $user_id): array
     return $client;
 }
 
-function validate_loan_inputs(float $amount, int $loan_period, string $loan_method, string $phone, string $bank_name, string $bank_account, float $loan_limit, bool $is_new_onboarded = false): void
+function validate_loan_inputs(float $amount, string $loan_method, string $phone, string $bank_name, string $bank_account, float $loan_limit): void
 {
     if ($amount <= 0) {
         json_response(false, 'Please enter a valid loan amount.');
-    }
-
-    if (!in_array($loan_period, allowed_loan_periods($is_new_onboarded), true)) {
-        json_response(false, 'Please select a valid loan period.');
     }
 
     if (!in_array($loan_method, ['Mobile Money', 'Bank Transfer'], true)) {
@@ -212,6 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $action = clean_text($_POST['action'] ?? '');
+loan_products_ensure_schema($conn);
 
 if ($action === '') {
     json_response(false, 'Invalid action.');
@@ -253,6 +232,7 @@ if ($action === 'get_loan') {
             interest,
             loan_balance,
             loan_period,
+            loan_product_id,
             loan_method,
             phone,
             bank_name,
@@ -297,7 +277,7 @@ if ($action === 'get_loan') {
 */
 if ($action === 'create_loan') {
     $amount = normalize_money($_POST['amount'] ?? 0);
-    $loan_period = (int)($_POST['loan_period'] ?? 0);
+    $product_id = (int)($_POST['product_id'] ?? 0);
     $loan_method = clean_text($_POST['loan_method'] ?? '');
     $phone = clean_text($_POST['phone'] ?? '');
     $bank_name = clean_text($_POST['bank_name'] ?? '');
@@ -312,16 +292,8 @@ if ($action === 'create_loan') {
         $phone = '';
     }
 
-    validate_loan_inputs(
-        $amount,
-        $loan_period,
-        $loan_method,
-        $phone,
-        $bank_name,
-        $bank_account,
-        $loan_limit,
-        $is_new_onboarded
-    );
+    validate_loan_inputs($amount, $loan_method, $phone, $bank_name, $bank_account, $loan_limit);
+    $product = require_loan_product($conn, $product_id, $is_new_onboarded, $amount);
 
     $check = $conn->prepare("
         SELECT id, status
@@ -348,11 +320,7 @@ if ($action === 'create_loan') {
         json_response(false, 'You already have a pending, outstanding, or overdue loan. Please clear it first.');
     }
 
-    $interest_rate = get_interest_rate($loan_period, $is_new_onboarded);
-    $interest = get_interest_amount($amount, $loan_period, $is_new_onboarded);
-    $loan_balance = round($amount + $interest, 2);
     $status = 'PENDING';
-    $due_date = (new DateTime())->modify("+{$loan_period} months")->format('Y-m-d H:i:s');
 
     $conn->begin_transaction();
 
@@ -366,42 +334,26 @@ if ($action === 'create_loan') {
             $bank_account
         );
 
-        $stmt = $conn->prepare("
-            INSERT INTO loan (
-                amount,
-                interest_rate,
-                client_id,
-                status,
-                interest,
-                due_date,
-                loan_balance,
-                loan_period,
-                loan_method,
-                phone,
-                bank_name,
-                bank_account
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+        [$names, $types, $values] = loan_product_existing_columns($conn, [
+            'amount'           => ['d', $amount],
+            'requested_amount' => ['d', $amount],
+            'client_id'        => ['i', $client_id],
+            'status'           => ['s', $status],
+            'loan_method'      => ['s', $loan_method],
+            'phone'            => ['s', $phone],
+            'bank_name'        => ['s', $bank_name],
+            'bank_account'     => ['s', $bank_account],
+        ] + loan_product_request_columns($product, $amount));
+
+        $stmt = $conn->prepare(
+            'INSERT INTO loan (' . implode(', ', $names) . ') VALUES (' . implode(', ', array_fill(0, count($names), '?')) . ')'
+        );
 
         if (!$stmt) {
             throw new Exception('Failed to prepare loan request.');
         }
 
-        $stmt->bind_param(
-            'ddisdsdissss',
-            $amount,
-            $interest_rate,
-            $client_id,
-            $status,
-            $interest,
-            $due_date,
-            $loan_balance,
-            $loan_period,
-            $loan_method,
-            $phone,
-            $bank_name,
-            $bank_account
-        );
+        $stmt->bind_param($types, ...$values);
 
         if (!$stmt->execute()) {
             throw new Exception($stmt->error);
@@ -457,7 +409,7 @@ if ($action === 'create_loan') {
 if ($action === 'update_pending_loan') {
     $loan_id = (int)($_POST['loan_id'] ?? 0);
     $amount = normalize_money($_POST['amount'] ?? 0);
-    $loan_period = (int)($_POST['loan_period'] ?? 0);
+    $product_id = (int)($_POST['product_id'] ?? 0);
     $loan_method = clean_text($_POST['loan_method'] ?? '');
     $phone = clean_text($_POST['phone'] ?? '');
     $bank_name = clean_text($_POST['bank_name'] ?? '');
@@ -476,16 +428,8 @@ if ($action === 'update_pending_loan') {
         $phone = '';
     }
 
-    validate_loan_inputs(
-        $amount,
-        $loan_period,
-        $loan_method,
-        $phone,
-        $bank_name,
-        $bank_account,
-        $loan_limit,
-        $is_new_onboarded
-    );
+    validate_loan_inputs($amount, $loan_method, $phone, $bank_name, $bank_account, $loan_limit);
+    $product = require_loan_product($conn, $product_id, $is_new_onboarded, $amount);
 
     $check = $conn->prepare("
         SELECT id, status
@@ -515,10 +459,6 @@ if ($action === 'update_pending_loan') {
         json_response(false, 'Only pending loans can be edited.');
     }
 
-    $interest_rate = get_interest_rate($loan_period, $is_new_onboarded);
-    $interest = get_interest_amount($amount, $loan_period, $is_new_onboarded);
-    $loan_balance = round($amount + $interest, 2);
-    $due_date = (new DateTime())->modify("+{$loan_period} months")->format('Y-m-d H:i:s');
 
     $conn->begin_transaction();
 
@@ -532,43 +472,28 @@ if ($action === 'update_pending_loan') {
             $bank_account
         );
 
-        $stmt = $conn->prepare("
-            UPDATE loan
-            SET
-                amount = ?,
-                interest_rate = ?,
-                interest = ?,
-                loan_balance = ?,
-                loan_period = ?,
-                loan_method = ?,
-                phone = ?,
-                bank_name = ?,
-                bank_account = ?,
-                due_date = ?
-            WHERE id = ?
-              AND client_id = ?
-              AND UPPER(status) = 'PENDING'
-        ");
+        [$names, $types, $values] = loan_product_existing_columns($conn, [
+            'amount'           => ['d', $amount],
+            'requested_amount' => ['d', $amount],
+            'loan_method'      => ['s', $loan_method],
+            'phone'            => ['s', $phone],
+            'bank_name'        => ['s', $bank_name],
+            'bank_account'     => ['s', $bank_account],
+        ] + loan_product_request_columns($product, $amount));
+
+        $stmt = $conn->prepare(
+            'UPDATE loan SET ' . implode(' = ?, ', $names) . " = ?
+            WHERE id = ? AND client_id = ? AND UPPER(status) = 'PENDING'"
+        );
 
         if (!$stmt) {
             throw new Exception('Failed to prepare loan update.');
         }
 
-        $stmt->bind_param(
-            'ddddisssssii',
-            $amount,
-            $interest_rate,
-            $interest,
-            $loan_balance,
-            $loan_period,
-            $loan_method,
-            $phone,
-            $bank_name,
-            $bank_account,
-            $due_date,
-            $loan_id,
-            $client_id
-        );
+        $types .= 'ii';
+        $values[] = $loan_id;
+        $values[] = $client_id;
+        $stmt->bind_param($types, ...$values);
 
         if (!$stmt->execute()) {
             throw new Exception($stmt->error);
