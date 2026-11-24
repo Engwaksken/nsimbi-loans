@@ -61,7 +61,7 @@ unset($_SESSION['old_login']);
                     <span class="brand-stat-lbl">Active Loans</span>
                 </div>
                 <div class="brand-stat">
-                    <span class="brand-stat-val">90.4%</span>
+                    <span class="brand-stat-val">99.4%</span>
                     <span class="brand-stat-lbl">Repayment Rate</span>
                 </div>
                 <div class="brand-stat">
