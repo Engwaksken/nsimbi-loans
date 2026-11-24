@@ -6,6 +6,7 @@ require 'db.php';
 require_once __DIR__ . '/loan_audit.php';
 require_once __DIR__ . '/../php/mail-function.php';
 require_once __DIR__ . '/../includes/loan_offers.php';
+require_once __DIR__ . '/../includes/loan_notifications.php';
 
 function finishReview(string $message): never {
     $_SESSION['loan_action_feedback'] = $message;
@@ -128,6 +129,7 @@ foreach ($ids as $id) {
         $notification = null;
         $officerNotification = null;
         $offerEvent = null;
+        $staffAmount = (float)($loan['amount'] ?? 0);
         if ($action === 'approve' && $clientType === 'customer') {
             // Mobile/web customers: send an offer the client accepts or rejects.
             $requested = (float)($loan['requested_amount'] ?? 0) ?: (float)($loan['amount'] ?? 0);
@@ -169,6 +171,7 @@ foreach ($ids as $id) {
             $fee = min($quote['processing_fee'], $offer);
             $dueDate = loan_term_due_date($period, $unit);
             $newStatus = 'OFFERED';
+            $staffAmount = $offer;
             $s = $conn->prepare("
                 UPDATE loan
                 SET status = ?, amount = ?, offer_amount = ?, offer_choice = ?, offered_by = ?, offered_at = NOW(),
@@ -220,9 +223,6 @@ foreach ($ids as $id) {
             $s->bind_param('sisi', $newStatus, $officerId, $infoDetails, $id);
             $auditAction = 'info_requested'; $auditReason = null;
             $officerNotification = [$officerId, 'loan_info_requested', "Please gather information for loan #{$id} ({$clientName}): {$infoDetails}"];
-            $officerName = trim((string)$officer['fname'].' '.(string)$officer['lname']);
-            $notification = ['Action Needed: Loan #'.$id.' Requires More Information',
-                '<h3>Dear '.htmlValue($officerName).',</h3><p>Loan #'.$id.' ('.htmlValue($clientName).') needs additional information.</p><p>'.nl2br(htmlValue($infoDetails)).'</p>'];
         } else {
             // Soft delete, preserving the loan and audit trail for accountability.
             // The loan.status column must accept the value DELETED (VARCHAR or suitable ENUM).
@@ -248,8 +248,17 @@ foreach ($ids as $id) {
             loan_notify_client($conn, $clientId, $id, 'loan_offer', $offerEvent['title'], $offerEvent['body']);
         }
         if ($notification) {
-            $destination = $action === 'request_info' ? (string)($officer['email'] ?? '') : $clientEmail;
-            safeMail($destination, $notification[0], $notification[1]);
+            safeMail($clientEmail, $notification[0], $notification[1]);
+        }
+        // Staff emails: officer (+ accountants on approval). Sent after the response.
+        if ($action !== 'delete') {
+            loan_notify_decision($conn, $id, $action, [
+                'comments'     => $comments,
+                'reason'       => $reason,
+                'info_details' => $infoDetails,
+                'offer_amount' => $staffAmount,
+                'new_status'   => $newStatus,
+            ]);
         }
     } catch (Throwable $e) {
         try { $conn->rollback(); } catch (Throwable $ignored) {}

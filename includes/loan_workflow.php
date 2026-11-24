@@ -256,5 +256,11 @@ function loan_finalize_new_request(mysqli $conn, int $loanId, string $clientType
         }
     }
 
-    return loan_assign_officer($conn, $loanId);
+    $officerId = loan_assign_officer($conn, $loanId);
+
+    // Email administrators once the response is sent (skipped if the insert is rolled back).
+    require_once __DIR__ . '/loan_notifications.php';
+    loan_notify_new_request($conn, $loanId);
+
+    return $officerId;
 }

@@ -310,12 +310,5 @@ try {
     redirect_with_message("Loan request failed. Please try again or contact support.");
 }
 
-if (function_exists('sendAdminLoanRequest')) {
-    try {
-        sendAdminLoanRequest($sender_name, $user_email, $conn);
-    } catch (Throwable $e) {
-        error_log('Admin loan request email failed: ' . $e->getMessage());
-    }
-}
-
+// Administrators are emailed by loan_finalize_new_request().
 redirect_with_message("Loan successfully requested. It is now pending approval.", 'success', 'pending_loans.php');

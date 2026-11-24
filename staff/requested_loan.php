@@ -79,8 +79,7 @@ if ($stmt->execute()) {
         $msg_stmt->close();
     }
 
-    // Send notification email
-    sendAdminLoanRequest($userName, $userEmail, $conn);
+    // Administrators are emailed by loan_finalize_new_request().
 
     redirect_with_message("LOAN SUCCESSFULLY REQUESTED", 'success', 'pending_loans.php');
 } else {
