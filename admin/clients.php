@@ -563,25 +563,4 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
     </div>
 </div>
 
-<style>
-.clients-filter-form{
-    display:flex;
-    align-items:center;
-    gap:.5rem;
-    flex-wrap:nowrap;
-    width:100%;
-    overflow-x:auto;
-}
-.clients-filter-form .clients-filter-search{ flex:1 1 260px; min-width:220px; }
-.clients-filter-form .form-select{ width:auto; flex:0 0 auto; max-width:200px; }
-.clients-filter-form .btn{ flex:0 0 auto; white-space:nowrap; }
-.clients-custom-dates{ display:inline-flex; gap:.5rem; flex:0 0 auto; }
-.clients-custom-dates[hidden]{ display:none; }
-.clients-custom-dates .form-control{ width:150px; }
-@media (max-width: 991px){
-    .clients-filter-form{ flex-wrap:wrap; }
-    .clients-filter-form .clients-filter-search{ flex-basis:100%; }
-}
-</style>
-
 <?php require "footer.php"; ?>

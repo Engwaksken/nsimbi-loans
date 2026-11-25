@@ -10,8 +10,67 @@ $limit  = 10;
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
+$employer = trim($_GET['employer'] ?? '');
+$employment = trim($_GET['employment'] ?? '');
+$status = in_array($_GET['status'] ?? '', ['active', 'blocked'], true) ? $_GET['status'] : '';
+$loans = in_array($_GET['loans'] ?? '', ['with', 'outstanding', 'without'], true) ? $_GET['loans'] : '';
 
-$where = "WHERE 1 = 1" . officer_client_sql('members');
+// ---- Period (by the date the staff member registered) ----
+$periods = [
+    'all'        => 'All time',
+    'today'      => 'Today',
+    'this_week'  => 'This week',
+    'this_month' => 'This month',
+    'last_month' => 'Last month',
+    'last_90'    => 'Last 90 days',
+    'this_year'  => 'This year',
+    'custom'     => 'Custom dates',
+];
+$period = (string)($_GET['period'] ?? 'all');
+if (!isset($periods[$period])) {
+    $period = 'all';
+}
+$validDate = static fn($d) => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false ? $d : null;
+[$from, $to] = match ($period) {
+    'today'      => [date('Y-m-d'), date('Y-m-d')],
+    'this_week'  => [date('Y-m-d', strtotime('monday this week')), date('Y-m-d')],
+    'this_month' => [date('Y-m-01'), date('Y-m-d')],
+    'last_month' => [date('Y-m-01', strtotime('first day of last month')), date('Y-m-t', strtotime('last day of last month'))],
+    'last_90'    => [date('Y-m-d', strtotime('-89 days')), date('Y-m-d')],
+    'this_year'  => [date('Y-01-01'), date('Y-m-d')],
+    'custom'     => [$validDate($_GET['from'] ?? null), $validDate($_GET['to'] ?? null)],
+    default      => [null, null],
+};
+if ($from !== null && $to !== null && $from > $to) {
+    [$from, $to] = [$to, $from];
+}
+
+$scope = officer_client_sql('members');
+
+// ---- Dropdown options (only the officer's own staff borrowers for loan officers) ----
+$distinctOptions = static function (mysqli $conn, string $column, string $scope): array {
+    $options = [];
+    $res = $conn->query("
+        SELECT MIN(TRIM(members.{$column})) AS name
+        FROM members
+        WHERE TRIM(COALESCE(members.{$column}, '')) <> ''" . $scope . "
+        GROUP BY LOWER(TRIM(members.{$column}))
+        ORDER BY name
+    ");
+    while ($res && $row = $res->fetch_assoc()) {
+        $options[] = $row['name'];
+    }
+    return $options;
+};
+$employerOptions = $distinctOptions($conn, 'employer', $scope);
+$employmentOptions = $distinctOptions($conn, 'employment_status', $scope);
+
+// Loans that count: anything past the application stage.
+$loanLive = "UPPER(COALESCE(loan.status, '')) NOT IN ('', 'PENDING', 'REJECTED', 'CANCELLED', 'DELETED')";
+$loanOpen = "UPPER(COALESCE(loan.status, '')) NOT IN ('', 'PENDING', 'REJECTED', 'CANCELLED', 'DELETED', 'CLEARED')";
+
+// ---- Filters (shared by the list, the count and the stat cards) ----
+$where = "WHERE 1 = 1" . $scope;
 $params = [];
 $types = "";
 
@@ -20,6 +79,7 @@ if ($search !== "") {
         AND (
             user.fname LIKE ? OR
             user.lname LIKE ? OR
+            CONCAT(user.fname, ' ', user.lname) LIKE ? OR
             user.email LIKE ? OR
             members.phone LIKE ? OR
             members.home_address LIKE ? OR
@@ -28,31 +88,85 @@ if ($search !== "") {
             members.bank_name LIKE ? OR
             members.bank_account LIKE ?)
     ";
-
     $like = "%{$search}%";
-    $params = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
-    $types = "sssssssss";
+    array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like, $like);
+    $types .= "ssssssssss";
 }
 
-$countSql = "
+if ($employer !== "") {
+    $where .= " AND LOWER(TRIM(members.employer)) = LOWER(?)";
+    $params[] = $employer;
+    $types .= "s";
+}
+
+if ($employment !== "") {
+    $where .= " AND LOWER(TRIM(members.employment_status)) = LOWER(?)";
+    $params[] = $employment;
+    $types .= "s";
+}
+
+if ($status === 'active') {
+    $where .= " AND user.status = 1";
+} elseif ($status === 'blocked') {
+    $where .= " AND COALESCE(user.status, 0) <> 1";
+}
+
+if ($loans === 'with') {
+    $where .= " AND EXISTS (SELECT 1 FROM loan WHERE loan.client_id = members.user_id AND $loanLive)";
+} elseif ($loans === 'outstanding') {
+    $where .= " AND EXISTS (SELECT 1 FROM loan WHERE loan.client_id = members.user_id AND $loanOpen AND loan.loan_balance > 0)";
+} elseif ($loans === 'without') {
+    $where .= " AND NOT EXISTS (SELECT 1 FROM loan WHERE loan.client_id = members.user_id AND $loanLive)";
+}
+
+if ($from !== null) {
+    $where .= " AND members.created_at >= ?";
+    $params[] = $from . ' 00:00:00';
+    $types .= "s";
+}
+
+if ($to !== null) {
+    $where .= " AND members.created_at <= ?";
+    $params[] = $to . ' 23:59:59';
+    $types .= "s";
+}
+
+$filtered = $search !== '' || $employer !== '' || $employment !== '' || $status !== '' || $loans !== '' || $period !== 'all';
+
+// Query string that keeps the filters across pages.
+$filterQuery = http_build_query(array_filter([
+    'q'          => $search,
+    'period'     => $period !== 'all' ? $period : '',
+    'from'       => $period === 'custom' ? ($from ?? '') : '',
+    'to'         => $period === 'custom' ? ($to ?? '') : '',
+    'employer'   => $employer,
+    'employment' => $employment,
+    'status'     => $status,
+    'loans'      => $loans,
+], static fn($v) => $v !== ''));
+$query = $filterQuery !== '' ? '&' . $filterQuery : '';
+
+$runStmt = static function (mysqli $conn, string $sql, string $types, array $params) {
+    $stmt = $conn->prepare($sql);
+    if ($types !== '') {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $stmt->close();
+    return $result;
+};
+
+$totalRows = (int)$runStmt($conn, "
     SELECT COUNT(*) AS total
     FROM members
     INNER JOIN user ON members.user_id = user.id
     $where
-";
-
-$countStmt = $conn->prepare($countSql);
-
-if (!empty($params)) {
-    $countStmt->bind_param($types, ...$params);
-}
-
-$countStmt->execute();
-$totalRows = (int)$countStmt->get_result()->fetch_assoc()['total'];
+", $types, $params)->fetch_assoc()['total'];
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
-$sql = "
-    SELECT 
+$staff = $runStmt($conn, "
+    SELECT
         user.id AS user_table_id,
         user.fname,
         user.lname,
@@ -65,26 +179,36 @@ $sql = "
     $where
     ORDER BY members.id DESC
     LIMIT ? OFFSET ?
-";
+", $types . "ii", array_merge($params, [$limit, $offset]))->fetch_all(MYSQLI_ASSOC);
 
-$stmt = $conn->prepare($sql);
+$stats = $runStmt($conn, "
+    SELECT
+        COUNT(*) AS total_staff,
+        SUM(CASE WHEN user.status = 1 THEN 1 ELSE 0 END) AS active_staff,
+        SUM(CASE WHEN l.live_loans > 0 THEN 1 ELSE 0 END) AS staff_with_loans,
+        COALESCE(SUM(l.balance), 0) AS total_outstanding
+    FROM members
+    INNER JOIN user ON members.user_id = user.id
+    LEFT JOIN (
+        SELECT loan.client_id,
+               SUM(CASE WHEN $loanLive THEN 1 ELSE 0 END) AS live_loans,
+               COALESCE(SUM(CASE WHEN $loanOpen THEN loan.loan_balance ELSE 0 END), 0) AS balance
+        FROM loan
+        GROUP BY loan.client_id
+    ) l ON l.client_id = members.user_id
+    $where
+", $types, $params)->fetch_assoc();
 
-if (!empty($params)) {
-    $bindTypes = $types . "ii";
-    $bindValues = array_merge($params, [$limit, $offset]);
-    $stmt->bind_param($bindTypes, ...$bindValues);
-} else {
-    $stmt->bind_param("ii", $limit, $offset);
-}
-
-$stmt->execute();
-$staff = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$totalStaff       = (int)($stats['total_staff'] ?? 0);
+$activeStaff      = (int)($stats['active_staff'] ?? 0);
+$staffWithLoans   = (int)($stats['staff_with_loans'] ?? 0);
+$totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 ?>
 
 <div class="page-header">
     <div>
         <div class="title"><?= e($phead) ?></div>
-        <div class="sub"><?= number_format($totalRows) ?> registered staff members</div>
+        <div class="sub"><?= number_format($totalRows) ?> <?= $filtered ? 'matching' : 'registered' ?> staff members</div>
     </div>
 
     <div class="d-flex gap-2 flex-wrap">
@@ -94,32 +218,88 @@ $staff = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
+<div class="stats-grid clients-stats-grid">
+    <div class="stat-card c-blue">
+        <div class="stat-head"><div class="stat-ico c-blue"><i class="fas fa-id-badge"></i></div></div>
+        <div class="stat-value sm"><?= number_format($totalStaff) ?></div>
+        <div class="stat-label"><?= $filtered ? 'Matching Staff' : 'Total Staff' ?></div>
+    </div>
+    <div class="stat-card c-green">
+        <div class="stat-head"><div class="stat-ico c-green"><i class="fas fa-user-check"></i></div></div>
+        <div class="stat-value sm"><?= number_format($activeStaff) ?></div>
+        <div class="stat-label">Active<?= $totalStaff > $activeStaff ? ' (' . number_format($totalStaff - $activeStaff) . ' blocked)' : '' ?></div>
+    </div>
+    <div class="stat-card c-indigo">
+        <div class="stat-head"><div class="stat-ico c-indigo"><i class="fas fa-file-invoice-dollar"></i></div></div>
+        <div class="stat-value sm"><?= number_format($staffWithLoans) ?></div>
+        <div class="stat-label">Have Loans</div>
+    </div>
+    <div class="stat-card c-orange">
+        <div class="stat-head"><div class="stat-ico c-orange"><i class="fas fa-balance-scale"></i></div></div>
+        <div class="stat-value">UGX <?= number_format($totalOutstanding) ?></div>
+        <div class="stat-label">Total Outstanding</div>
+    </div>
+</div>
+
 <div class="card clients-card">
     <div class="card-header clients-toolbar">
-        <form method="GET" class="clients-search-form">
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="fas fa-search"></i>
-                </span>
-
+        <form method="GET" class="clients-filter-form">
+            <div class="input-group clients-filter-search">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
                 <input
                     type="text"
                     name="q"
                     class="form-control"
                     value="<?= e($search) ?>"
                     placeholder="Search staff name, phone, email, employer, bank..."
+                    aria-label="Search"
                 >
-
-                <button class="btn btn-primary" type="submit">
-                    Search
-                </button>
-
-                <?php if ($search !== ""): ?>
-                    <a href="<?= e(basename($_SERVER['PHP_SELF'])) ?>" class="btn btn-light">
-                        Reset
-                    </a>
-                <?php endif; ?>
             </div>
+
+            <select name="period" class="form-select" aria-label="Registration period"
+                    onchange="this.form.querySelector('.clients-custom-dates').hidden = this.value !== 'custom'; if (this.value !== 'custom') this.form.submit();">
+                <?php foreach ($periods as $key => $label): ?>
+                    <option value="<?= e($key) ?>"<?= $period === $key ? ' selected' : '' ?>><?= e($key === 'all' ? 'Period: All time' : $label) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <span class="clients-custom-dates"<?= $period === 'custom' ? '' : ' hidden' ?>>
+                <input type="date" name="from" class="form-control" value="<?= e($from ?? '') ?>" aria-label="From">
+                <input type="date" name="to" class="form-control" value="<?= e($to ?? '') ?>" aria-label="To">
+            </span>
+
+            <select name="employer" class="form-select" aria-label="Employer" onchange="this.form.submit()">
+                <option value="">All employers</option>
+                <?php foreach ($employerOptions as $opt): ?>
+                    <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $employer) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <select name="employment" class="form-select" aria-label="Employment" onchange="this.form.submit()">
+                <option value="">All employment</option>
+                <?php foreach ($employmentOptions as $opt): ?>
+                    <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $employment) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <select name="status" class="form-select" aria-label="Status" onchange="this.form.submit()">
+                <option value="">All statuses</option>
+                <option value="active"<?= $status === 'active' ? ' selected' : '' ?>>Active</option>
+                <option value="blocked"<?= $status === 'blocked' ? ' selected' : '' ?>>Blocked</option>
+            </select>
+
+            <select name="loans" class="form-select" aria-label="Loans" onchange="this.form.submit()">
+                <option value="">All loans</option>
+                <option value="with"<?= $loans === 'with' ? ' selected' : '' ?>>Have loans</option>
+                <option value="outstanding"<?= $loans === 'outstanding' ? ' selected' : '' ?>>Balance outstanding</option>
+                <option value="without"<?= $loans === 'without' ? ' selected' : '' ?>>No loans</option>
+            </select>
+
+            <button class="btn btn-primary" type="submit"><i class="fas fa-filter"></i> Filter</button>
+
+            <?php if ($filtered): ?>
+                <a href="<?= e(basename($_SERVER['PHP_SELF'])) ?>" class="btn btn-light">Reset</a>
+            <?php endif; ?>
         </form>
     </div>
 
@@ -252,8 +432,6 @@ $staff = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         <?php if ($totalPages > 1): ?>
             <nav>
                 <ul class="pagination mb-0">
-                    <?php $query = $search !== "" ? '&q=' . urlencode($search) : ''; ?>
-
                     <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
                         <a class="page-link" href="?page=<?= max(1, $page - 1) . $query ?>">Previous</a>
                     </li>
