@@ -58,6 +58,7 @@ $sql = "
         user.lname,
         user.email,
         user.status,
+        user.image_url AS profile_photo,
         members.*
     FROM members
     INNER JOIN user ON members.user_id = user.id
@@ -155,9 +156,7 @@ $staff = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
                                 <td>
                                     <div class="cell-user">
-                                        <div class="cell-av">
-                                            <?= e($initials ?: 'ST') ?>
-                                        </div>
+                                        <?= profile_avatar($row['profile_photo'] ?? '', $initials ?: 'ST', 'cell-av') ?>
 
                                         <div>
                                             <div class="cell-name"><?= e($fullName ?: 'Unnamed Staff') ?></div>

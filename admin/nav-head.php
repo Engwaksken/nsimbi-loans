@@ -16,6 +16,8 @@ $lname    = $_SESSION['lname'] ?? '';
 $uname    = htmlspecialchars(trim("$fname $lname"));
 $initials = strtoupper(substr($fname,0,1).substr($lname,0,1));
 $admin_id = $_SESSION['user_id'] ?? 0;
+require_once dirname(__DIR__) . '/includes/profile_photo.php';
+$profile_photo = profile_photo_path($conn, (int)($admin_id ?: $user_id));
 
 $notifications = []; $unread_count = 0; $new_messages = 0; $count_pending = 0;
 if ($admin_id) {
@@ -60,6 +62,7 @@ function asset_url(string $relative): string {
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="<?= htmlspecialchars(asset_url('assets/css/loanpro.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars(asset_url('assets/css/profile-photo.css'), ENT_QUOTES, 'UTF-8') ?>">
   <link rel="stylesheet" href="../datatables2/datatables.min.css">
   <?= site_panel_style_tags() ?>
 </head>
@@ -74,7 +77,7 @@ function asset_url(string $relative): string {
   </div>
 
   <div class="sidebar-user">
-    <div class="s-avatar"><?= $initials ?></div>
+    <?= profile_avatar($profile_photo, $initials, 's-avatar') ?>
     <div>
       <div class="s-name"><?= $uname ?></div>
       <div class="s-role"><?= $role == 1 ? 'Administrator' : 'Manager' ?></div>

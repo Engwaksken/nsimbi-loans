@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require 'db.php';
 require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/profile_photo.php';
 
 if (!isset($conn)) {
     if (isset($connection)) {
@@ -146,6 +147,16 @@ function processSignature($base64Data, $uploadDir, $required = false) {
     return $filePath;
 }
 
+// The selfie is required and must be a real photo; it becomes the profile picture.
+$selfie = $_FILES['profile_img'] ?? null;
+if (!$selfie || ($selfie['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+    || (int)$selfie['size'] > PROFILE_PHOTO_MAX_BYTES
+    || profile_photo_image_ext((string)$selfie['tmp_name']) === '') {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Please take a selfie (a JPG or PNG photo, up to 8 MB).']);
+    exit;
+}
+
 $id_front = uploadFile('id_front', $uploadDir, $allowedDocTypes, false);
 $id_back = uploadFile('id_back', $uploadDir, $allowedDocTypes, false);
 $signatureData = $_POST['applicant_signature'] ?? '';
@@ -182,6 +193,11 @@ try {
 
     if (!$stmt->execute()) {
         throw new Exception('Failed to insert member: ' . $stmt->error);
+    }
+
+    $photoError = profile_photo_save($conn, (int)$user_id, $selfie);
+    if ($photoError !== '') {
+        throw new Exception($photoError);
     }
 
    $conn->commit();

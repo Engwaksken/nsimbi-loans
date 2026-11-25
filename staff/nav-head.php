@@ -66,6 +66,7 @@ $page_active = "active";
   <link href="assets/css/nucleo-svg.css" rel="stylesheet" />
   <!-- CSS Files -->
   <link id="pagestyle" href="assets/css/loanpro.css" rel="stylesheet" /> 
+  <link href="../assets/css/profile-photo.css?v=<?= (int)@filemtime(dirname(__DIR__) . '/assets/css/profile-photo.css') ?>" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <?= site_panel_style_tags() ?>
 

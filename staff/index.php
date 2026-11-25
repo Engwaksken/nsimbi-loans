@@ -9,6 +9,7 @@
   <link href="assets/css/nucleo-icons.css" rel="stylesheet" />
   <link href="assets/css/nucleo-svg.css" rel="stylesheet" />
   <link href="assets/css/loanpro.css" rel="stylesheet" />
+  <link href="../assets/css/profile-photo.css?v=<?= (int)@filemtime(dirname(__DIR__) . '/assets/css/profile-photo.css') ?>" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
@@ -636,6 +637,17 @@
                           <label>Upload National ID Back (Image/PDF)</label>
                           <input type="file" class="form-control" name="id_back" accept="image/*,.pdf" required>
                         </div>
+                        <div class="col-md-6 mb-3">
+                          <label>Your photo (selfie)</label>
+                          <div class="selfie-box" data-selfie>
+                            <div class="selfie-preview"><img alt="Your selfie" hidden><i class="fas fa-user"></i></div>
+                            <div class="selfie-body">
+                              <button type="button" class="btn btn-sm btn-primary mb-0" data-selfie-start><i class="fas fa-camera"></i> Take a selfie</button>
+                              <div class="selfie-help" data-selfie-help>Use your phone or computer camera. Face the camera in good light, with no sunglasses or hat.</div>
+                            </div>
+                            <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your selfie">
+                          </div>
+                        </div>
                       </div>
                       <div class="row">
                         <div class="col-md-6 mb-3">
@@ -1038,5 +1050,6 @@
   window.onConsentChange    = onConsentChange;
   </script>
 
+<script src="../assets/js/selfie-capture.js?v=<?= (int)@filemtime(dirname(__DIR__) . '/assets/js/selfie-capture.js') ?>"></script>
 </body>
 </html>

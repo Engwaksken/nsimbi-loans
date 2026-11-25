@@ -23,7 +23,7 @@ function h($value): string
 $userId = (int)$_SESSION['logged_in'];
 
 $stmt = $conn->prepare("
-    SELECT id, fname, lname, username, email, status, role, datetime
+    SELECT id, fname, lname, username, email, status, role, datetime, image_url
     FROM user
     WHERE id = ?
     LIMIT 1
@@ -44,6 +44,10 @@ if (!$user) {
 
 $fullName = trim(($user['fname'] ?? '') . ' ' . ($user['lname'] ?? ''));
 $initials = strtoupper(substr((string)($user['fname'] ?? 'U'), 0, 1) . substr((string)($user['lname'] ?? ''), 0, 1));
+
+if (empty($_SESSION['admin_photo_csrf'])) {
+    $_SESSION['admin_photo_csrf'] = bin2hex(random_bytes(16));
+}
 
 $message = $_SESSION['message'] ?? '';
 $messageType = $_SESSION['message_type'] ?? 'info';
@@ -211,10 +215,23 @@ unset($_SESSION['message'], $_SESSION['message_type']);
             <div class="profile-cover"></div>
 
             <div class="profile-avatar-wrap">
-                <div class="profile-avatar"><?= h($initials ?: 'U') ?></div>
+                <?= profile_avatar($user['image_url'] ?? '', $initials ?: 'U', 'profile-avatar') ?>
                 <div class="profile-name"><?= h($fullName ?: 'User') ?></div>
                 <div class="profile-email"><?= h($user['email'] ?? '') ?></div>
             </div>
+
+            <form method="POST" action="profile_photo_action.php" enctype="multipart/form-data" id="photoForm" novalidate style="padding:0 1.25rem 1rem">
+                <input type="hidden" name="csrf" value="<?= h($_SESSION['admin_photo_csrf']) ?>">
+                <div class="selfie-box" data-selfie>
+                    <div class="selfie-preview"><img alt="Your photo" hidden><i class="fas fa-user"></i></div>
+                    <div class="selfie-body">
+                        <button type="button" class="btn btn-sm btn-primary" data-selfie-start><i class="fas fa-camera"></i> <?= ($user['image_url'] ?? '') !== '' ? 'Change photo' : 'Add photo' ?></button>
+                        <div class="selfie-help" data-selfie-help>Take a selfie with your camera.</div>
+                    </div>
+                    <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your photo">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm mt-2" id="photoSave" disabled><i class="fas fa-check"></i> Save photo</button>
+            </form>
 
             <div class="profile-info-list">
                 <div class="profile-info-item">
@@ -328,4 +345,10 @@ unset($_SESSION['message'], $_SESSION['message_type']);
     </div>
 </div>
 
+<script src="<?= h(asset_url('assets/js/selfie-capture.js')) ?>"></script>
+<script>
+document.getElementById('photoForm').addEventListener('selfie:change', function () {
+    document.getElementById('photoSave').disabled = false;
+});
+</script>
 <?php require "footer.php"; ?>

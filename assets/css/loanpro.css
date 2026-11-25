@@ -2996,30 +2996,3 @@ a.profile-tab-btn{text-decoration:none;}
 .ns-pop-actions .btn{min-width:110px;justify-content:center}
 @media (max-width:480px){.ns-pop-actions{flex-direction:column-reverse}.ns-pop-actions .btn{width:100%}}
 
-/* ---------- Profile photos (includes/profile_photo.php) ---------- */
-.has-photo{overflow:hidden;padding:0;background:#e2e8f0}
-.has-photo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
-
-/* ---------- Selfie capture (assets/js/selfie-capture.js) ---------- */
-.selfie-box{position:relative;display:flex;align-items:center;gap:1rem;padding:.85rem;border:2px dashed #cbd5e1;border-radius:12px;background:#fff}
-.selfie-box.has-selfie{border-style:solid;border-color:#94a3b8}
-.selfie-box:has(.selfie-input.is-invalid){border-color:#dc3545}
-.selfie-preview{width:84px;height:84px;border-radius:50%;flex-shrink:0;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:2rem}
-.selfie-preview img{width:100%;height:100%;object-fit:cover}
-.selfie-body{min-width:0}
-.selfie-help{font-size:.8rem;color:#64748b;margin-top:.35rem}
-.selfie-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);bottom:0;left:0}
-.selfie-cam{position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.82);display:flex;align-items:center;justify-content:center;padding:16px}
-.selfie-cam[hidden]{display:none}
-.selfie-cam-box{background:#fff;border-radius:16px;padding:1rem;width:100%;max-width:440px;text-align:center}
-.selfie-cam-title{font-weight:800;font-size:1.05rem;margin-bottom:.6rem;color:#0f172a}
-.selfie-cam-stage{position:relative;width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;background:#0f172a}
-.selfie-cam-stage video,.selfie-cam-stage canvas{width:100%;height:100%;object-fit:cover;display:block}
-.selfie-cam-stage video{transform:scaleX(-1)}
-.selfie-cam-stage [hidden]{display:none}
-.selfie-cam-guide{position:absolute;inset:12%;border:3px dashed rgba(255,255,255,.75);border-radius:50%;pointer-events:none}
-.selfie-cam-msg{font-size:.85rem;color:#475569;margin:.7rem 0}
-.selfie-cam-actions{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
-.selfie-cam-actions [hidden]{display:none}
-@media (max-width:480px){.selfie-box{flex-direction:column;text-align:center}.selfie-cam-actions .btn{flex:1}}
-.review-photo{width:72px;height:72px;border-radius:50%;margin-bottom:.4rem;display:flex;align-items:center;justify-content:center;background:var(--primary,#123299);color:#fff;font-weight:800;border:2px solid #e5e7eb}

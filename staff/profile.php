@@ -26,7 +26,53 @@ $lfect = mysqli_fetch_assoc($lget);
 
 $clog = mysqli_query($conn, "SELECT COUNT(*) AS loan_count FROM loan WHERE client_id = '$user_id'");
 $logfetch = mysqli_fetch_assoc($clog);
+
+// Profile photo (selfie): shown here and changed with staff/profile_photo_action.php.
+require_once dirname(__DIR__) . '/includes/profile_photo.php';
+$photoPath = profile_photo_path($conn, (int)$user_id);
+$photoInitials = strtoupper(substr((string)($lfect['fname'] ?? ''), 0, 1) . substr((string)($lfect['lname'] ?? ''), 0, 1));
+if (empty($_SESSION['staff_photo_csrf'])) {
+    $_SESSION['staff_photo_csrf'] = bin2hex(random_bytes(16));
+}
+[$photoFlash, $photoFlashType] = $_SESSION['staff_photo_flash'] ?? ['', ''];
+unset($_SESSION['staff_photo_flash']);
 ?>
+<style>
+.staff-photo{width:96px;height:96px;border-radius:50%;background:#123299;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;flex-shrink:0}
+</style>
+<div class="row">
+  <div class="col-12 mt-4">
+    <div class="card">
+      <div class="card-header pb-0 px-3"><h6 class="mb-0">Profile Photo</h6></div>
+      <div class="card-body pt-3 p-3">
+        <?php if ($photoFlash !== ''): ?>
+          <div class="alert <?= $photoFlashType === 'success' ? 'alert-success' : 'alert-danger' ?> text-white"><?= htmlspecialchars($photoFlash) ?></div>
+        <?php endif; ?>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+          <?= profile_avatar($photoPath, $photoInitials, 'staff-photo') ?>
+          <form method="post" action="profile_photo_action.php" enctype="multipart/form-data" id="photoForm" class="flex-grow-1" style="min-width:260px" novalidate>
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['staff_photo_csrf']) ?>">
+            <div class="selfie-box" data-selfie>
+              <div class="selfie-preview"><img alt="Your selfie" hidden><i class="fas fa-user"></i></div>
+              <div class="selfie-body">
+                <button type="button" class="btn btn-sm btn-primary mb-0" data-selfie-start><i class="fas fa-camera"></i> <?= $photoPath !== '' ? 'Take a new selfie' : 'Take a selfie' ?></button>
+                <div class="selfie-help" data-selfie-help>Face the camera in good light, with no sunglasses or hat.</div>
+              </div>
+              <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your selfie">
+            </div>
+            <button type="submit" class="btn bg-gradient-info btn-sm mt-2 mb-0" id="photoSave" disabled>Save Photo</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/js/selfie-capture.js?v=<?= (int)@filemtime(dirname(__DIR__) . '/assets/js/selfie-capture.js') ?>"></script>
+<script>
+document.getElementById('photoForm').addEventListener('selfie:change', function () {
+  document.getElementById('photoSave').disabled = false;
+});
+</script>
 
 <div class="row">
   <div class="col-md-7 mt-4">
