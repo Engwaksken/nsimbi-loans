@@ -1,5 +1,6 @@
 <?php
 require "db.php";
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -28,7 +29,7 @@ $sql = "
         u.status AS user_status
     FROM startups s
     INNER JOIN user u ON s.startup_id = u.id
-    WHERE u.role = 5
+    WHERE u.role = 5" . officer_client_sql('s') . "
     ORDER BY s.id DESC
 ";
 

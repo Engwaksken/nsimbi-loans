@@ -1,5 +1,6 @@
 <?php
 require "db.php";
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -48,6 +49,7 @@ if ($startupId <= 0) {
     header("Location: startups.php");
     exit;
 }
+officer_require_client($conn, 'startup', $startupId);
 
 $stmt = $conn->prepare("
     SELECT s.*, u.id AS user_id, u.username, u.role, u.status AS user_status

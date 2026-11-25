@@ -84,7 +84,7 @@ if (!in_array($typeFilter, $allowedTypes, true)) {
     $typeFilter = 'all';
 }
 
-$whereStatus = "l.status = 'OUTSTANDING'";
+$whereStatus = "l.status = 'OUTSTANDING'" . officer_loan_sql('l');
 
 $searchCustomer = '';
 $searchMember = '';

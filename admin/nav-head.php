@@ -9,6 +9,17 @@ loan_penalties_maybe_run($conn);
 if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1','2',1,2])) {
     header('Location: ../login.php'); exit();
 }
+// Loan officers own clients by district (includes/officer_assignment.php):
+// first run sets Mbarara -> Ruth Musiimenta, others -> Esther Kayondo and
+// reassigns existing records; afterwards new clients and loans get theirs.
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+try {
+    officer_assignment_ensure_schema($conn);
+    officer_assignment_bootstrap($conn);
+    officer_sync($conn);
+} catch (Throwable $e) {
+    error_log('Officer assignment sync failed: ' . $e->getMessage());
+}
 $user_id  = $_SESSION['logged_in'] ?? null;
 $role     = $_SESSION['role'];
 $fname    = $_SESSION['fname'] ?? '';

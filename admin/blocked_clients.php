@@ -5,7 +5,7 @@ $table_name = "Clients";
 $phead = "BLOCKED CLIENTS";
 
 if (isset($_REQUEST['check']) && $_REQUEST['check'] == 2) {
-    $lget = mysqli_query($conn, "SELECT * FROM customers WHERE active = 0 ORDER BY id DESC");
+    $lget = mysqli_query($conn, "SELECT * FROM customers WHERE active = 0" . officer_client_sql('customers') . " ORDER BY id DESC");
     $phead = "BLOCKED CLIENTS";
 }
 ?>

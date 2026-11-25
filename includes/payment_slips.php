@@ -258,8 +258,8 @@ function payment_slip_review(
 
         if ($actorRole === 2) {
             $assigned = (int)($loan['assigned_officer_id'] ?? 0);
-            if ($assigned > 0 && $assigned !== $actorId) {
-                throw new DomainException('This loan is assigned to another loan officer.');
+            if ($assigned !== $actorId) {
+                throw new DomainException('This loan is not assigned to you.');
             }
         }
 

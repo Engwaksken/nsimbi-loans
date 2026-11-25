@@ -15,7 +15,7 @@ $lget = mysqli_query($conn, "
   FROM loan
   JOIN customers ON loan.client_id = customers.user_id
   JOIN user ON customers.user_id = user.id
-  WHERE loan.status != 'PENDING'
+  WHERE loan.status != 'PENDING'" . officer_loan_sql('loan') . "
   ORDER BY loan.id ASC
 ");
 ?>

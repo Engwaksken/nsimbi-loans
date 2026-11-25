@@ -12,9 +12,9 @@ if (!isset($conn)) {
 $lget = mysqli_query($conn, "
   SELECT loan.*, user.fname, user.lname
   FROM loan
-  JOIN members ON loan.client_id = members.user_id
+  JOIN members ON loan.client_id = members.user_id AND loan.organisation_id IS NULL
   JOIN user ON members.user_id = user.id
-  WHERE loan.status != 'PENDING'
+  WHERE loan.status != 'PENDING'" . officer_loan_sql('loan') . "
   ORDER BY loan.id ASC
 ");
 ?>

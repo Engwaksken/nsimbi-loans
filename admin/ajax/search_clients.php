@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../db.php';
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -23,6 +24,13 @@ if (mb_strlen($q) < 2) {
 }
 
 $like = '%' . $q . '%';
+
+// Loan officers only find their own clients (business clients, staff borrowers, startups).
+$officerWhere = officer_scope_id() > 0
+    ? " AND (EXISTS (SELECT 1 FROM customers oc WHERE oc.user_id = u.id" . officer_client_sql('oc') . ")"
+      . " OR EXISTS (SELECT 1 FROM members om WHERE om.user_id = u.id" . officer_client_sql('om') . ")"
+      . " OR EXISTS (SELECT 1 FROM startups os WHERE os.startup_id = u.id" . officer_client_sql('os') . "))"
+    : '';
 
 $sql = "
     SELECT
@@ -62,6 +70,7 @@ $sql = "
             OR CONCAT(u.fname, ' ', u.lname) LIKE ?
         )
         AND LOWER(CAST(u.role AS CHAR)) IN ('4', 'client', 'customer', 'member', 'staff', 'startup')
+        {$officerWhere}
     ORDER BY u.fname ASC, u.lname ASC
     LIMIT 20
 ";

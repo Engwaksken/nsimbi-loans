@@ -313,6 +313,7 @@ $baseFrom = "
 
 $whereSql = "
     WHERE UPPER(TRIM(COALESCE(l.status, ''))) IN ('PENDING', 'INFO_PROVIDED')
+" . officer_loan_sql('l') . "
 ";
 
 $bindParams = [];
@@ -1263,7 +1264,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                 <?php endif; ?>
                             </div>
                             <?php if (!$isReviewer && !($isAssignedToMe && $status === 'INFO_REQUESTED')): ?>
-                                <div class="fs-xs text-muted mt-1"><?= $isOfficer ? 'Read-only - not assigned to you' : 'Read-only for your role' ?></div>
+                                <div class="fs-xs text-muted mt-1"><?= ($isOfficer && !$isAssignedToMe) ? 'Read-only - not assigned to you' : 'Read-only for your role' ?></div>
                             <?php endif; ?>
                         </td>
                     </tr>

@@ -1,5 +1,7 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
 require "db.php";
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 // Get all active customers who do not have active loans
 $sql = "
@@ -7,7 +9,7 @@ $sql = "
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
     LEFT JOIN loan l ON l.client_id = u.id AND l.status IN ('PENDING','OUTSTANDING','OVERDUE')
-    WHERE u.status = 1 AND l.id IS NULL
+    WHERE u.status = 1 AND l.id IS NULL" . officer_client_sql('c') . "
     ORDER BY u.fname ASC
 ";
 

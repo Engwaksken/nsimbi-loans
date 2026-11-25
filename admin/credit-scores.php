@@ -9,7 +9,7 @@ $customers_query = mysqli_query($d_db, 'SELECT
     c.business_name, 
     c.business_type,
     c.credit_score
-    FROM customers c WHERE c.active = 1 ORDER BY c.credit_score DESC');
+    FROM customers c WHERE c.active = 1' . officer_client_sql('c') . ' ORDER BY c.credit_score DESC');
 
 $customers = [];
 while($customer = mysqli_fetch_assoc($customers_query)) {

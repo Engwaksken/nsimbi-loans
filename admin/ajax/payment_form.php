@@ -5,6 +5,9 @@ if (!isset($_SESSION['logged_in'])) { http_response_code(403); exit; }
 $lid=(int)($_GET['loan_id']??0);
 $loan=$conn->query("SELECT * FROM loan WHERE id=$lid LIMIT 1")->fetch_assoc();
 if (!$loan) { echo '<div class="alert alert-danger">Loan not found.</div>'; exit; }
+// Loan officers may only take payments on their own loans.
+require_once __DIR__ . '/../../includes/officer_assignment.php';
+officer_require_loan($conn, $lid);
 ?>
 <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--r);padding:.9rem 1.1rem;margin-bottom:1.2rem;display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
   <div><div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.05em">Loan Amount</div><div style="font-weight:700;color:var(--text-dark)">UGX <?= number_format($loan['amount']) ?></div></div>

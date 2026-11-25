@@ -276,6 +276,12 @@ if ($amount <= 0) {
     );
 }
 
+// Loan officers may only issue loans to their own clients.
+require_once __DIR__ . '/../../includes/officer_assignment.php';
+if (!officer_may_access_client($conn, $clientType, $clientId)) {
+    loanRespond(false, 'This client is assigned to another loan officer.', [], 403);
+}
+
 /*
 |--------------------------------------------------------------------------
 | Customer loans use a loan product (Loans > Loan Products)

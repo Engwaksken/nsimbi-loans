@@ -138,8 +138,12 @@ if ($action === 'create') {
     backNow();
 }
 
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
+
 if ($action === 'update') {
     $id                = (int)($_POST['id'] ?? 0);
+    // Loan officers may only change their own startups.
+    officer_require_client($conn, 'startup', $id);
     $company_name      = trim($_POST['company_name'] ?? '');
     $ceo_name          = trim($_POST['ceo_name'] ?? '');
     $phone             = trim($_POST['phone'] ?? '');
@@ -258,6 +262,7 @@ if ($action === 'update') {
 
 if ($action === 'delete') {
     $id = (int)($_POST['id'] ?? 0);
+    officer_require_client($conn, 'startup', $id);
     $startupUserId = (int)($_POST['startup_user_id'] ?? 0);
 
     if ($id <= 0 || $startupUserId <= 0) {

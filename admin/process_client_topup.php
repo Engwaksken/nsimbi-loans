@@ -16,6 +16,8 @@ function clean_money($value) {
 
 
 $staffId   = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+officer_require_client($conn, 'customer', $staffId);
 
 $newAmount = clean_money($_POST['amount'] ?? '');
 $newPeriod = isset($_POST['loan_period']) ? (int)$_POST['loan_period'] : 0;

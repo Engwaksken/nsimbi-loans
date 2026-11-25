@@ -2,6 +2,7 @@
 
 
 require 'nav-head.php';   
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
 
 
 if (empty($_SERVER['HTTP_X_REQUESTED_WITH']) ||
@@ -123,6 +124,7 @@ match (true) {
 function action_view(mysqli $conn): never {
     $id = (int)get_param('user_id');
     if (!$id) json_err('Missing user_id.');
+    officer_require_client($conn, 'customer', $id);
 
     $c = fetch_client($conn, $id);
     if (!$c) json_err('Client not found.', 404);
@@ -415,6 +417,7 @@ function action_view(mysqli $conn): never {
 function action_edit_form(mysqli $conn): never {
     $id = (int)get_param('user_id');
     if (!$id) json_err('Missing user_id.');
+    officer_require_client($conn, 'customer', $id);
     $c = fetch_client($conn, $id);
     if (!$c) json_err('Client not found.', 404);
     render_client_form($c);
@@ -691,6 +694,7 @@ function render_client_form(?array $c): void {
 function action_edit_save(mysqli $conn): never {
     $uid = (int)post('user_id');
     if (!$uid) json_err('Missing user_id.');
+    officer_require_client($conn, 'customer', $uid);
 
     $c = fetch_client($conn, $uid);
     if (!$c) json_err('Client not found.', 404);
@@ -886,6 +890,7 @@ function action_delete(mysqli $conn): never {
     $uid = (int)post('client_id');
     if (!$uid) $uid = (int)post('user_id');
     if (!$uid) json_err('Missing client_id.');
+    officer_require_user($conn, $uid);
 
     /* Verify client exists */
     $chk = $conn->prepare("SELECT id FROM user WHERE id = ? LIMIT 1");
@@ -931,6 +936,7 @@ function action_delete(mysqli $conn): never {
 function action_toggle_status(mysqli $conn): never {
     $uid = (int)post('user_id');
     if (!$uid) json_err('Missing user_id.');
+    officer_require_client($conn, 'customer', $uid);
 
     /* Fetch current status */
     $row = $conn->prepare("SELECT u.status, c.active FROM user u INNER JOIN customers c ON c.user_id = u.id WHERE u.id = ? LIMIT 1");
@@ -970,6 +976,7 @@ function action_reset_password(mysqli $conn): never {
     $confirm  = post('confirm_password');
 
     if (!$uid)     json_err('Missing user_id.');
+    officer_require_user($conn, $uid);
     if (!$password) json_err('Password cannot be empty.');
     if (strlen($password) < 6) json_err('Password must be at least 6 characters.');
     if ($password !== $confirm) json_err('Passwords do not match.');
@@ -988,6 +995,7 @@ function action_reset_password(mysqli $conn): never {
 function action_loan_details(mysqli $conn): never {
     $id = (int)get_param('client_id');
     if (!$id) json_err('Missing client_id.');
+    officer_require_client($conn, 'customer', $id);
 
     /* Client basics */
     $cSt = $conn->prepare("

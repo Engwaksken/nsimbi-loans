@@ -43,10 +43,14 @@ $sql = "
            l.effective_balance,
            m.first_name,
            m.last_name,
-           m.telephone1
+           m.telephone1,
+           org.company_name AS organisation_name,
+           org.phone AS organisation_phone
     FROM loan_repayment_requests r
     LEFT JOIN loan l ON l.id = r.loan_id
-    LEFT JOIN members m ON m.user_id = r.client_id
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN members m ON m.user_id = r.client_id AND l.organisation_id IS NULL
+    WHERE 1 = 1" . officer_loan_sql('l') . "
     ORDER BY
         CASE r.status
             WHEN 'PENDING' THEN 0
@@ -102,13 +106,13 @@ $result = $conn->query($sql);
                                     'PENDING'  => 'warning',
                                     default    => 'secondary',
                                 };
-                                $clientName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                                $clientName = trim((string)($row['organisation_name'] ?? '')) ?: trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
                                 ?>
                                 <tr>
                                     <td><?= $i++ ?></td>
                                     <td>
                                         <strong><?= e($clientName !== '' ? $clientName : 'Unknown Client') ?></strong><br>
-                                        <small><?= e($row['telephone1'] ?? '') ?></small>
+                                        <small><?= e($row['organisation_phone'] ?? $row['telephone1'] ?? '') ?></small>
                                     </td>
                                     <td>#<?= (int)$row['loan_id'] ?></td>
                                     <td><?= money($row['requested_amount']) ?></td>

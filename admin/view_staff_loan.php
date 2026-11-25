@@ -1,8 +1,10 @@
 <?php 
 require"nav-head.php" ;
 
-   $lget = mysqli_query($conn, 'select * from loan where id="'.$_REQUEST['id'].'" ');
+   $lget = mysqli_query($conn, 'select * from loan where id="'.(int)($_REQUEST['id'] ?? 0).'" ');
    $lfect = mysqli_fetch_assoc($lget);
+   // Loan officers may only open their own loans.
+   officer_require_loan($conn, (int)($lfect['id'] ?? 0));
    $clientId = mysqli_real_escape_string($conn, $lfect['client_id']);
 
 $client_get = mysqli_query($conn, "
@@ -12,6 +14,14 @@ $client_get = mysqli_query($conn, "
         WHERE members.user_id = '$clientId'");
 
 $cfect = mysqli_fetch_assoc($client_get);
+
+// Organisation loans (loan.organisation_id): never show the staff member whose
+// user id happens to equal the organisation id.
+if ((int)($lfect['organisation_id'] ?? 0) > 0) {
+    $org = organisation_find($conn, (int)$lfect['organisation_id']);
+    $cfect = ['fname' => $org['company_name'] ?? 'Organisation #' . (int)$lfect['organisation_id'], 'lname' => '',
+        'phone' => $org['phone'] ?? '', 'nin' => ''];
+}
 
 
   ?>

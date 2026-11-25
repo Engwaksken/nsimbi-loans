@@ -11,6 +11,12 @@ $notes  =$_POST['notes']??'';
 if (!$lid||$amount<=0) { echo json_encode(['success'=>false,'message'=>'Invalid data.']); exit; }
 $loan=$conn->query("SELECT * FROM loan WHERE id=$lid LIMIT 1")->fetch_assoc();
 if (!$loan) { echo json_encode(['success'=>false,'message'=>'Loan not found.']); exit; }
+// Loan officers may only record payments on their own loans.
+require_once __DIR__ . '/../../includes/officer_assignment.php';
+if (officer_scope_id() > 0 && (int)($loan['assigned_officer_id'] ?? 0) !== officer_scope_id()) {
+    http_response_code(403);
+    echo json_encode(['success'=>false,'message'=>'This loan is assigned to another loan officer.']); exit;
+}
 if ($amount>$loan['loan_balance']) { echo json_encode(['success'=>false,'message'=>'Amount exceeds balance.']); exit; }
 $conn->begin_transaction();
 try {

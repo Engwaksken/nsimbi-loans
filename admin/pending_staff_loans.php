@@ -2,7 +2,8 @@
 require "nav-head.php";
 $current_user_role = isset($_SESSION['role']) ? $_SESSION['role'] : 0;
 
-$lget = mysqli_query($conn, 'SELECT * FROM loan WHERE status="PENDING" ORDER BY id DESC');
+// Staff loans only (organisation loans are not staff); officers see their own loans.
+$lget = mysqli_query($conn, 'SELECT * FROM loan WHERE status="PENDING" AND organisation_id IS NULL' . officer_loan_sql('loan') . ' ORDER BY id DESC');
 
 $phead = "STAFF PENDING LOANS";              
 ?>

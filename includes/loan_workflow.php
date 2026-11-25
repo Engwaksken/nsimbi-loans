@@ -110,6 +110,15 @@ function loan_assign_officer(mysqli $conn, int $loanId): int
         return 0;
     }
 
+    // District rules first: the loan goes to its client's officer
+    // (includes/officer_assignment.php). The least-busy officer below is only
+    // used when no rules are set up.
+    require_once __DIR__ . '/officer_assignment.php';
+    $byDistrict = officer_assign_loan($conn, $loanId);
+    if ($byDistrict > 0) {
+        return $byDistrict;
+    }
+
     $activeStatuses = "'PENDING','INFO_REQUESTED','INFO_PROVIDED','OUTSTANDING','OVERDUE','ACTIVE','APPROVED'";
     $userStatusSql = loan_table_has_column($conn, 'user', 'status')
         ? ' AND COALESCE(u.status, 1) = 1'

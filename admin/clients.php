@@ -13,12 +13,12 @@ $page   = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
 
-$where  = "";
+$where  = "WHERE 1 = 1" . officer_client_sql('c');
 $params = [];
 $types  = "";
 
 if ($search !== "") {
-    $where = "WHERE 
+    $where .= " AND (
         u.fname LIKE ? OR
         u.lname LIKE ? OR
         u.email LIKE ? OR
@@ -26,7 +26,7 @@ if ($search !== "") {
         c.business_name LIKE ? OR
         c.business_type LIKE ? OR
         c.district LIKE ? OR
-        c.location LIKE ?";
+        c.location LIKE ?)";
 
     $like = "%{$search}%";
 
@@ -130,6 +130,7 @@ $statsSql = "
         FROM loan
         GROUP BY client_id
     ) l ON l.client_id = u.id
+    WHERE 1 = 1" . officer_client_sql('c') . "
 ";
 
 $stats = $conn->query($statsSql)->fetch_assoc();

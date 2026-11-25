@@ -5,8 +5,8 @@ declare(strict_types=1);
  * Loans > Payment Slips: repayments clients sent with a payment slip.
  * A loan officer checks the slip, then approves (the loan balance goes down
  * automatically, and the loan is cleared when fully paid) or rejects with a
- * reason. Reviewer (1), loan officer (2) and accountant (5); officers see the
- * loans assigned to them and unassigned ones.
+ * reason. Reviewer (1), loan officer (2) and accountant (5); officers only see
+ * the loans assigned to them.
  */
 
 $phead = 'Payment Slips';
@@ -31,6 +31,8 @@ if (!function_exists('h')) {
 }
 
 payment_slips_ensure_schema($conn);
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+organisations_ensure_table($conn);
 
 if (empty($_SESSION['payment_slips_csrf'])) {
     $_SESSION['payment_slips_csrf'] = bin2hex(random_bytes(32));
@@ -75,25 +77,23 @@ $where = $tab === 'pending'
     : "UPPER(p.status) IN ('SUCCESSFUL', 'REJECTED') AND p.reviewed_at IS NOT NULL";
 $params = [];
 $types = '';
-if ($role === 2) {
-    $where .= ' AND (l.assigned_officer_id IS NULL OR l.assigned_officer_id = 0 OR l.assigned_officer_id = ?)';
-    $params[] = $actorId;
-    $types .= 'i';
-}
+// Loan officers only see payments on their own loans ('' for everyone else).
+$where .= officer_loan_sql('l');
 $order = $tab === 'pending' ? 'p.id ASC' : 'p.reviewed_at DESC';
 $limit = $tab === 'pending' ? 200 : 100;
 
 $sql = "
     SELECT p.*, l.loan_balance, l.status AS loan_status, l.amount AS loan_amount, l.due_date,
            l.assigned_officer_id,
-           TRIM(CONCAT(COALESCE(u.fname, ''), ' ', COALESCE(u.lname, ''))) AS client_name,
-           c.phone AS client_phone,
+           COALESCE(org.company_name, TRIM(CONCAT(COALESCE(u.fname, ''), ' ', COALESCE(u.lname, '')))) AS client_name,
+           COALESCE(org.phone, c.phone) AS client_phone,
            TRIM(CONCAT(COALESCE(r.fname, ''), ' ', COALESCE(r.lname, ''))) AS reviewer_name,
            (SELECT COALESCE(SUM(p2.amount), 0) FROM payments p2
              WHERE p2.loan_id = p.loan_id AND UPPER(p2.status) = 'PENDING' AND p2.id < p.id) AS pending_before
     FROM payments p
     INNER JOIN loan l ON l.id = p.loan_id
-    LEFT JOIN user u ON u.id = COALESCE(p.user_id, l.client_id)
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN user u ON l.organisation_id IS NULL AND u.id = COALESCE(p.user_id, l.client_id)
     LEFT JOIN customers c ON c.user_id = u.id
     LEFT JOIN user r ON r.id = p.reviewed_by
     WHERE {$where}

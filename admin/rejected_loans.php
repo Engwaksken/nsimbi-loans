@@ -51,7 +51,7 @@ if (!in_array($typeFilter, $allowedTypes, true)) {
     $typeFilter = 'all';
 }
 
-$whereStatus = "l.status = 'REJECTED'";
+$whereStatus = "l.status = 'REJECTED'" . officer_loan_sql('l');
 
 $searchCustomer = '';
 $searchMember = '';

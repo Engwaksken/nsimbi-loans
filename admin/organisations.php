@@ -18,6 +18,7 @@ if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1
 $conn->set_charset('utf8mb4');
 
 require_once dirname(__DIR__) . '/includes/organisations.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 organisations_ensure_table($conn);
 
 const ORG_FIELDS = [
@@ -65,6 +66,10 @@ $formValues = null; // posted values to put back into the form after an error
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
     $id = (int)($_POST['id'] ?? 0);
+    if ($action === 'update' || $action === 'delete') {
+        // Loan officers may only change organisations assigned to them.
+        officer_require_client($conn, 'organisation', $id);
+    }
 
     if (!hash_equals($csrf, (string)($_POST['csrf_token'] ?? ''))) {
         $error = 'Your session expired. Please try again.';
@@ -101,7 +106,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->bind_param('ssssssssssi', ...[...array_values($values), $status, $id]);
                 }
                 $stmt->execute();
+                $newId = (int)$conn->insert_id;
                 $stmt->close();
+                if ($action === 'create' && $newId > 0) {
+                    // Give the new organisation its officer now, so it shows up straight away.
+                    officer_of_client($conn, 'organisation', $newId);
+                }
                 org_done($action === 'create'
                     ? 'Organisation added. Choose it under "Organisations" in the New Loan form.'
                     : 'Organisation updated.');
@@ -125,12 +135,13 @@ try {
         SELECT o.*,
                (SELECT COUNT(*) FROM loan l WHERE l.client_id = o.id AND LOWER(COALESCE(l.client_type, '')) = 'organisation') AS loans
         FROM organisations o
+        WHERE 1 = 1" . officer_client_sql('o') . "
         ORDER BY o.status = 'active' DESC, o.company_name
     ");
     $organisations = $result->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $e) {
     // Older databases without loan.client_type: list without the loan count.
-    $result = $conn->query("SELECT o.*, NULL AS loans FROM organisations o ORDER BY o.status = 'active' DESC, o.company_name");
+    $result = $conn->query("SELECT o.*, NULL AS loans FROM organisations o WHERE 1 = 1" . officer_client_sql('o') . " ORDER BY o.status = 'active' DESC, o.company_name");
     $organisations = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
 

@@ -105,7 +105,7 @@ $overdueCondition = "
             )
         )
     )
-";
+" . officer_loan_sql('l');
 
 $searchSqlCustomer = '';
 $searchSqlMember = '';

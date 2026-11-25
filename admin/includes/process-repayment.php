@@ -110,6 +110,9 @@ if (!isset($conn) || !$conn instanceof mysqli) {
 }
 
 $loanId = (int)postValue('loan_id', 0);
+// Loan officers may only record repayments on their own loans.
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
+officer_require_loan($conn, $loanId);
 $amount = (float)postValue('amount', 0);
 $paymentMethod = trim((string)postValue('payment_method', 'Cash'));
 $reference = trim((string)postValue('reference', ''));

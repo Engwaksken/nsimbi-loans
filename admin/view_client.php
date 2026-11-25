@@ -10,6 +10,7 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
     require_once __DIR__ . '/db.php';
     require_once __DIR__ . '/vendor/autoload.php';
     require_once __DIR__ . '/includes/books-tab.php';
+    require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
     if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1', '2', 1, 2], true)) {
         header('Location: ../login.php');
@@ -35,6 +36,7 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
         http_response_code(400);
         exit('Invalid client selected.');
     }
+    officer_require_client($conn, 'customer', $user_id);
 
     $clientStmt = $conn->prepare("
         SELECT
@@ -129,6 +131,7 @@ if ($user_id <= 0) {
     require "footer.php";
     exit;
 }
+officer_require_client($conn, 'customer', $user_id);
 
 $clientSql = "
     SELECT 

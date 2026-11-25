@@ -130,6 +130,11 @@ $members   = [];
 $startups  = [];
 $organisations = [];
 
+// Loan officers only pick their own clients (officer_client_sql() is '' for
+// everyone else). Organisation loans are told apart by loan.organisation_id.
+require_once __DIR__ . '/../../includes/officer_assignment.php';
+organisations_ensure_table($conn);
+
 /*
 |--------------------------------------------------------------------------
 | Customer query
@@ -157,6 +162,7 @@ if ($loanHasClientType) {
             SELECT 1
             FROM loan l
             WHERE l.client_id = c.user_id
+              AND l.organisation_id IS NULL
               AND UPPER(TRIM(l.status)) IN (
                   'PENDING',
                   'OUTSTANDING',
@@ -191,7 +197,7 @@ $customerSql = "
         ON u.id = c.user_id
     WHERE u.status = 1
       AND c.active = 1
-      {$customerDuplicateCondition}
+      {$customerDuplicateCondition}" . officer_client_sql('c') . "
     ORDER BY
         u.fname ASC,
         u.lname ASC
@@ -267,6 +273,7 @@ if ($loanHasClientType) {
             SELECT 1
             FROM loan l
             WHERE l.client_id = m.user_id
+              AND l.organisation_id IS NULL
               AND UPPER(TRIM(l.status)) IN (
                   'PENDING',
                   'OUTSTANDING',
@@ -295,7 +302,7 @@ $memberSql = "
     INNER JOIN user u
         ON u.id = m.user_id
     WHERE u.status = 1
-      {$memberDuplicateCondition}
+      {$memberDuplicateCondition}" . officer_client_sql('m') . "
     ORDER BY
         u.fname ASC,
         u.lname ASC
@@ -370,6 +377,7 @@ if ($loanHasClientType) {
             SELECT 1
             FROM loan l
             WHERE l.client_id = s.{$startupIdColumn}
+              AND l.organisation_id IS NULL
               AND UPPER(TRIM(l.status)) IN (
                   'PENDING',
                   'OUTSTANDING',
@@ -407,7 +415,7 @@ $startupSql = "
     FROM startups s
     WHERE 1 = 1
       {$startupStatusCondition}
-      {$startupDuplicateCondition}
+      {$startupDuplicateCondition}" . officer_client_sql('s') . "
     ORDER BY
         s.company_name ASC,
         s.ceo_name ASC
@@ -467,7 +475,7 @@ $totalEligible = count($customers)
 
 // Keep organisation clients distinct from startup applicants.
 if (addLoanTableHasColumn($conn, 'organisations', 'id')) {
-    $organisationResult = $conn->query("SELECT id, company_name, ceo_name, phone FROM organisations WHERE status = 'active' ORDER BY company_name");
+    $organisationResult = $conn->query("SELECT o.id, o.company_name, o.ceo_name, o.phone FROM organisations o WHERE o.status = 'active'" . officer_client_sql('o') . " ORDER BY o.company_name");
     if ($organisationResult) {
         while ($row = $organisationResult->fetch_assoc()) {
             $organisations[] = [

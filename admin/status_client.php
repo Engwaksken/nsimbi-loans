@@ -1,13 +1,25 @@
 <?php
 require_once __DIR__ . '/includes/alert_bridge.php';
 
+if (session_status() === PHP_SESSION_NONE) session_start();
 require"db.php";
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 //require "nav-head.php"; 
-$client = $_REQUEST['client'];
-$admin = $_REQUEST['admin'];
+// Staff only.
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    http_response_code(403);
+    exit('Not authorized.');
+}
+
+// Whole numbers only: these go into SQL and the redirect below.
+$client = (int)($_REQUEST['client'] ?? 0);
+$admin = (int)($_REQUEST['admin'] ?? 0);
 
 $get_user = mysqli_query($conn, "select * from customers where id='".$client."' "); 
 $fetch_user = mysqli_fetch_assoc($get_user);
+if ($fetch_user) {
+    officer_require_client($conn, 'customer', (int)$fetch_user['user_id']);
+}
 $role = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
 
 if($role==1 || $role==2){

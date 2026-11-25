@@ -14,6 +14,7 @@ function typeBadge(string $type): string
         'customer' => 'badge-primary',
         'member'   => 'badge-purple',
         'startup'  => 'badge-warning',
+        'organisation' => 'badge-info',
         default    => 'badge-muted',
     };
 }
@@ -27,14 +28,15 @@ if (!preg_match('/^\d{4}-\d{2}$/', $selected_month)) {
 }
 
 $allowed_filters = ['all', 'successful', 'failed'];
-$allowed_types = ['all', 'customer', 'member', 'startup'];
+$allowed_types = ['all', 'customer', 'member', 'startup', 'organisation'];
 
 if (!in_array($filter_type, $allowed_filters, true)) $filter_type = 'all';
 if (!in_array($type_filter, $allowed_types, true)) $type_filter = 'all';
 
 $month_display = date('F Y', strtotime($selected_month . '-01'));
 
-$wherePayment = "DATE_FORMAT(p.datetime, '%Y-%m') = ?";
+// Loan officers only see payments on their own loans ('' for everyone else).
+$wherePayment = "DATE_FORMAT(p.datetime, '%Y-%m') = ?" . officer_loan_sql('l');
 $paramsCustomer = [$selected_month];
 $paramsMember = [$selected_month];
 $paramsStartup = [$selected_month];
@@ -67,7 +69,7 @@ $customerSql = "
         c.business_name AS organization_name
     FROM payments p
     INNER JOIN loan l ON p.loan_id = l.id
-    INNER JOIN customers c ON l.client_id = c.user_id
+    INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON c.user_id = u.id
     WHERE {$wherePayment}
 ";
@@ -91,7 +93,7 @@ $memberSql = "
         m.employer AS organization_name
     FROM payments p
     INNER JOIN loan l ON p.loan_id = l.id
-    INNER JOIN members m ON l.client_id = m.user_id
+    INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON m.user_id = u.id
     WHERE {$wherePayment}
 ";
@@ -121,7 +123,31 @@ $startupSql = "
         st.company_name AS organization_name
     FROM payments p
     INNER JOIN loan l ON p.loan_id = l.id
-    INNER JOIN startups st ON l.client_id = st.startup_id
+    INNER JOIN startups st ON l.client_id = st.startup_id AND l.organisation_id IS NULL
+    WHERE {$wherePayment}
+";
+
+// Organisation loans: recognised by loan.organisation_id (ids overlap user ids).
+$organisationSql = "
+    SELECT 
+        p.id AS payment_id,
+        p.amount,
+        p.status,
+        p.datetime,
+        l.id AS loan_id,
+        l.client_id,
+        l.amount AS loan_amount,
+        l.interest AS loan_interest,
+        l.loan_balance,
+        'organisation' AS client_type,
+        org.ceo_name AS fname,
+        '' AS lname,
+        org.email AS client_email,
+        org.phone AS client_phone,
+        org.company_name AS organization_name
+    FROM payments p
+    INNER JOIN loan l ON p.loan_id = l.id
+    INNER JOIN organisations org ON l.organisation_id = org.id
     WHERE {$wherePayment}
 ";
 
@@ -137,10 +163,14 @@ if ($type_filter === 'customer') {
     $baseSql = $startupSql;
     $bindParams = $paramsStartup;
     $bindTypes = $typesStartup;
+} elseif ($type_filter === 'organisation') {
+    $baseSql = $organisationSql;
+    $bindParams = $paramsStartup;
+    $bindTypes = $typesStartup;
 } else {
-    $baseSql = "($customerSql) UNION ALL ($memberSql) UNION ALL ($startupSql)";
-    $bindParams = array_merge($paramsCustomer, $paramsMember, $paramsStartup);
-    $bindTypes = $typesCustomer . $typesMember . $typesStartup;
+    $baseSql = "($customerSql) UNION ALL ($memberSql) UNION ALL ($startupSql) UNION ALL ($organisationSql)";
+    $bindParams = array_merge($paramsCustomer, $paramsMember, $paramsStartup, $paramsStartup);
+    $bindTypes = $typesCustomer . $typesMember . $typesStartup . $typesStartup;
 }
 
 $query = "SELECT * FROM ($baseSql) x ORDER BY payment_id DESC";
@@ -170,6 +200,7 @@ $typeStats = [
     'customer' => ['count' => 0, 'amount' => 0],
     'member'   => ['count' => 0, 'amount' => 0],
     'startup'  => ['count' => 0, 'amount' => 0],
+    'organisation' => ['count' => 0, 'amount' => 0],
 ];
 
 foreach ($payments as $payment) {
@@ -194,6 +225,7 @@ foreach ($payments as $payment) {
 }
 
 
+$openScope = officer_loan_sql('l');
 $openLoansSql = "
     (
         SELECT 
@@ -208,10 +240,10 @@ $openLoansSql = "
             c.phone AS client_phone,
             c.business_name AS organization_name
         FROM loan l
-        INNER JOIN customers c ON l.client_id = c.user_id
+        INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON c.user_id = u.id
         WHERE l.status IN ('OUTSTANDING','OVERDUE','ACTIVE','APPROVED')
-        AND COALESCE(l.loan_balance,0) > 0
+        AND COALESCE(l.loan_balance,0) > 0{$openScope}
     )
     UNION ALL
     (
@@ -227,10 +259,10 @@ $openLoansSql = "
             m.phone AS client_phone,
             m.employer AS organization_name
         FROM loan l
-        INNER JOIN members m ON l.client_id = m.user_id
+        INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON m.user_id = u.id
         WHERE l.status IN ('OUTSTANDING','OVERDUE','ACTIVE','APPROVED')
-        AND COALESCE(l.loan_balance,0) > 0
+        AND COALESCE(l.loan_balance,0) > 0{$openScope}
     )
     UNION ALL
     (
@@ -246,9 +278,27 @@ $openLoansSql = "
             st.phone AS client_phone,
             st.ceo_name AS organization_name
         FROM loan l
-        INNER JOIN startups st ON l.client_id = st.startup_id
+        INNER JOIN startups st ON l.client_id = st.startup_id AND l.organisation_id IS NULL
         WHERE l.status IN ('OUTSTANDING','OVERDUE','ACTIVE','APPROVED')
-        AND COALESCE(l.loan_balance,0) > 0
+        AND COALESCE(l.loan_balance,0) > 0{$openScope}
+    )
+    UNION ALL
+    (
+        SELECT 
+            l.id AS loan_id,
+            l.client_id,
+            l.amount,
+            l.interest,
+            l.loan_balance,
+            l.status,
+            'organisation' AS client_type,
+            org.company_name AS client_name,
+            org.phone AS client_phone,
+            org.ceo_name AS organization_name
+        FROM loan l
+        INNER JOIN organisations org ON l.organisation_id = org.id
+        WHERE l.status IN ('OUTSTANDING','OVERDUE','ACTIVE','APPROVED')
+        AND COALESCE(l.loan_balance,0) > 0{$openScope}
     )
     ORDER BY loan_id DESC
 ";
@@ -357,6 +407,7 @@ if ($openRes) {
                             <option value="customer" <?= $type_filter === 'customer' ? 'selected' : '' ?>>Customers</option>
                             <option value="member" <?= $type_filter === 'member' ? 'selected' : '' ?>>Members / Staff</option>
                             <option value="startup" <?= $type_filter === 'startup' ? 'selected' : '' ?>>Startups</option>
+                            <option value="organisation" <?= $type_filter === 'organisation' ? 'selected' : '' ?>>Organisations</option>
                         </select>
                     </div>
 
@@ -485,7 +536,7 @@ if ($openRes) {
                                 $clientType = (string)($row['client_type'] ?? '');
                                 $clientName = trim(($row['fname'] ?? '') . ' ' . ($row['lname'] ?? ''));
 
-                                if ($clientType === 'startup') {
+                                if (in_array($clientType, ['startup', 'organisation'], true)) {
                                     $clientName = $row['organization_name'] ?: ($row['fname'] ?? 'Startup');
                                 }
 

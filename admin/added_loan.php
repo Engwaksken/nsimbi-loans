@@ -8,6 +8,8 @@ require_once __DIR__ . '/../includes/loan_workflow.php';
 date_default_timezone_set('Africa/Nairobi');
 
 $client = mysqli_real_escape_string($conn, $_REQUEST['user_id']);
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+officer_require_client($conn, 'customer', (int)$client);
 $amount = floatval($_REQUEST['amount']);
 $loanPeriod = intval($_REQUEST['loan_period']);
 $interestRate = 0; // initialize

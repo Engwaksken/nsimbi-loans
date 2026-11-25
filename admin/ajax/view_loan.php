@@ -5,6 +5,9 @@ if (!isset($_SESSION['logged_in'])) { http_response_code(403); exit; }
 $id = (int)($_GET['id']??0);
 $loan = $conn->query("SELECT * FROM loan WHERE id=$id LIMIT 1")->fetch_assoc();
 if (!$loan) { echo '<div class="alert alert-danger">Loan not found.</div>'; exit; }
+// Loan officers may only open their own loans.
+require_once __DIR__ . '/../../includes/officer_assignment.php';
+officer_require_loan($conn, $id);
 $cid = (int)$loan['client_id'];
 $cfect = null; $ctype = 'Unknown';
 // Organisation loans first: organisation ids overlap user ids.

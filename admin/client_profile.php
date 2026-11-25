@@ -5,6 +5,12 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require "db.php";
 require_once dirname(__DIR__) . '/includes/loan_offers.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+// Staff only.
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    http_response_code(403);
+    exit('Not authorized.');
+}
 loan_offers_ensure_schema($conn);
 
 function h($v): string {
@@ -42,6 +48,7 @@ if ($user_id <= 0) {
     echo 'Invalid client selected.';
     exit;
 }
+officer_require_client($conn, 'customer', $user_id);
 
 /**
  * Fetch every client-detail column from both tables (excluding the two

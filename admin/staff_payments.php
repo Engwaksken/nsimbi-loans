@@ -40,8 +40,9 @@ $phead = "STAFF LOAN PAYMENTS";
                     user.lname
                   FROM payments
                   JOIN loan ON payments.loan_id = loan.id
-                  JOIN members ON loan.client_id = members.user_id
+                  JOIN members ON loan.client_id = members.user_id AND loan.organisation_id IS NULL
                   JOIN user ON members.user_id = user.id
+                  WHERE 1 = 1" . officer_loan_sql('loan') . "
                   ORDER BY payments.id DESC
                 ";
 

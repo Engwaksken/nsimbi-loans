@@ -8,7 +8,9 @@ $lfect = null;
 $logfetch = ['loan_count' => 0];
 
 if ($clientId > 0) {
-    
+    // Loan officers may only issue loans to their own clients.
+    officer_require_client($conn, 'customer', $clientId);
+
     $query = "
         SELECT customers.*, user.fname AS fname, user.lname AS lname
         FROM customers 
@@ -23,7 +25,7 @@ if ($clientId > 0) {
         $stmt->close();
     }
 
-    $loanQuery = "SELECT COUNT(*) AS loan_count FROM loan WHERE client_id = ?";
+    $loanQuery = "SELECT COUNT(*) AS loan_count FROM loan WHERE client_id = ? AND organisation_id IS NULL";
     if ($stmt2 = $conn->prepare($loanQuery)) {
         $stmt2->bind_param("i", $clientId);
         $stmt2->execute();

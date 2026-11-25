@@ -6,8 +6,8 @@ $sql = "
     SELECT u.id AS user_id, u.fname, u.lname, c.phone
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
-    LEFT JOIN loan l ON l.client_id = u.id  AND l.status = 'CLEARED'
-    WHERE u.status = 1 AND l.id IS NULL
+    LEFT JOIN loan l ON l.client_id = u.id  AND l.status = 'CLEARED' AND l.organisation_id IS NULL
+    WHERE u.status = 1 AND l.id IS NULL" . officer_client_sql('c') . "
     ORDER BY u.fname ASC
 ";
 

@@ -15,7 +15,8 @@ $sql = "
     INNER JOIN loan l 
         ON l.client_id = u.id
        AND l.status = 'CLEARED'
-    WHERE u.status = 1
+       AND l.organisation_id IS NULL
+    WHERE u.status = 1" . officer_client_sql('m') . "
     ORDER BY u.fname ASC
 ";
 

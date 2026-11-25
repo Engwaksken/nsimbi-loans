@@ -1,6 +1,15 @@
 <?php
 session_start();
 require "../db.php";
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
+
+// Staff only, for every action.
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'message' => 'Not authorized.']);
+    exit;
+}
 
 function e($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -67,6 +76,14 @@ if ($userId <= 0 && !in_array($action, ['update'], true)) {
 
 if (in_array($action, ['edit', 'update', 'delete'], true) && !can_manage_staff()) {
     json_response(false, 'Not authorized for this action.');
+}
+
+// Loan officers may only see or change their own staff borrowers.
+if ($userId > 0) {
+    officer_require_client($conn, 'member', $userId);
+}
+if ($action === 'update' && (int)($_POST['staff'] ?? 0) > 0) {
+    officer_require_client($conn, 'member', (int)$_POST['staff']);
 }
 
 /* VIEW STAFF */

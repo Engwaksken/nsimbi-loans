@@ -2,6 +2,17 @@
 declare(strict_types=1);
 
 require 'db.php';
+// The PDF export runs before nav-head.php, so load the session and the
+// officer scope here: loan officers only get their own loans.
+if (session_status() === PHP_SESSION_NONE) session_start();
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+
+// Staff only, checked here because the PDF export runs before nav-head.php.
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    header('Location: ../login.php');
+    exit;
+}
+organisations_ensure_table($conn);
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -115,6 +126,7 @@ function typeBadge(string $t): string
         'customer' => 'badge-primary',
         'member', 'staff' => 'badge-purple',
         'startup' => 'badge-warning',
+        'organisation' => 'badge-info',
         default => 'badge-muted',
     };
 }
@@ -148,7 +160,7 @@ $allowedStatuses = [
  */
 if ($type === 'staff') $type = 'member';
 
-$allowedTypes = ['all', 'customer', 'member', 'startup'];
+$allowedTypes = ['all', 'customer', 'member', 'startup', 'organisation'];
 
 if (!in_array($status, $allowedStatuses, true)) $status = 'all';
 if (!in_array($type, $allowedTypes, true)) $type = 'all';
@@ -165,6 +177,10 @@ function buildWhere(string $source, string $status, string $from, string $to, st
     $where = [];
     $params = [];
     $types = '';
+
+    if (officer_scope_id() > 0) {
+        $where[] = 'l.assigned_officer_id = ' . officer_scope_id();
+    }
 
     if ($status !== 'all') {
         $where[] = 'l.status = ?';
@@ -282,7 +298,7 @@ $selCustomer = "
         COALESCE(p.report_total_paid, 0) AS report_total_paid,
         COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
-    INNER JOIN customers c ON l.client_id = c.user_id
+    INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON c.user_id = u.id
     LEFT JOIN ($paymentSubquery) p ON p.loan_id = l.id
     {$cw['sql']}
@@ -305,7 +321,7 @@ $selStaff = "
         COALESCE(p.report_total_paid, 0) AS report_total_paid,
         COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
-    INNER JOIN members m ON l.client_id = m.user_id
+    INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON m.user_id = u.id
     LEFT JOIN ($paymentSubquery) p ON p.loan_id = l.id
     {$mw['sql']}
@@ -328,7 +344,30 @@ $selStartup = "
         COALESCE(p.report_total_paid, 0) AS report_total_paid,
         COALESCE(p.report_payment_count, 0) AS report_payment_count
     FROM loan l
-    INNER JOIN startups st ON l.client_id = st.{$startupIdColumn}
+    INNER JOIN startups st ON l.client_id = st.{$startupIdColumn} AND l.organisation_id IS NULL
+    LEFT JOIN ($paymentSubquery) p ON p.loan_id = l.id
+    {$sw['sql']}
+";
+
+// Organisation loans (loan.organisation_id); same columns and filters as startups.
+$selOrganisation = "
+    SELECT 
+        l.*,
+        'organisation' AS report_client_type,
+        st.ceo_name AS fname,
+        '' AS lname,
+        st.email AS user_email,
+        st.phone AS client_phone,
+        '' AS nin,
+        st.company_name AS business_name,
+        st.company_location AS location,
+        '' AS district,
+        0 AS credit_score,
+        0 AS client_loan_limit,
+        COALESCE(p.report_total_paid, 0) AS report_total_paid,
+        COALESCE(p.report_payment_count, 0) AS report_payment_count
+    FROM loan l
+    INNER JOIN organisations st ON l.organisation_id = st.id
     LEFT JOIN ($paymentSubquery) p ON p.loan_id = l.id
     {$sw['sql']}
 ";
@@ -355,10 +394,16 @@ switch ($type) {
         $bindT = $sw['types'];
         break;
 
+    case 'organisation':
+        $baseSql = $selOrganisation;
+        $bindP = $sw['params'];
+        $bindT = $sw['types'];
+        break;
+
     default:
-        $baseSql = "($selCustomer) UNION ALL ($selStaff) UNION ALL ($selStartup)";
-        $bindP = array_merge($cw['params'], $mw['params'], $sw['params']);
-        $bindT = $cw['types'] . $mw['types'] . $sw['types'];
+        $baseSql = "($selCustomer) UNION ALL ($selStaff) UNION ALL ($selStartup) UNION ALL ($selOrganisation)";
+        $bindP = array_merge($cw['params'], $mw['params'], $sw['params'], $sw['params']);
+        $bindT = $cw['types'] . $mw['types'] . $sw['types'] . $sw['types'];
         break;
 }
 
@@ -400,7 +445,8 @@ try {
     $byType = [
         'customer' => [],
         'member' => [],
-        'startup' => []
+        'startup' => [],
+        'organisation' => []
     ];
 
     while ($row = $typeStatsRes->fetch_assoc()) {
@@ -982,6 +1028,7 @@ require 'nav-head.php';
                             <option value="customer" <?= $type === 'customer' ? 'selected' : '' ?>>Customers</option>
                             <option value="member" <?= $type === 'member' ? 'selected' : '' ?>>Members / Staff</option>
                             <option value="startup" <?= $type === 'startup' ? 'selected' : '' ?>>Startups</option>
+                            <option value="organisation" <?= $type === 'organisation' ? 'selected' : '' ?>>Organisations</option>
                         </select>
                     </div>
                 </div>

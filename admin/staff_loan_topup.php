@@ -10,6 +10,10 @@ if ($clientId <= 0 || $loanId <= 0) {
     exit;
 }
 
+// Loan officers may only top up their own clients' loans.
+officer_require_loan($conn, $loanId);
+officer_require_client($conn, 'member', $clientId);
+
 // Fetch staff details
 $client = null;
 $loan = null;
@@ -32,7 +36,7 @@ if ($stmt = $conn->prepare($clientQuery)) {
 $loanQuery = "
     SELECT *
     FROM loan
-    WHERE id = ? AND client_id = ? AND status = 'OUTSTANDING'
+    WHERE id = ? AND client_id = ? AND organisation_id IS NULL AND status = 'OUTSTANDING'
     LIMIT 1
 ";
 

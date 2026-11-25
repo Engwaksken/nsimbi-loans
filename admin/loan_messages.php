@@ -13,6 +13,18 @@ function h($v){
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
+// Loan officers only count messages about their own loans (or, when a
+// message has no loan, their own customers/members).
+$officerId = officer_scope_id();
+$officerMessageSql = $officerId > 0 ? "
+WHERE (
+    loan_id IN (SELECT id FROM loan WHERE assigned_officer_id = {$officerId})
+    OR (COALESCE(loan_id, 0) = 0 AND (
+        user_id IN (SELECT user_id FROM customers WHERE assigned_officer_id = {$officerId})
+        OR user_id IN (SELECT user_id FROM members WHERE assigned_officer_id = {$officerId})
+    ))
+)" : '';
+
 // ===== STATS =====
 $statsSql = "
 SELECT
@@ -21,6 +33,7 @@ SUM(is_read=1) total_read,
 SUM(is_read=0) total_unread,
 COUNT(DISTINCT sender_name) total_senders
 FROM loan_messages
+{$officerMessageSql}
 ";
 
 $stats = $conn->query($statsSql)->fetch_assoc();

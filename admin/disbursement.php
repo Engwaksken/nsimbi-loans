@@ -51,11 +51,12 @@ function methodLabel(?string $method): string
 $pendingSql = "
     SELECT
         l.*,
-        COALESCE(NULLIF(u.fname, ''), '') AS client_fname,
+        COALESCE(org.company_name, NULLIF(u.fname, ''), '') AS client_fname,
         COALESCE(NULLIF(u.lname, ''), '') AS client_lname,
-        u.email AS client_email
+        COALESCE(org.email, u.email) AS client_email
     FROM loan l
-    LEFT JOIN user u ON u.id = l.client_id
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN user u ON u.id = l.client_id AND l.organisation_id IS NULL
     WHERE l.status = 'APPROVED'
     ORDER BY l.id DESC
 ";
@@ -78,12 +79,13 @@ $pendingTopupSql = "
         l.amount AS current_amount,
         l.loan_balance AS current_balance,
         l.due_date AS current_due_date,
-        COALESCE(NULLIF(u.fname, ''), '') AS client_fname,
+        COALESCE(org.company_name, NULLIF(u.fname, ''), '') AS client_fname,
         COALESCE(NULLIF(u.lname, ''), '') AS client_lname,
-        u.email AS client_email
+        COALESCE(org.email, u.email) AS client_email
     FROM loan_topup_requests t
     INNER JOIN loan l ON l.id = t.loan_id
-    LEFT JOIN user u ON u.id = t.client_id
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN user u ON u.id = t.client_id AND l.organisation_id IS NULL
     WHERE t.status = 'APPROVED'
     ORDER BY t.id DESC
 ";
@@ -103,10 +105,11 @@ $auditTrailByTopup = getTopupAuditTrailBulk($conn, array_column($pendingTopups, 
 $recentSql = "
     SELECT
         l.*,
-        COALESCE(NULLIF(u.fname, ''), '') AS client_fname,
+        COALESCE(org.company_name, NULLIF(u.fname, ''), '') AS client_fname,
         COALESCE(NULLIF(u.lname, ''), '') AS client_lname
     FROM loan l
-    LEFT JOIN user u ON u.id = l.client_id
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN user u ON u.id = l.client_id AND l.organisation_id IS NULL
     WHERE l.status = 'OUTSTANDING' AND l.disbursed_at IS NOT NULL
     ORDER BY l.disbursed_at DESC
     LIMIT 25
@@ -125,10 +128,12 @@ if ($recentResult) {
 $recentTopupSql = "
     SELECT
         t.*,
-        COALESCE(NULLIF(u.fname, ''), '') AS client_fname,
+        COALESCE(org.company_name, NULLIF(u.fname, ''), '') AS client_fname,
         COALESCE(NULLIF(u.lname, ''), '') AS client_lname
     FROM loan_topup_requests t
-    LEFT JOIN user u ON u.id = t.client_id
+    LEFT JOIN loan l ON l.id = t.loan_id
+    LEFT JOIN organisations org ON org.id = l.organisation_id
+    LEFT JOIN user u ON u.id = t.client_id AND l.organisation_id IS NULL
     WHERE t.status = 'DISBURSED' AND t.disbursed_at IS NOT NULL
     ORDER BY t.disbursed_at DESC
     LIMIT 25

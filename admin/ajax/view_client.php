@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__.'/../db.php';
+require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
 if (session_status()===PHP_SESSION_NONE) session_start();
 if (!isset($_SESSION['logged_in'])) { http_response_code(403); exit; }
 $id=(int)($_GET['id']??0);
+officer_require_client($conn, 'customer', $id);
 $c=$conn->query("SELECT u.*,c.* FROM customers c INNER JOIN user u ON c.user_id=u.id WHERE u.id=$id LIMIT 1")->fetch_assoc();
 if (!$c) { echo '<div class="alert alert-danger">Client not found.</div>'; exit; }
 $ls=$conn->query("SELECT COUNT(*) AS tot,COALESCE(SUM(amount),0) AS amt,COALESCE(SUM(loan_balance),0) AS bal,SUM(status='CLEARED') AS clr,SUM(status='OUTSTANDING') AS out,SUM(status='OVERDUE') AS ovr FROM loan WHERE client_id=$id AND status!='PENDING'")->fetch_assoc();

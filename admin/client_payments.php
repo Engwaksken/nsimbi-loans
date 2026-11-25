@@ -42,6 +42,7 @@ $phead = "CLIENT LOAN PAYMENTS";
                   JOIN loan ON payments.loan_id = loan.id
                   JOIN customers ON loan.client_id = customers.user_id
                   JOIN user ON customers.user_id = user.id
+                  WHERE 1 = 1" . officer_client_sql('customers') . "
                   ORDER BY payments.id DESC
                 ";
 

@@ -66,7 +66,7 @@ $sql = "
     LEFT JOIN user u ON u.id = t.client_id
     LEFT JOIN customers c ON c.user_id = t.client_id
     LEFT JOIN user officer ON officer.id = t.assigned_officer_id
-    WHERE t.status IN ('PENDING', 'INFO_PROVIDED')
+    WHERE t.status IN ('PENDING', 'INFO_PROVIDED')" . officer_loan_sql('l') . "
     ORDER BY t.id DESC
 ";
 

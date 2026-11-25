@@ -11,6 +11,7 @@ if (!isset($_REQUEST['user_id']) || trim((string)$_REQUEST['user_id']) === '') {
 }
 
 $user_id = (int)$_REQUEST['user_id'];
+officer_require_client($conn, 'member', $user_id);
 $role    = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
 
 function h($value): string {

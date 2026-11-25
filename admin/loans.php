@@ -87,7 +87,7 @@ if ($filter === 'cleared') {
     $whereParts[] = "l.status = 'ACTIVE'";
 }
 
-$wsql = implode(" AND ", $whereParts);
+$wsql = implode(" AND ", $whereParts) . officer_loan_sql('l');
 
 $customerSearch = $search !== ''
     ? "AND (u.fname LIKE '$likeSearch' OR u.lname LIKE '$likeSearch' OR c.phone LIKE '$likeSearch' OR COALESCE(c.email, u.email) LIKE '$likeSearch' OR c.business_name LIKE '$likeSearch')"

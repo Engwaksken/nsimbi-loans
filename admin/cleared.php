@@ -45,7 +45,7 @@ if (!in_array($typeFilter, $allowedTypes, true)) {
 $perPage = 15;
 $page = max(1, (int)($_GET['page'] ?? 1));
 
-$whereStatus = "l.status = 'CLEARED'";
+$whereStatus = "l.status = 'CLEARED'" . officer_loan_sql('l');
 
 $searchCustomer = '';
 $searchMember = '';

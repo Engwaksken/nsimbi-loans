@@ -28,17 +28,24 @@ if (!$loan_result || mysqli_num_rows($loan_result) === 0) {
 }
 
 $loan = mysqli_fetch_assoc($loan_result);
+// Loan officers may only open their own loans.
+officer_require_loan($conn, $loan_id);
 $client_id = (int)$loan['client_id'];
 
-// Fetch client name
+// Fetch client name (organisation loans by loan.organisation_id: organisation
+// ids overlap user ids, so they must not be looked up as customers/members).
 $cfect = [];
+$organisationId = (int)($loan['organisation_id'] ?? 0);
+$organisation = $organisationId > 0 ? organisation_find($conn, $organisationId) : null;
 $sql1 = "SELECT u.fname, u.lname 
          FROM customers c 
          INNER JOIN user u ON c.user_id = u.id 
          WHERE c.user_id = $client_id LIMIT 1";
 $result1 = mysqli_query($conn, $sql1);
 
-if ($result1 && mysqli_num_rows($result1) > 0) {
+if ($organisationId > 0) {
+    // Organisation loan: no customer/member lookup.
+} elseif ($result1 && mysqli_num_rows($result1) > 0) {
     $cfect = mysqli_fetch_assoc($result1);
 } else {
     $sql2 = "SELECT u.fname, u.lname 
@@ -54,6 +61,9 @@ if ($result1 && mysqli_num_rows($result1) > 0) {
 $full_name = (!empty($cfect['fname']) && !empty($cfect['lname']))
     ? htmlspecialchars($cfect['fname'] . ' ' . $cfect['lname'])
     : 'N/A';
+if ($organisationId > 0) {
+    $full_name = htmlspecialchars((string)($organisation['company_name'] ?? '') ?: 'Organisation #' . $organisationId);
+}
 
 $amount = (float)$loan['amount'];
 $interest_rate = (float)$loan['interest_rate'];

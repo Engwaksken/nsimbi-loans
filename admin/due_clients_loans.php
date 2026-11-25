@@ -7,7 +7,7 @@ $phead = "Due Clients Loans";
 
 $sql = "SELECT * FROM loan 
         WHERE status = 'OUTSTANDING' 
-          AND due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+          AND due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY)" . officer_loan_sql('loan') . "
         ORDER BY due_date ASC, id DESC";
 
 $lget = mysqli_query($conn, $sql);

@@ -57,9 +57,15 @@ function typeBadge(string $type): string
         'customer' => 'badge-primary',
         'member'   => 'badge-purple',
         'startup'  => 'badge-warning',
+        'organisation' => 'badge-info',
         default    => 'badge-muted',
     };
 }
+
+// Loan officers only count their own loans, payments and clients ('' for everyone else).
+$loanScope = officer_loan_sql('loan');
+$lScope = officer_loan_sql('l');
+$paymentScope = $lScope !== '' ? " AND loan_id IN (SELECT l.id FROM loan l WHERE 1 = 1{$lScope})" : '';
 
 /*
 |--------------------------------------------------------------------------
@@ -69,89 +75,92 @@ function typeBadge(string $type): string
 $total_loans = scalarValue($conn, "
     SELECT COALESCE(SUM(amount), 0) AS v 
     FROM loan 
-    WHERE status != 'PENDING'
+    WHERE status != 'PENDING'{$loanScope}
 ");
 
 $total_interest = scalarValue($conn, "
     SELECT COALESCE(SUM(interest), 0) AS v 
     FROM loan 
-    WHERE status != 'PENDING'
+    WHERE status != 'PENDING'{$loanScope}
 ");
 
 $outstanding = scalarValue($conn, "
     SELECT COALESCE(SUM(loan_balance), 0) AS v 
     FROM loan 
-    WHERE status = 'OUTSTANDING'
+    WHERE status = 'OUTSTANDING'{$loanScope}
 ");
 
 $cleared_amt = scalarValue($conn, "
     SELECT COALESCE(SUM(amount), 0) AS v 
     FROM loan 
-    WHERE status = 'CLEARED'
+    WHERE status = 'CLEARED'{$loanScope}
 ");
 
 $overdue_amt = scalarValue($conn, "
     SELECT COALESCE(SUM(amount), 0) AS v 
     FROM loan 
-    WHERE status = 'OVERDUE'
+    WHERE status = 'OVERDUE'{$loanScope}
 ");
 
 $total_paid = scalarValue($conn, "
     SELECT COALESCE(SUM(amount), 0) AS v 
     FROM payments 
-    WHERE status = 'SUCCESSFUL'
+    WHERE status = 'SUCCESSFUL'{$paymentScope}
 ");
 
 $pending_count = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM loan 
-    WHERE status = 'PENDING'
+    WHERE status = 'PENDING'{$loanScope}
 ");
 
 $overdue_count = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM loan 
-    WHERE status = 'OVERDUE'
+    WHERE status = 'OVERDUE'{$loanScope}
 ");
 
 $cleared_count = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM loan 
-    WHERE status = 'CLEARED'
+    WHERE status = 'CLEARED'{$loanScope}
 ");
 
 $today_loans = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM loan 
-    WHERE DATE(datetime) = CURDATE()
+    WHERE DATE(datetime) = CURDATE(){$loanScope}
 ");
 
 $today_payments = scalarValue($conn, "
     SELECT COALESCE(SUM(amount), 0) AS v 
     FROM payments 
     WHERE DATE(datetime) = CURDATE() 
-    AND status = 'SUCCESSFUL'
+    AND status = 'SUCCESSFUL'{$paymentScope}
 ");
 
 $total_customers = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM customers
+    WHERE 1 = 1" . officer_client_sql('customers') . "
 ");
 
 $active_customers = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM customers 
-    WHERE active = '1'
+    WHERE active = '1'" . officer_client_sql('customers') . "
 ");
 
 $total_members = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM members
+    WHERE 1 = 1" . officer_client_sql('members') . "
 ");
 
 $total_startups = scalarValue($conn, "
     SELECT COUNT(*) AS v 
     FROM startups
+    WHERE 1 = 1" . officer_client_sql('startups') . "
 ");
 
 /*
@@ -167,8 +176,9 @@ $eligible_customer_count = scalarValue($conn, "
         SELECT 1 
         FROM loan l
         WHERE l.client_id = c.user_id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('c') . "
 ");
 
 $eligible_member_count = scalarValue($conn, "
@@ -178,8 +188,9 @@ $eligible_member_count = scalarValue($conn, "
         SELECT 1 
         FROM loan l
         WHERE l.client_id = m.user_id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('m') . "
 ");
 
 $eligible_startup_count = scalarValue($conn, "
@@ -189,8 +200,9 @@ $eligible_startup_count = scalarValue($conn, "
         SELECT 1 
         FROM loan l
         WHERE l.client_id = s.id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('s') . "
 ");
 
 $total_eligible_new_loan = $eligible_customer_count + $eligible_member_count + $eligible_startup_count;
@@ -211,9 +223,9 @@ $recentLoansSql = "
             c.phone AS client_phone,
             c.business_name AS organization_name
         FROM loan l
-        INNER JOIN customers c ON l.client_id = c.user_id
+        INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON c.user_id = u.id
-        WHERE l.status != 'PENDING'
+        WHERE l.status != 'PENDING'{$lScope}
     )
 
     UNION ALL
@@ -228,9 +240,9 @@ $recentLoansSql = "
             m.phone AS client_phone,
             m.employer AS organization_name
         FROM loan l
-        INNER JOIN members m ON l.client_id = m.user_id
+        INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON m.user_id = u.id
-        WHERE l.status != 'PENDING'
+        WHERE l.status != 'PENDING'{$lScope}
     )
 
     UNION ALL
@@ -245,8 +257,24 @@ $recentLoansSql = "
             st.phone AS client_phone,
             st.company_name AS organization_name
         FROM loan l
-        INNER JOIN startups st ON l.client_id = st.id
-        WHERE l.status != 'PENDING'
+        INNER JOIN startups st ON l.client_id = st.id AND l.organisation_id IS NULL
+        WHERE l.status != 'PENDING'{$lScope}
+    )
+
+    UNION ALL
+
+    (
+        SELECT 
+            l.*,
+            'organisation' AS client_type,
+            org.ceo_name AS fname,
+            '' AS lname,
+            org.email AS client_email,
+            org.phone AS client_phone,
+            org.company_name AS organization_name
+        FROM loan l
+        INNER JOIN organisations org ON l.organisation_id = org.id
+        WHERE l.status != 'PENDING'{$lScope}
     )
 
     ORDER BY id DESC
@@ -278,8 +306,9 @@ $recentPaymentsSql = "
             c.business_name AS organization_name
         FROM payments p
         INNER JOIN loan l ON p.loan_id = l.id
-        INNER JOIN customers c ON l.client_id = c.user_id
+        INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON c.user_id = u.id
+        WHERE 1 = 1{$lScope}
     )
 
     UNION ALL
@@ -294,8 +323,9 @@ $recentPaymentsSql = "
             m.employer AS organization_name
         FROM payments p
         INNER JOIN loan l ON p.loan_id = l.id
-        INNER JOIN members m ON l.client_id = m.user_id
+        INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
         INNER JOIN user u ON m.user_id = u.id
+        WHERE 1 = 1{$lScope}
     )
 
     UNION ALL
@@ -310,7 +340,24 @@ $recentPaymentsSql = "
             st.company_name AS organization_name
         FROM payments p
         INNER JOIN loan l ON p.loan_id = l.id
-        INNER JOIN startups st ON l.client_id = st.id
+        INNER JOIN startups st ON l.client_id = st.id AND l.organisation_id IS NULL
+        WHERE 1 = 1{$lScope}
+    )
+
+    UNION ALL
+
+    (
+        SELECT 
+            p.*,
+            l.id AS loan_id,
+            'organisation' AS client_type,
+            org.ceo_name AS fname,
+            '' AS lname,
+            org.company_name AS organization_name
+        FROM payments p
+        INNER JOIN loan l ON p.loan_id = l.id
+        INNER JOIN organisations org ON l.organisation_id = org.id
+        WHERE 1 = 1{$lScope}
     )
 
     ORDER BY id DESC
@@ -350,8 +397,9 @@ $ec = $conn->query("
     WHERE NOT EXISTS (
         SELECT 1 FROM loan l
         WHERE l.client_id = c.user_id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('c') . "
     ORDER BY u.fname ASC, u.lname ASC
     LIMIT 100
 ");
@@ -375,8 +423,9 @@ $em = $conn->query("
     WHERE NOT EXISTS (
         SELECT 1 FROM loan l
         WHERE l.client_id = m.user_id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('m') . "
     ORDER BY u.fname ASC, u.lname ASC
     LIMIT 100
 ");
@@ -399,8 +448,9 @@ $es = $conn->query("
     WHERE NOT EXISTS (
         SELECT 1 FROM loan l
         WHERE l.client_id = s.id
+        AND l.organisation_id IS NULL
         AND l.status IN ('PENDING', 'OUTSTANDING', 'OVERDUE', 'ACTIVE', 'APPROVED')
-    )
+    )" . officer_client_sql('s') . "
     ORDER BY s.company_name ASC
     LIMIT 100
 ");
@@ -650,7 +700,7 @@ if ($es) {
                     $clientType = (string)($loan['client_type'] ?? '');
                     $clientName = trim(($loan['fname'] ?? '') . ' ' . ($loan['lname'] ?? ''));
 
-                    if ($clientType === 'startup') {
+                    if (in_array($clientType, ['startup', 'organisation'], true)) {
                         $clientName = $loan['organization_name'] ?: ($loan['fname'] ?? 'Startup');
                     }
 
@@ -794,7 +844,7 @@ if ($es) {
                     $payType = (string)($pay['client_type'] ?? '');
                     $payName = trim(($pay['fname'] ?? '') . ' ' . ($pay['lname'] ?? ''));
 
-                    if ($payType === 'startup') {
+                    if (in_array($payType, ['startup', 'organisation'], true)) {
                         $payName = $pay['organization_name'] ?: ($pay['fname'] ?? 'Startup');
                     }
 

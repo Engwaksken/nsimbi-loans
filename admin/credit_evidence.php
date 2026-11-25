@@ -11,6 +11,7 @@ declare(strict_types=1);
 $phead = 'Credit Documents';
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/credit_scoring.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -116,6 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ---------- Data ---------- */
 credit_ensure_schema($conn);
 $where = '1=1';
+if (officer_scope_id() > 0) {
+    // Loan officers only see documents from their own clients (business clients or staff borrowers).
+    $where .= ' AND (EXISTS (SELECT 1 FROM customers oc WHERE oc.user_id = e.user_id' . officer_client_sql('oc') . ')'
+        . ' OR EXISTS (SELECT 1 FROM members om WHERE om.user_id = e.user_id' . officer_client_sql('om') . '))';
+}
 $types = '';
 $params = [];
 if ($search !== '') {

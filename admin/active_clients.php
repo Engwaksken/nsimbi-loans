@@ -13,7 +13,7 @@ $lget = mysqli_query($conn, "
     SELECT user.id AS user_id, user.fname, user.lname, user.email, user.status, customers.*
     FROM customers
     INNER JOIN user ON customers.user_id = user.id
-    WHERE customers.active = 1
+    WHERE customers.active = 1" . officer_client_sql('customers') . "
     ORDER BY customers.id DESC
 ");
 

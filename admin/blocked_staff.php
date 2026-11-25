@@ -4,6 +4,7 @@ $table_name = "MEMBERS";
 
   $lget = mysqli_query($conn, " SELECT user.fname, user.lname, user.email, user.status, members.* FROM members
     INNER JOIN user ON members.user_id = user.id AND user.status=0
+    WHERE 1 = 1" . officer_client_sql('members') . "
     ORDER BY members.id DESC
 ");
 

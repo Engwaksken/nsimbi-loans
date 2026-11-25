@@ -22,6 +22,8 @@ if (!isset($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [
     header('Location: ../login.php');
     exit;
 }
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+organisations_ensure_table($conn);
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -112,6 +114,8 @@ try {
     $s->execute();
     $loan = $s->get_result()->fetch_assoc() ?: null;
     $s->close();
+    // Loan officers may only open receipts for their own loans.
+    officer_require_loan($conn, $loanId);
 
     if (r_table_exists($conn, 'receipts')) {
         $s = $conn->prepare('SELECT * FROM receipts WHERE payment_id = ? ORDER BY id DESC LIMIT 1');
@@ -121,7 +125,15 @@ try {
         $s->close();
     }
 
-    // Who paid: customer, member/staff or startup (startup loans store startups.startup_id).
+    // Who paid: organisation (loan.organisation_id, checked first: organisation
+    // ids overlap user ids), customer, member/staff or startup (startup loans
+    // store startups.startup_id).
+    $organisation = $loan ? organisation_find($conn, (int)($loan['organisation_id'] ?? 0)) : null;
+    if ($loan && $organisation) {
+        $client = ['name' => trim((string)$organisation['company_name']) ?: 'Organisation #' . (int)$organisation['id'],
+            'phone' => (string)($organisation['phone'] ?? ''), 'email' => (string)($organisation['email'] ?? ''),
+            'org' => (string)($organisation['ceo_name'] ?? ''), 'type' => 'organisation'];
+    }
     if ($loan) {
         $clientId = (int)$loan['client_id'];
         $type = strtolower(trim((string)($loan['client_type'] ?? '')));
@@ -133,7 +145,8 @@ try {
             'startup'  => "SELECT COALESCE(NULLIF(st.ceo_name, ''), st.company_name) AS name, st.phone, st.email, st.company_name AS org
                            FROM startups st WHERE st.startup_id = ? LIMIT 1",
         ];
-        $order = isset($lookups[$type]) ? [$type] : array_keys($lookups);
+        $isOrganisationLoan = (int)($loan['organisation_id'] ?? 0) > 0;
+        $order = $isOrganisationLoan ? [] : (isset($lookups[$type]) ? [$type] : array_keys($lookups));
         foreach ($order as $t) {
             try {
                 $s = $conn->prepare($lookups[$t]);
@@ -151,7 +164,7 @@ try {
             }
         }
         if ($client['name'] === '') {
-            $client['name'] = 'Client #' . $clientId;
+            $client['name'] = $isOrganisationLoan ? 'Organisation #' . (int)$loan['organisation_id'] : 'Client #' . $clientId;
         }
 
         // Confirmed payments on this loan before and after this one, to show

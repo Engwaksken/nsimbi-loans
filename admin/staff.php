@@ -11,13 +11,13 @@ $page   = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
 
-$where = "";
+$where = "WHERE 1 = 1" . officer_client_sql('members');
 $params = [];
 $types = "";
 
 if ($search !== "") {
-    $where = "
-        WHERE 
+    $where .= "
+        AND (
             user.fname LIKE ? OR
             user.lname LIKE ? OR
             user.email LIKE ? OR
@@ -26,7 +26,7 @@ if ($search !== "") {
             members.employer LIKE ? OR
             members.employment_status LIKE ? OR
             members.bank_name LIKE ? OR
-            members.bank_account LIKE ?
+            members.bank_account LIKE ?)
     ";
 
     $like = "%{$search}%";

@@ -131,6 +131,10 @@ try {
         die('Loan not found.');
     }
 
+    // Loan officers may only open their own loans (also covers ?export=pdf).
+    require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+    officer_require_loan($conn, $loan_id);
+
     $client_id = (int)($loan['client_id'] ?? 0);
 
     $clientType = 'Unknown';

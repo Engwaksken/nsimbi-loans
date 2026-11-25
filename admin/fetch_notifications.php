@@ -1,5 +1,31 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require "db.php";
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+
+// Staff only (same roles as the admin area).
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    http_response_code(403);
+    exit;
+}
+
+/** Loan officers: only messages about their own loans or clients. '' for others. */
+function officer_message_sql(): string
+{
+    $officerId = officer_scope_id();
+    if ($officerId <= 0) {
+        return '';
+    }
+    return "(
+        loan_id IN (SELECT id FROM loan WHERE assigned_officer_id = {$officerId})
+        OR (COALESCE(loan_id, 0) = 0 AND (
+            user_id IN (SELECT user_id FROM customers WHERE assigned_officer_id = {$officerId})
+            OR user_id IN (SELECT user_id FROM members WHERE assigned_officer_id = {$officerId})
+        ))
+    )";
+}
 
 function h($v){
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -12,16 +38,22 @@ $limit  = 10;
 $offset = ($page - 1) * $limit;
 
 // ===== WHERE =====
-$where = "";
+$conditions = [];
 $params = [];
 $types = "";
 
 if ($search !== '') {
-    $where = "WHERE sender_name LIKE ? OR message_type LIKE ? LIKE ?";
+    $conditions[] = "(sender_name LIKE ? OR message_type LIKE ? OR message LIKE ?)";
     $like = "%$search%";
     $params = [$like, $like, $like];
     $types = "sss";
 }
+
+if (officer_message_sql() !== '') {
+    $conditions[] = officer_message_sql();
+}
+
+$where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
 // ===== COUNT =====
 $countSql = "SELECT COUNT(*) total FROM loan_messages $where";

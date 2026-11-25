@@ -8,6 +8,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/credit_scoring.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 if (!isset($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
     http_response_code(403);
@@ -19,6 +20,8 @@ if (!$doc) {
     http_response_code(404);
     exit('Document not found.');
 }
+// The document's owner may be a business client or a staff borrower.
+officer_require_user($conn, (int)$doc['user_id']);
 
 if (!empty($doc['file_deleted_at'])) {
     http_response_code(410);

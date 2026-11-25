@@ -30,6 +30,10 @@ if (isset($_GET['loan_id']) && is_numeric($_GET['loan_id'])) {
 $wantsPdf = isset($_GET['export']) && $_GET['export'] === 'pdf';
 
 require $wantsPdf ? "db.php" : "nav-head.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 function h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -89,6 +93,7 @@ function render_invalid(string $message, bool $wantsPdf): void {
 if ($loan_id <= 0) {
     render_invalid('Loan ID missing or invalid.', $wantsPdf);
 }
+officer_require_loan($conn, $loan_id);
 
 /* =========================================================
    FETCH LOAN

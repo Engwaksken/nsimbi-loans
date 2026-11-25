@@ -100,7 +100,7 @@ function pm_recipients(mysqli $conn, array $me): array
     $rows = $conn->query("
         SELECT id, fname, lname, username, email, role
         FROM user
-        WHERE role IN ({$list})
+        WHERE role IN ({$list})" . pm_officer_borrower_sql($conn, $myRole, (int)$me['id']) . "
         ORDER BY role DESC, fname, lname
         LIMIT 2000
     ")->fetch_all(MYSQLI_ASSOC);
@@ -269,6 +269,33 @@ function pm_clean_body(string $body): string
 }
 
 /** Start a new conversation. Returns the thread id. */
+/**
+ * For a loan officer: SQL limiting user rows to their own clients (customers
+ * and staff borrowers with assigned_officer_id = them). '' for everyone else.
+ */
+function pm_officer_borrower_sql(mysqli $conn, int $role, int $userId): string
+{
+    if ($role !== 2 || $userId <= 0) {
+        return '';
+    }
+    $parts = [];
+    foreach (['customers', 'members'] as $table) {
+        try {
+            $res = $conn->query("SHOW COLUMNS FROM `{$table}` LIKE 'assigned_officer_id'");
+            if ($res && $res->num_rows > 0) {
+                $parts[] = "id IN (SELECT user_id FROM `{$table}` WHERE assigned_officer_id = {$userId})";
+            }
+        } catch (Throwable $e) {
+            // Table missing: nothing to add.
+        }
+    }
+    // Officer with no assignment columns yet: show no borrowers rather than all.
+    if (!$parts) {
+        return ' AND 1 = 0';
+    }
+    return $parts ? ' AND (' . implode(' OR ', $parts) . ')' : '';
+}
+
 function pm_send_new(mysqli $conn, array $me, int $recipientId, string $subject, string $body): int
 {
     $subject = trim(preg_replace('/\s+/', ' ', $subject));
@@ -285,6 +312,14 @@ function pm_send_new(mysqli $conn, array $me, int $recipientId, string $subject,
     $recipient = pm_user($conn, $recipientId);
     if (!$recipient || !pm_can_message((int)$me['role'], (int)$recipient['role'])) {
         throw new DomainException('Please choose a valid recipient.');
+    }
+    // Loan officers may only start conversations with their own clients.
+    $officerSql = pm_officer_borrower_sql($conn, (int)$me['role'], (int)$me['id']);
+    if ($officerSql !== '') {
+        $mine = $conn->query('SELECT 1 FROM user WHERE id = ' . (int)$recipientId . $officerSql . ' LIMIT 1');
+        if (!$mine || $mine->num_rows === 0) {
+            throw new DomainException('This client is assigned to another loan officer.');
+        }
     }
 
     $meId = (int)$me['id'];

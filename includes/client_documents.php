@@ -376,6 +376,20 @@ function client_limit_submit(mysqli $conn, int $userId, float $currentLimit, flo
 /** Loan officer assigned to the client's latest loan, else 0. */
 function client_assigned_officer(mysqli $conn, int $userId): int
 {
+    // The client's own officer (by district, includes/officer_assignment.php).
+    try {
+        $stmt = $conn->prepare('SELECT assigned_officer_id FROM customers WHERE user_id = ? LIMIT 1');
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $own = (int)($stmt->get_result()->fetch_assoc()['assigned_officer_id'] ?? 0);
+        $stmt->close();
+        if ($own > 0) {
+            return $own;
+        }
+    } catch (Throwable $e) {
+        // Column not added yet: fall back to the latest loan's officer.
+    }
+
     if (!function_exists('loan_table_has_column') || !loan_table_has_column($conn, 'loan', 'assigned_officer_id')) {
         return 0;
     }
