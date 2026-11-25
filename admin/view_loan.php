@@ -122,6 +122,9 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 $loan_id = (int)$_GET['id'];
 
 try {
+    require_once dirname(__DIR__) . '/includes/organisations.php';
+    organisations_ensure_table($conn);
+
     $loan = fetchOne($conn, "SELECT * FROM loan WHERE id = ? LIMIT 1", 'i', [$loan_id]);
 
     if (!$loan) {
@@ -134,8 +137,29 @@ try {
     $clientSource = 'unknown';
     $client = [];
 
+    /* ORGANISATION: loan.organisation_id = organisations.id. Checked first and
+       exclusively, because organisation ids overlap user ids. Shown with the
+       startup layout (company, CEO, contacts, location, status). */
+    $organisationId = (int)($loan['organisation_id'] ?? 0);
+    if ($organisationId > 0) {
+        $org = organisation_find($conn, $organisationId);
+        if ($org) {
+            $clientType = 'Organisation';
+            $clientSource = 'startup';
+            $client = [
+                'client_source'    => 'organisation',
+                'company_name'     => $org['company_name'],
+                'ceo_name'         => $org['ceo_name'],
+                'email'            => $org['email'],
+                'phone'            => $org['phone'],
+                'company_location' => $org['company_location'],
+                'startup_status'   => $org['status'],
+            ];
+        }
+    }
+
     /* CUSTOMER: loan.client_id = customers.user_id */
-    $customer = fetchOne($conn, "
+    $customer = $organisationId > 0 ? null : fetchOne($conn, "
         SELECT 
             'customer' AS client_source,
             u.id AS user_id,
@@ -172,7 +196,7 @@ try {
     }
 
     /* STAFF / MEMBER: loan.client_id = members.user_id */
-    if (!$client) {
+    if (!$client && $organisationId === 0) {
         $member = fetchOne($conn, "
             SELECT 
                 'member' AS client_source,
@@ -201,7 +225,7 @@ try {
     }
 
    
-    if (!$client) {
+    if (!$client && $organisationId === 0) {
         $startup = fetchOne($conn, "
             SELECT
                 'startup' AS client_source,

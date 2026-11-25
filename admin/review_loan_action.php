@@ -8,6 +8,7 @@ require_once __DIR__ . '/../php/mail-function.php';
 require_once __DIR__ . '/../includes/loan_offers.php';
 require_once __DIR__ . '/../includes/loan_products.php';
 require_once __DIR__ . '/../includes/loan_notifications.php';
+require_once __DIR__ . '/../includes/organisations.php';
 
 function finishReview(string $message): never {
     $_SESSION['loan_action_feedback'] = $message;
@@ -59,7 +60,9 @@ $officerId = filter_var($_POST['officer_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 // Approve = send the client an offer. The reviewer picks the applicant's
 // requested amount, the system-calculated amount or a custom amount. Bulk
 // approval offers each applicant the amount they asked for.
-$offerChoice = $bulk ? 'requested' : postText('offer_choice', 20);
+// Only customer loans show the offer choice; staff, startup and organisation
+// approvals send none and approve the requested amount.
+$offerChoice = $bulk ? 'requested' : (postText('offer_choice', 20) ?: 'requested');
 $customAmount = (float)preg_replace('/[^0-9.]/', '', postText('custom_amount', 30));
 $ninVerified = ($_POST['nin_verified'] ?? '') === '1';
 $ninRef = postText('nin_reference', 100);
@@ -96,6 +99,9 @@ try {
     $startupIdColumn = 'startup_id';
 }
 
+// loan.organisation_id must exist before the per-loan transactions below.
+organisations_ensure_table($conn);
+
 $success = 0;
 $skipped = 0;
 $failed = 0;
@@ -112,7 +118,9 @@ foreach ($ids as $id) {
         $oldStatus = (string)$loan['status'];
         $clientId = (int)($loan['client_id'] ?? 0);
         $amount = number_format((float)($loan['amount'] ?? 0), 2);
-        $clientType = strtolower(trim((string)($loan['client_type'] ?? '')));
+        $clientType = !empty($loan['organisation_id'])
+            ? 'organisation'
+            : strtolower(trim((string)($loan['client_type'] ?? '')));
         // Only match user IDs to a client in tables known to use user IDs.
         // Startup IDs belong to the startups table, and must never be treated as user IDs.
         $client = null;
@@ -120,6 +128,12 @@ foreach ($ids as $id) {
             $s = $conn->prepare('SELECT fname, lname, email FROM user WHERE id = ? LIMIT 1');
             $s->bind_param('i', $clientId); $s->execute();
             $client = $s->get_result()->fetch_assoc(); $s->close();
+        } elseif ($clientType === 'organisation') {
+            // Organisation loans: loan.client_id is organisations.id.
+            $org = organisation_find($conn, (int)($loan['organisation_id'] ?? 0) ?: $clientId);
+            if ($org) {
+                $client = ['fname' => (string)$org['company_name'], 'lname' => '', 'email' => (string)$org['email']];
+            }
         } elseif ($clientType === 'startup') {
             $s = $conn->prepare("SELECT ceo_name AS fname, company_name AS lname, email FROM startups WHERE `{$startupIdColumn}` = ? LIMIT 1");
             $s->bind_param('i', $clientId); $s->execute();

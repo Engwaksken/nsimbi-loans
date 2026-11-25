@@ -226,7 +226,7 @@ function loan_backfill_pending_assignments(mysqli $conn, int $limit = 200): int
 /**
  * Finish setting up a newly created loan request.
  *
- * @param string $clientType customer|member|startup
+ * @param string $clientType customer|member|startup|organisation
  * @return int Assigned officer id (0 when no officer could be assigned).
  */
 function loan_finalize_new_request(mysqli $conn, int $loanId, string $clientType = ''): int
@@ -237,7 +237,7 @@ function loan_finalize_new_request(mysqli $conn, int $loanId, string $clientType
 
     $clientType = strtolower(trim($clientType));
 
-    if (!in_array($clientType, ['customer', 'member', 'startup'], true)) {
+    if (!in_array($clientType, ['customer', 'member', 'startup', 'organisation'], true)) {
         $clientType = '';
     }
 

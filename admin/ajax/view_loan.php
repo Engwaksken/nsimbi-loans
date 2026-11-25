@@ -7,8 +7,17 @@ $loan = $conn->query("SELECT * FROM loan WHERE id=$id LIMIT 1")->fetch_assoc();
 if (!$loan) { echo '<div class="alert alert-danger">Loan not found.</div>'; exit; }
 $cid = (int)$loan['client_id'];
 $cfect = null; $ctype = 'Unknown';
-$cr = $conn->query("SELECT u.fname,u.lname,c.phone,c.nin,c.business_name,c.location,c.district FROM customers c INNER JOIN user u ON c.user_id=u.id WHERE c.user_id=$cid LIMIT 1");
-if ($cr && $cr->num_rows) { $cfect=$cr->fetch_assoc(); $ctype='Business Client'; }
+// Organisation loans first: organisation ids overlap user ids.
+$oid = (int)($loan['organisation_id'] ?? 0);
+if ($oid > 0) {
+    require_once __DIR__ . '/../../includes/organisations.php';
+    $org = organisation_find($conn, $oid);
+    $cfect = ['fname' => $org['company_name'] ?? 'Organisation #' . $oid, 'lname' => '', 'phone' => $org['phone'] ?? '', 'nin' => ''];
+    $ctype = 'Organisation';
+}
+$cr = $oid > 0 ? null : $conn->query("SELECT u.fname,u.lname,c.phone,c.nin,c.business_name,c.location,c.district FROM customers c INNER JOIN user u ON c.user_id=u.id WHERE c.user_id=$cid LIMIT 1");
+if ($oid > 0) { /* organisation set above */ }
+elseif ($cr && $cr->num_rows) { $cfect=$cr->fetch_assoc(); $ctype='Business Client'; }
 else {
     $mr=$conn->query("SELECT u.fname,u.lname,m.phone,m.nin,m.employer,m.department FROM members m INNER JOIN user u ON m.user_id=u.id WHERE m.user_id=$cid LIMIT 1");
     if ($mr && $mr->num_rows) { $cfect=$mr->fetch_assoc(); $ctype='Staff Member'; }

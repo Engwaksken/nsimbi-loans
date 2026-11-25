@@ -247,9 +247,17 @@ function loan_notify_load(mysqli $conn, int $loanId): ?array
     }
 
     $clientId = (int)($loan['client_id'] ?? 0);
-    $type = strtolower(trim((string)($loan['client_type'] ?? '')));
+    $type = !empty($loan['organisation_id']) ? 'organisation' : strtolower(trim((string)($loan['client_type'] ?? '')));
+    if ($type === 'organisation') {
+        $clientId = (int)($loan['organisation_id'] ?? 0) ?: $clientId;
+    }
+    $loan['client_type'] = $type;
     $client = null;
-    if ($clientId > 0 && $type === 'startup') {
+    if ($clientId > 0 && $type === 'organisation') {
+        require_once __DIR__ . '/organisations.php';
+        organisations_ensure_table($conn);
+        $stmt = $conn->prepare("SELECT company_name AS fname, '' AS lname, email FROM organisations WHERE id = ? LIMIT 1");
+    } elseif ($clientId > 0 && $type === 'startup') {
         $column = loan_table_has_column($conn, 'startups', 'startup_id') ? 'startup_id' : 'id';
         $stmt = $conn->prepare("SELECT ceo_name AS fname, company_name AS lname, email FROM startups WHERE `{$column}` = ? LIMIT 1");
     } elseif ($clientId > 0 && in_array($type, ['customer', 'member', ''], true)) {

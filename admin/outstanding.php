@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require "nav-head.php";
+require_once dirname(__DIR__) . '/includes/organisations.php';
+organisations_ensure_table($conn);
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
 
@@ -33,6 +35,7 @@ function typeBadge(string $type): string
         'customer' => 'badge-primary',
         'member'   => 'badge-purple',
         'startup'  => 'badge-warning',
+        'organisation' => 'badge-info',
         default    => 'badge-muted',
     };
 }
@@ -75,7 +78,7 @@ function topupStatusLabel(string $status): string
 $search = trim($_GET['search'] ?? '');
 $typeFilter = trim($_GET['type'] ?? 'all');
 
-$allowedTypes = ['all', 'customer', 'member', 'startup'];
+$allowedTypes = ['all', 'customer', 'member', 'startup', 'organisation'];
 
 if (!in_array($typeFilter, $allowedTypes, true)) {
     $typeFilter = 'all';
@@ -181,7 +184,7 @@ $customerSql = "
         c.location AS client_location,
         c.district AS client_district
     FROM loan l
-    INNER JOIN customers c ON l.client_id = c.user_id
+    INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON c.user_id = u.id
     WHERE {$whereStatus}
     {$searchCustomer}
@@ -200,7 +203,7 @@ $memberSql = "
         m.department AS client_location,
         m.home_address AS client_district
     FROM loan l
-    INNER JOIN members m ON l.client_id = m.user_id
+    INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON m.user_id = u.id
     WHERE {$whereStatus}
     {$searchMember}
@@ -219,7 +222,26 @@ $startupSql = "
         st.company_location AS client_location,
         st.status AS client_district
     FROM loan l
-    INNER JOIN startups st ON l.client_id = st.id
+    INNER JOIN startups st ON l.client_id = st.id AND l.organisation_id IS NULL
+    WHERE {$whereStatus}
+    {$searchStartup}
+";
+
+// Organisation loans (loan.organisation_id); same columns as startups.
+$organisationSql = "
+    SELECT 
+        l.*,
+        'organisation' AS client_type,
+        st.ceo_name AS fname,
+        '' AS lname,
+        st.email AS client_email,
+        st.phone AS client_phone,
+        '' AS client_nin,
+        st.company_name AS organization_name,
+        st.company_location AS client_location,
+        '' AS client_district
+    FROM loan l
+    INNER JOIN organisations st ON l.organisation_id = st.id
     WHERE {$whereStatus}
     {$searchStartup}
 ";
@@ -236,6 +258,11 @@ if ($typeFilter === 'customer') {
     $baseSql = $startupSql;
     $bindParams = $paramsStartup;
     $bindTypes = $typesStartup;
+
+} elseif ($typeFilter === 'organisation') {
+    $baseSql = $organisationSql;
+    $bindParams = $paramsStartup;
+    $bindTypes = $typesStartup;
 } else {
     $baseSql = "
         ($customerSql)
@@ -243,15 +270,22 @@ if ($typeFilter === 'customer') {
         ($memberSql)
         UNION ALL
         ($startupSql)
+        UNION ALL
+        ($organisationSql)
     ";
 
-    $bindParams = array_merge($paramsCustomer, $paramsMember, $paramsStartup);
-    $bindTypes = $typesCustomer . $typesMember . $typesStartup;
+    $bindParams = array_merge($paramsCustomer, $paramsMember, $paramsStartup, $paramsStartup);
+    $bindTypes = $typesCustomer . $typesMember . $typesStartup . $typesStartup;
 }
 
+// Inside a derived table the type label must not be called client_type:
+// l.* already has that column on newer databases and MySQL rejects the
+// duplicate. The outer SELECT renames it back (the last column wins).
+$derivedSql = str_replace(' AS client_type,', ' AS loan_type_label,', $baseSql);
+
 $sql = "
-    SELECT *
-    FROM ($baseSql) x
+    SELECT x.*, x.loan_type_label AS client_type
+    FROM ($derivedSql) x
     ORDER BY id DESC
 ";
 
@@ -288,6 +322,7 @@ $typeStats = [
     'customer' => ['count' => 0, 'amount' => 0, 'balance' => 0],
     'member'   => ['count' => 0, 'amount' => 0, 'balance' => 0],
     'startup'  => ['count' => 0, 'amount' => 0, 'balance' => 0],
+    'organisation' => ['count' => 0, 'amount' => 0, 'balance' => 0],
 ];
 
 foreach ($loans as $loan) {
@@ -772,7 +807,8 @@ foreach ($loans as $loan) {
                 'all'      => 'All',
                 'customer' => 'Customers',
                 'member'   => 'Members / Staff',
-                'startup'  => 'Startups'
+                'startup' => 'Startups',
+                'organisation' => 'Organisations'
             ] as $key => $label): ?>
 
                 <a href="?type=<?= h($key) ?>&search=<?= urlencode($search) ?>"
@@ -866,7 +902,7 @@ foreach ($loans as $loan) {
                                 ($loan['lname'] ?? '')
                             );
 
-                            if ($clientType === 'startup') {
+                            if (in_array($clientType, ['startup', 'organisation'], true)) {
                                 $clientName = $loan['organization_name']
                                     ?: ($loan['fname'] ?? 'Startup');
                             }
@@ -907,7 +943,7 @@ foreach ($loans as $loan) {
 
                                         <?php if (
                                             !empty($loan['organization_name']) &&
-                                            $clientType !== 'startup'
+                                            !in_array($clientType, ['startup', 'organisation'], true)
                                         ): ?>
 
                                             . <?= h($loan['organization_name']) ?>

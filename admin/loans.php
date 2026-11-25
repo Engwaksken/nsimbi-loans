@@ -4,6 +4,8 @@ declare(strict_types=1);
 $phead = 'Loans';
 require "nav-head.php";
 require "services_check.php";
+require_once dirname(__DIR__) . '/includes/organisations.php';
+organisations_ensure_table($conn);
 require_once dirname(__DIR__) . '/includes/districts.php';
 
 function e($v): string
@@ -40,6 +42,7 @@ function typeBadge(string $type): string
         'customer' => 'badge-primary',
         'member'   => 'badge-purple',
         'startup'  => 'badge-warning',
+        'organisation' => 'badge-info',
         default    => 'badge-muted',
     };
 }
@@ -54,7 +57,8 @@ $allowedFilters = [
     'active',
     'customer',
     'member',
-    'startup'
+    'startup',
+    'organisation'
 ];
 
 if (!in_array($filter, $allowedFilters, true)) {
@@ -110,7 +114,7 @@ $customerSql = "
         c.location AS client_location,
         c.district AS client_district
     FROM loan l
-    INNER JOIN customers c ON l.client_id = c.user_id
+    INNER JOIN customers c ON l.client_id = c.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON c.user_id = u.id
     WHERE $wsql $customerSearch
 ";
@@ -128,7 +132,7 @@ $memberSql = "
         m.home_address AS client_location,
         '' AS client_district
     FROM loan l
-    INNER JOIN members m ON l.client_id = m.user_id
+    INNER JOIN members m ON l.client_id = m.user_id AND l.organisation_id IS NULL
     INNER JOIN user u ON m.user_id = u.id
     WHERE $wsql $memberSearch
 ";
@@ -151,8 +155,30 @@ $startupSql = "
         st.company_location AS client_location,
         '' AS client_district
     FROM loan l
-    INNER JOIN startups st ON l.client_id = st.startup_id
+    INNER JOIN startups st ON l.client_id = st.startup_id AND l.organisation_id IS NULL
     WHERE $wsql $startupSearch
+";
+
+// Organisation loans: recognised by loan.organisation_id (ids overlap user ids).
+$organisationSearch = $search !== ''
+    ? "AND (org.company_name LIKE '$likeSearch' OR org.ceo_name LIKE '$likeSearch' OR org.phone LIKE '$likeSearch' OR org.email LIKE '$likeSearch' OR org.company_location LIKE '$likeSearch')"
+    : '';
+
+$organisationSql = "
+    SELECT
+        l.*,
+        'organisation' AS client_type,
+        org.ceo_name AS fname,
+        '' AS lname,
+        org.email AS client_email,
+        org.phone AS client_phone,
+        '' AS client_nin,
+        org.company_name AS organization_name,
+        org.company_location AS client_location,
+        '' AS client_district
+    FROM loan l
+    INNER JOIN organisations org ON l.organisation_id = org.id
+    WHERE $wsql $organisationSearch
 ";
 
 if ($filter === 'customer') {
@@ -161,8 +187,10 @@ if ($filter === 'customer') {
     $baseSql = $memberSql;
 } elseif ($filter === 'startup') {
     $baseSql = $startupSql;
+} elseif ($filter === 'organisation') {
+    $baseSql = $organisationSql;
 } else {
-    $baseSql = "($customerSql) UNION ALL ($memberSql) UNION ALL ($startupSql)";
+    $baseSql = "($customerSql) UNION ALL ($memberSql) UNION ALL ($startupSql) UNION ALL ($organisationSql)";
 }
 
 // No derived table: l.* already has client_type on newer databases, and a
@@ -229,6 +257,7 @@ $typeStats = [
     'customer' => ['count' => 0, 'amount' => 0, 'interest' => 0, 'balance' => 0],
     'member'   => ['count' => 0, 'amount' => 0, 'interest' => 0, 'balance' => 0],
     'startup'  => ['count' => 0, 'amount' => 0, 'interest' => 0, 'balance' => 0],
+    'organisation' => ['count' => 0, 'amount' => 0, 'interest' => 0, 'balance' => 0],
 ];
 
 $statusStats = [
@@ -593,6 +622,7 @@ function pageUrl(int $p, string $filter, string $search): string
             'customer'    => 'Customers',
             'member'      => 'Members / Staff',
             'startup'     => 'Startups',
+            'organisation' => 'Organisations',
           
             'cleared'     => 'Cleared',
             'outstanding' => 'Outstanding',
@@ -696,7 +726,7 @@ function pageUrl(int $p, string $filter, string $search): string
                         $clientName = $loan['organization_name'] ?? 'Unknown Client';
                     }
 
-                    if (($loan['client_type'] ?? '') === 'startup') {
+                    if (in_array($loan['client_type'] ?? '', ['startup', 'organisation'], true)) {
                         $clientName = $loan['organization_name'] ?: $clientName;
                     }
 

@@ -11,6 +11,8 @@ require_once __DIR__ . "/../includes/loan_offers.php";
 require_once __DIR__ . "/../includes/loan_products.php";
 require_once __DIR__ . "/../includes/districts.php";
 require_once __DIR__ . "/../includes/profile_photo.php";
+require_once __DIR__ . "/../includes/organisations.php";
+organisations_ensure_table($conn);
 loan_products_ensure_schema($conn);
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -143,6 +145,7 @@ function typeBadge(string $type): string
         'customer' => 'badge-primary',
         'member'   => 'badge-purple',
         'startup'  => 'badge-warning',
+        'organisation' => 'badge-info',
         'unknown'  => 'badge-secondary',
         default    => 'badge-muted',
     };
@@ -171,7 +174,7 @@ function statusLabel(string $status): string
 $search = trim($_GET['search'] ?? '');
 $typeFilter = trim($_GET['type'] ?? 'all');
 
-$allowedTypes = ['all', 'customer', 'member', 'startup', 'unknown'];
+$allowedTypes = ['all', 'customer', 'member', 'startup', 'organisation', 'unknown'];
 if (!in_array($typeFilter, $allowedTypes, true)) {
     $typeFilter = 'all';
 }
@@ -271,6 +274,13 @@ $startupJoinType = $hasClientTypeColumn
     ? "LOWER(TRIM(COALESCE(l.client_type, ''))) = 'startup'"
     : "client_map.client_type = 'startup'";
 
+// Organisation loans are recognised by loan.organisation_id (organisation
+// ids overlap user ids), and never matched to a customer, member or startup.
+$clientTypeExpr = "CASE WHEN l.organisation_id IS NOT NULL THEN 'organisation' ELSE ({$clientTypeExpr}) END";
+$customerJoinType .= ' AND l.organisation_id IS NULL';
+$memberJoinType .= ' AND l.organisation_id IS NULL';
+$startupJoinType .= ' AND l.organisation_id IS NULL';
+
 $baseFrom = "
     FROM loan l
 
@@ -293,6 +303,9 @@ $baseFrom = "
     LEFT JOIN startups st
         ON {$startupJoinType}
        AND l.client_id = st.id
+
+    LEFT JOIN organisations org
+        ON l.organisation_id = org.id
 
     LEFT JOIN user officer
         ON l.assigned_officer_id = officer.id
@@ -319,9 +332,9 @@ if ($search !== '') {
             COALESCE(uc.fname, um.fname, st.ceo_name, c.business_name, '') LIKE ?
             OR COALESCE(uc.lname, um.lname, '') LIKE ?
             OR CONCAT(COALESCE(uc.fname, um.fname, st.ceo_name, c.business_name, ''), ' ', COALESCE(uc.lname, um.lname, '')) LIKE ?
-            OR COALESCE(c.business_name, m.employer, st.company_name, '') LIKE ?
-            OR COALESCE(c.email, uc.email, m.work_email, um.email, st.email, '') LIKE ?
-            OR COALESCE(c.phone, m.phone, st.phone, '') LIKE ?
+            OR COALESCE(c.business_name, m.employer, st.company_name, org.company_name, '') LIKE ?
+            OR COALESCE(c.email, uc.email, m.work_email, um.email, st.email, org.email, '') LIKE ?
+            OR COALESCE(c.phone, m.phone, st.phone, org.phone, '') LIKE ?
             OR COALESCE(c.nin, m.nin, '') LIKE ?
             OR COALESCE(c.location, m.department, st.company_location, '') LIKE ?
             OR COALESCE(c.district, m.home_address, st.status, '') LIKE ?
@@ -352,8 +365,8 @@ $summarySql = "
         COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'customer' THEN l.amount ELSE 0 END), 0) AS customer_amount,
         COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'member' THEN 1 ELSE 0 END), 0) AS member_count,
         COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'member' THEN l.amount ELSE 0 END), 0) AS member_amount,
-        COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'startup' THEN 1 ELSE 0 END), 0) AS startup_count,
-        COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'startup' THEN l.amount ELSE 0 END), 0) AS startup_amount,
+        COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) IN ('startup', 'organisation') THEN 1 ELSE 0 END), 0) AS startup_count,
+        COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) IN ('startup', 'organisation') THEN l.amount ELSE 0 END), 0) AS startup_amount,
         COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'unknown' THEN 1 ELSE 0 END), 0) AS unknown_count,
         COALESCE(SUM(CASE WHEN ({$clientTypeExpr}) = 'unknown' THEN l.amount ELSE 0 END), 0) AS unknown_amount
     {$baseFrom}
@@ -387,6 +400,7 @@ $sql = "
             NULLIF(uc.fname, ''),
             NULLIF(um.fname, ''),
             NULLIF(st.ceo_name, ''),
+            NULLIF(org.ceo_name, ''),
             NULLIF(c.business_name, ''),
             ''
         ) AS fname,
@@ -405,6 +419,7 @@ $sql = "
             NULLIF(m.work_email, ''),
             NULLIF(um.email, ''),
             NULLIF(st.email, ''),
+            NULLIF(org.email, ''),
             ''
         ) AS client_email,
 
@@ -412,6 +427,7 @@ $sql = "
             NULLIF(c.phone, ''),
             NULLIF(m.phone, ''),
             NULLIF(st.phone, ''),
+            NULLIF(org.phone, ''),
             ''
         ) AS client_phone,
 
@@ -425,6 +441,7 @@ $sql = "
             NULLIF(c.business_name, ''),
             NULLIF(m.employer, ''),
             NULLIF(st.company_name, ''),
+            NULLIF(org.company_name, ''),
             ''
         ) AS organization_name,
 
@@ -432,6 +449,7 @@ $sql = "
             NULLIF(c.location, ''),
             NULLIF(m.home_address, ''),
             NULLIF(st.company_location, ''),
+            NULLIF(org.company_location, ''),
             ''
         ) AS client_location,
 
@@ -458,7 +476,8 @@ $sql = "
         c.user_id AS customer_user_id,
         m.id AS member_table_id,
         m.user_id AS member_user_id,
-        st.id AS startup_table_id
+        st.id AS startup_table_id,
+        org.id AS organisation_table_id
 
     {$baseFrom}
     {$whereSql}
@@ -903,7 +922,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     <div class="stat-card border-orange-band">
         <div class="stat-flex">
             <div>
-                <div class="stat-label">Startup Pending</div>
+                <div class="stat-label">Startup / Organisation Pending</div>
                 <div class="stat-value"><?= number_format($typeStats['startup']['count']) ?></div>
                 <div class="stat-small"><?= money($typeStats['startup']['amount']) ?> requested</div>
             </div>
@@ -959,6 +978,7 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
             'customer' => 'Customers',
             'member' => 'Members / Staff',
             'startup' => 'Startups',
+            'organisation' => 'Organisations',
             'unknown' => 'Unknown'
         ] as $key => $label): ?>
             <a href="?type=<?= h($key) ?>&search=<?= urlencode($search) ?>&per_page=<?= $perPage ?>"
@@ -1082,6 +1102,10 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
 
         if ($clientType === 'startup') {
             $clientName = $organization !== '' ? $organization : ($fname !== '' ? $fname : 'Startup');
+        }
+
+        if ($clientType === 'organisation') {
+            $clientName = $organization !== '' ? $organization : 'Organisation #' . (int)($loan['client_id'] ?? 0);
         }
 
         if ($clientType === 'customer' && $clientName === '') {

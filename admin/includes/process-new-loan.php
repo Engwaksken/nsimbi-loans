@@ -104,6 +104,9 @@ register_shutdown_function(static function (): void {
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../../includes/loan_workflow.php';
 require_once __DIR__ . '/../../includes/loan_products.php';
+require_once __DIR__ . '/../../includes/organisations.php';
+// Before any transaction: adding a column would commit it early.
+organisations_ensure_table($conn);
 
 date_default_timezone_set('Africa/Kampala');
 
@@ -592,7 +595,28 @@ try {
         'APPROVED',
     ];
 
-    if ($hasClientTypeColumn) {
+    if ($clientType === 'organisation') {
+        $duplicateSql = "
+            SELECT id, status
+            FROM loan
+            WHERE organisation_id = ?
+              AND status IN (?, ?, ?, ?, ?)
+            ORDER BY id DESC
+            LIMIT 1
+            FOR UPDATE
+        ";
+
+        $duplicateValues = [
+            $clientId,
+            $blockedStatuses[0],
+            $blockedStatuses[1],
+            $blockedStatuses[2],
+            $blockedStatuses[3],
+            $blockedStatuses[4],
+        ];
+
+        $duplicateTypes = 'isssss';
+    } elseif ($hasClientTypeColumn) {
         $duplicateSql = "
             SELECT id, status
             FROM loan
@@ -620,6 +644,7 @@ try {
             SELECT id, status
             FROM loan
             WHERE client_id = ?
+              AND organisation_id IS NULL
               AND status IN (?, ?, ?, ?, ?)
             ORDER BY id DESC
             LIMIT 1
@@ -792,6 +817,17 @@ try {
         throw new RuntimeException(
             'The loan was not assigned a valid record number.'
         );
+    }
+
+    // Organisation loans: record the organisation so every page can tell this
+    // loan apart from a customer or staff loan with the same client id.
+    if ($clientType === 'organisation') {
+        $organisationStatement = $conn->prepare('UPDATE loan SET organisation_id = ? WHERE id = ?');
+        $organisationStatement->bind_param('ii', $clientId, $loanId);
+        if (!$organisationStatement->execute()) {
+            throw new RuntimeException('The organisation could not be linked to the loan.');
+        }
+        $organisationStatement->close();
     }
 
     // Customer loans: save the product's terms and figures on the loan.
