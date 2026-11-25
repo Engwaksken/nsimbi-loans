@@ -145,6 +145,23 @@ try {
     $organisations = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
 
+// ---- Statistics (the same organisations as the list) ----
+$orgTotal = count($organisations);
+$orgActive = count(array_filter($organisations, static fn($o) => $o['status'] === 'active'));
+$orgStats = ['with_loans' => 0, 'outstanding' => 0.0];
+try {
+    $row = $conn->query("
+        SELECT COUNT(DISTINCT CASE WHEN UPPER(COALESCE(l.status, '')) <> 'PENDING' THEN o.id END) AS with_loans,
+               COALESCE(SUM(CASE WHEN UPPER(COALESCE(l.status, '')) NOT IN ('PENDING', 'CLEARED', 'REJECTED', 'DELETED') THEN l.loan_balance END), 0) AS outstanding
+        FROM organisations o
+        JOIN loan l ON l.organisation_id = o.id
+        WHERE 1 = 1" . officer_client_sql('o') . "
+    ")->fetch_assoc();
+    $orgStats = ['with_loans' => (int)$row['with_loans'], 'outstanding' => (float)$row['outstanding']];
+} catch (Throwable $e) {
+    error_log('Organisation stats failed: ' . $e->getMessage());
+}
+
 function org_e($value): string
 {
     return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
@@ -190,6 +207,29 @@ require 'nav-head.php';
     <?php elseif ($flash !== ''): ?>
         <div class="alert alert-success"><?= org_e($flash) ?></div>
     <?php endif; ?>
+
+    <div class="stats-grid clients-stats-grid">
+        <div class="stat-card c-blue">
+            <div class="stat-head"><div class="stat-ico c-blue"><i class="fas fa-city"></i></div></div>
+            <div class="stat-value sm"><?= number_format($orgTotal) ?></div>
+            <div class="stat-label">Total Organisations</div>
+        </div>
+        <div class="stat-card c-green">
+            <div class="stat-head"><div class="stat-ico c-green"><i class="fas fa-check-circle"></i></div></div>
+            <div class="stat-value sm"><?= number_format($orgActive) ?></div>
+            <div class="stat-label">Active<?= $orgTotal > $orgActive ? ' (' . number_format($orgTotal - $orgActive) . ' inactive)' : '' ?></div>
+        </div>
+        <div class="stat-card c-indigo">
+            <div class="stat-head"><div class="stat-ico c-indigo"><i class="fas fa-file-invoice-dollar"></i></div></div>
+            <div class="stat-value sm"><?= number_format($orgStats['with_loans']) ?></div>
+            <div class="stat-label">Have Loans</div>
+        </div>
+        <div class="stat-card c-orange">
+            <div class="stat-head"><div class="stat-ico c-orange"><i class="fas fa-balance-scale"></i></div></div>
+            <div class="stat-value">UGX <?= number_format($orgStats['outstanding']) ?></div>
+            <div class="stat-label">Total Outstanding</div>
+        </div>
+    </div>
 
     <div class="org-card">
         <div class="table-responsive">
