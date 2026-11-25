@@ -12,8 +12,68 @@ $limit  = 10;
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
+$type   = trim($_GET['type'] ?? '');
+$district = trim($_GET['district'] ?? '');
 
-$where  = "WHERE 1 = 1" . officer_client_sql('c');
+// ---- Period (by the date the client signed up) ----
+$periods = [
+    'all'        => 'All time',
+    'today'      => 'Today',
+    'this_week'  => 'This week',
+    'this_month' => 'This month',
+    'last_month' => 'Last month',
+    'last_90'    => 'Last 90 days',
+    'this_year'  => 'This year',
+    'custom'     => 'Custom dates',
+];
+$period = (string)($_GET['period'] ?? 'all');
+if (!isset($periods[$period])) {
+    $period = 'all';
+}
+$validDate = static fn($d) => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false ? $d : null;
+[$from, $to] = match ($period) {
+    'today'      => [date('Y-m-d'), date('Y-m-d')],
+    'this_week'  => [date('Y-m-d', strtotime('monday this week')), date('Y-m-d')],
+    'this_month' => [date('Y-m-01'), date('Y-m-d')],
+    'last_month' => [date('Y-m-01', strtotime('first day of last month')), date('Y-m-t', strtotime('last day of last month'))],
+    'last_90'    => [date('Y-m-d', strtotime('-89 days')), date('Y-m-d')],
+    'this_year'  => [date('Y-01-01'), date('Y-m-d')],
+    'custom'     => [$validDate($_GET['from'] ?? null), $validDate($_GET['to'] ?? null)],
+    default      => [null, null],
+};
+if ($from !== null && $to !== null && $from > $to) {
+    [$from, $to] = [$to, $from];
+}
+
+// ---- Dropdown options (only the officer's own clients for loan officers) ----
+$scope = officer_client_sql('c');
+
+$typeOptions = [];
+$res = $conn->query("
+    SELECT MIN(TRIM(c.business_type)) AS name
+    FROM customers c
+    WHERE TRIM(COALESCE(c.business_type, '')) <> ''" . $scope . "
+    GROUP BY LOWER(TRIM(c.business_type))
+    ORDER BY name
+");
+while ($res && $row = $res->fetch_assoc()) {
+    $typeOptions[] = $row['name'];
+}
+
+$districtOptions = [];
+$res = $conn->query("
+    SELECT MIN(TRIM(c.district)) AS name
+    FROM customers c
+    WHERE TRIM(COALESCE(c.district, '')) <> ''" . $scope . "
+    GROUP BY LOWER(TRIM(c.district))
+    ORDER BY name
+");
+while ($res && $row = $res->fetch_assoc()) {
+    $districtOptions[] = $row['name'];
+}
+
+// ---- Filters (shared by the list, the count and the stat cards) ----
+$where  = "WHERE 1 = 1" . $scope;
 $params = [];
 $types  = "";
 
@@ -21,36 +81,64 @@ if ($search !== "") {
     $where .= " AND (
         u.fname LIKE ? OR
         u.lname LIKE ? OR
+        CONCAT(u.fname, ' ', u.lname) LIKE ? OR
         u.email LIKE ? OR
         c.phone LIKE ? OR
         c.business_name LIKE ? OR
         c.business_type LIKE ? OR
         c.district LIKE ? OR
         c.location LIKE ?)";
-
     $like = "%{$search}%";
-
-    $params = [
-        $like, $like, $like, $like,
-        $like, $like, $like, $like
-    ];
-
-    $types = "ssssssss";
+    array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like);
+    $types .= "sssssssss";
 }
 
-$countSql = "
+if ($type !== "") {
+    $where .= " AND LOWER(TRIM(c.business_type)) = LOWER(?)";
+    $params[] = $type;
+    $types .= "s";
+}
+
+if ($district !== "") {
+    $where .= " AND LOWER(TRIM(c.district)) = LOWER(?)";
+    $params[] = $district;
+    $types .= "s";
+}
+
+if ($from !== null) {
+    $where .= " AND c.created_at >= ?";
+    $params[] = $from . ' 00:00:00';
+    $types .= "s";
+}
+
+if ($to !== null) {
+    $where .= " AND c.created_at <= ?";
+    $params[] = $to . ' 23:59:59';
+    $types .= "s";
+}
+
+$filtered = $search !== '' || $type !== '' || $district !== '' || $period !== 'all';
+
+// Query string that keeps the filters across pages.
+$filterQuery = http_build_query(array_filter([
+    'q'        => $search,
+    'period'   => $period !== 'all' ? $period : '',
+    'from'     => $period === 'custom' ? ($from ?? '') : '',
+    'to'       => $period === 'custom' ? ($to ?? '') : '',
+    'type'     => $type,
+    'district' => $district,
+], static fn($v) => $v !== ''));
+$query = $filterQuery !== '' ? '&' . $filterQuery : '';
+
+$countStmt = $conn->prepare("
     SELECT COUNT(*) AS total
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
     $where
-";
-
-$countStmt = $conn->prepare($countSql);
-
-if (!empty($params)) {
+");
+if ($types !== "") {
     $countStmt->bind_param($types, ...$params);
 }
-
 $countStmt->execute();
 $totalRows = (int)$countStmt->get_result()->fetch_assoc()['total'];
 $countStmt->close();
@@ -130,10 +218,16 @@ $statsSql = "
         FROM loan
         GROUP BY client_id
     ) l ON l.client_id = u.id
-    WHERE 1 = 1" . officer_client_sql('c') . "
+    $where
 ";
 
-$stats = $conn->query($statsSql)->fetch_assoc();
+$statsStmt = $conn->prepare($statsSql);
+if ($types !== "") {
+    $statsStmt->bind_param($types, ...$params);
+}
+$statsStmt->execute();
+$stats = $statsStmt->get_result()->fetch_assoc();
+$statsStmt->close();
 
 $totalClients     = (int)($stats['total_clients'] ?? 0);
 $activeClients    = (int)($stats['active_clients'] ?? 0);
@@ -144,7 +238,7 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 <div class="page-header">
     <div>
         <div class="title">Business Clients</div>
-        <div class="sub"><?= number_format($totalRows) ?> registered clients</div>
+        <div class="sub"><?= number_format($totalRows) ?> <?= $filtered ? 'matching' : 'registered' ?> clients</div>
     </div>
 
     <div class="d-flex gap-2 flex-wrap">
@@ -210,30 +304,50 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 
 <div class="card clients-card">
     <div class="card-header clients-toolbar">
-        <form method="GET" class="clients-search-form">
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="fas fa-search"></i>
-                </span>
-
-                <input 
-                    type="text" 
-                    name="q" 
+        <form method="GET" class="clients-filter-form">
+            <div class="input-group clients-filter-search">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input
+                    type="text"
+                    name="q"
                     class="form-control"
                     value="<?= e($search) ?>"
                     placeholder="Search client, phone, email, business..."
+                    aria-label="Search"
                 >
-
-                <button class="btn btn-primary" type="submit">
-                    Search
-                </button>
-
-                <?php if ($search !== ""): ?>
-                    <a href="clients.php" class="btn btn-light">
-                        Reset
-                    </a>
-                <?php endif; ?>
             </div>
+
+            <select name="period" class="form-select" aria-label="Sign-up period"
+                    onchange="this.form.querySelector('.clients-custom-dates').hidden = this.value !== 'custom'; if (this.value !== 'custom') this.form.submit();">
+                <?php foreach ($periods as $key => $label): ?>
+                    <option value="<?= e($key) ?>"<?= $period === $key ? ' selected' : '' ?>><?= e($key === 'all' ? 'Period: All time' : $label) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <span class="clients-custom-dates"<?= $period === 'custom' ? '' : ' hidden' ?>>
+                <input type="date" name="from" class="form-control" value="<?= e($from ?? '') ?>" aria-label="From">
+                <input type="date" name="to" class="form-control" value="<?= e($to ?? '') ?>" aria-label="To">
+            </span>
+
+            <select name="type" class="form-select" aria-label="Business type" onchange="this.form.submit()">
+                <option value="">All types</option>
+                <?php foreach ($typeOptions as $opt): ?>
+                    <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $type) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <select name="district" class="form-select" aria-label="District" onchange="this.form.submit()">
+                <option value="">All districts</option>
+                <?php foreach ($districtOptions as $opt): ?>
+                    <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $district) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <button class="btn btn-primary" type="submit"><i class="fas fa-filter"></i> Filter</button>
+
+            <?php if ($filtered): ?>
+                <a href="clients.php" class="btn btn-light">Reset</a>
+            <?php endif; ?>
         </form>
     </div>
 
@@ -361,8 +475,6 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
         <?php if ($totalPages > 1): ?>
             <nav>
                 <ul class="pagination mb-0">
-                    <?php $query = $search !== "" ? '&q=' . urlencode($search) : ''; ?>
-
                     <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
                         <a class="page-link" href="?page=<?= max(1, $page - 1) . $query ?>">
                             Previous
@@ -392,5 +504,26 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
         <?php endif; ?>
     </div>
 </div>
+
+<style>
+.clients-filter-form{
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    flex-wrap:nowrap;
+    width:100%;
+    overflow-x:auto;
+}
+.clients-filter-form .clients-filter-search{ flex:1 1 260px; min-width:220px; }
+.clients-filter-form .form-select{ width:auto; flex:0 0 auto; max-width:200px; }
+.clients-filter-form .btn{ flex:0 0 auto; white-space:nowrap; }
+.clients-custom-dates{ display:inline-flex; gap:.5rem; flex:0 0 auto; }
+.clients-custom-dates[hidden]{ display:none; }
+.clients-custom-dates .form-control{ width:150px; }
+@media (max-width: 991px){
+    .clients-filter-form{ flex-wrap:wrap; }
+    .clients-filter-form .clients-filter-search{ flex-basis:100%; }
+}
+</style>
 
 <?php require "footer.php"; ?>
