@@ -6,7 +6,7 @@ require "db.php";
 require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 
 // Staff only (same roles as the admin area).
-if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2, 6], true)) {
     http_response_code(403);
     exit;
 }

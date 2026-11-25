@@ -14,7 +14,7 @@ if (!$conn) {
 }
 
 $role = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
-if (!in_array($role, [1, 5], true)) {
+if (!in_array($role, [1, 6], true)) {
     die("Not authorized to view disbursement vouchers.");
 }
 

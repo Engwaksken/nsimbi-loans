@@ -47,6 +47,6 @@ $in=strtoupper(substr($c['fname'],0,1).substr($c['lname'],0,1));
   <?php endif; ?>
 </div>
 <div class="d-flex gap-2 mt-5">
-  <a href="client_loan_details.php?id=<?= $id ?>" class="btn btn-primary"><i class="fas fa-file-invoice-dollar"></i> View Loans</a>
+  <a href="view_client.php?user_id=<?= $id ?>&tab=loans" class="btn btn-primary"><i class="fas fa-file-invoice-dollar"></i> View Loans</a>
   <a href="client_profile.php?id=<?= $id ?>" class="btn btn-ghost"><i class="fas fa-user"></i> Full Profile</a>
 </div>

@@ -100,6 +100,7 @@ if (!$user) {
             <select class="form-control" id="role" name="role">
               <option value="1" <?= ((int)$user['role'] === 1) ? 'selected' : '' ?>>Admin</option>
               <option value="2" <?= ((int)$user['role'] === 2) ? 'selected' : '' ?>>Loan Officer</option>
+              <option value="6" <?= ((int)$user['role'] === 6) ? 'selected' : '' ?>>Accountant</option>
             </select>
           </div>
 

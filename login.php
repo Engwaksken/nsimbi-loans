@@ -6,7 +6,7 @@ $brand = site_settings($conn);
 if (isset($_SESSION['logged_in'])) {
     $role = (int)($_SESSION['role'] ?? 0);
 
-    if ($role === 1 || $role === 2) {
+    if ($role === 1 || $role === 2 || $role === 6) {
         header('Location: /admin/dashboard');
     } elseif ($role === 3) {
         header('Location: /clients/dashboard');

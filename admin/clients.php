@@ -302,7 +302,7 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
 
                                 <td>
                                     <a 
-                                        href="client_loan_details.php?client_id=<?= $clientId ?>"
+                                        href="view_client.php?user_id=<?= $clientId ?>&tab=loans"
                                         class="badge <?= (int)$c['ln'] > 0 ? 'badge-primary' : 'badge-muted' ?>"
                                     >
                                         <?= (int)$c['ln'] ?> loan<?= (int)$c['ln'] !== 1 ? 's' : '' ?>

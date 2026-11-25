@@ -33,7 +33,7 @@ if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-if ($role !== 0 && !in_array($role, [1, 2], true)) {
+if ($role !== 0 && !in_array($role, [1, 2, 6], true)) {
     header("Location: view_user.php?user={$userId}&msg=Invalid role selected&type=error");
     exit;
 }

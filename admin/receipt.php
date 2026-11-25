@@ -18,7 +18,7 @@ require_once dirname(__DIR__) . '/includes/site_cms.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (!isset($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+if (!isset($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2, 6], true)) {
     header('Location: ../login.php');
     exit;
 }

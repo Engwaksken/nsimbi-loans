@@ -66,7 +66,7 @@ if (!$topupId || $topupId <= 0) {
     redirectWithAlert("Invalid top-up request ID");
 }
 
-if ($role !== 5) {
+if ($role !== 6) {
     redirectWithAlert("Not Authorized for this Action");
 }
 

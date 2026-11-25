@@ -6,7 +6,8 @@ $brand = site_settings($conn);
 // Late penalties on overdue product loans (at most once an hour; see includes/loan_products.php).
 require_once dirname(__DIR__) . '/includes/loan_products.php';
 loan_penalties_maybe_run($conn);
-if (!isset($_SESSION['logged_in']) || !in_array($_SESSION['role'], ['1','2',1,2])) {
+// Admin area: admins (1), loan officers (2) and accountants (6).
+if (!isset($_SESSION['logged_in']) || !in_array((int)$_SESSION['role'], [1, 2, 6], true)) {
     header('Location: ../login.php'); exit();
 }
 // Loan officers own clients by district (includes/officer_assignment.php):
@@ -16,6 +17,7 @@ require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 try {
     officer_assignment_ensure_schema($conn);
     officer_assignment_bootstrap($conn);
+    officer_apply_referrals_once($conn);
     officer_sync($conn);
 } catch (Throwable $e) {
     error_log('Officer assignment sync failed: ' . $e->getMessage());
@@ -91,7 +93,7 @@ function asset_url(string $relative): string {
     <?= profile_avatar($profile_photo, $initials, 's-avatar') ?>
     <div>
       <div class="s-name"><?= $uname ?></div>
-      <div class="s-role"><?= $role == 1 ? 'Administrator' : 'Manager' ?></div>
+      <div class="s-role"><?= [1 => 'Administrator', 2 => 'Loan Officer', 6 => 'Accountant'][(int)$role] ?? 'Staff' ?></div>
     </div>
   </div>
 
@@ -156,6 +158,7 @@ $navSections = [
     ['loans.php', 'fa-file-invoice-dollar', 'All Loans'],
     ['pending_loans.php', 'fa-hourglass-half', 'Pending', (int)$count_pending, 'red'],
     ['payment_slips.php', 'fa-receipt', 'Payment Slips', $payment_slips_pending, 'red', ['payment_slip_file.php']],
+    ...((int)$role === 6 ? [['disbursement.php', 'fa-hand-holding-usd', 'Disbursement']] : []),
     ['outstanding.php', 'fa-exclamation-circle', 'Outstanding'],
     ['overdue.php', 'fa-clock', 'Overdue'],
     ['cleared.php', 'fa-check-circle', 'Cleared'],

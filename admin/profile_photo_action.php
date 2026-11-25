@@ -21,7 +21,7 @@ function admin_photo_back(string $message, string $type): never
 }
 
 $userId = (int)($_SESSION['user_id'] ?? $_SESSION['logged_in'] ?? 0);
-if ($userId <= 0 || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+if ($userId <= 0 || !in_array((int)($_SESSION['role'] ?? 0), [1, 2, 6], true)) {
     header('Location: ../login.php');
     exit;
 }

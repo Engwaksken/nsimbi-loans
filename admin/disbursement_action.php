@@ -14,7 +14,7 @@ if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }
 
-// Assumption: role = 5 is "Accountant" - the only role allowed to disburse funds.
+// Accountants (role 6) disburse funds. Role 5 is startups.
 $role    = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
 $actorId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
@@ -45,7 +45,7 @@ if (!$loan_id || $loan_id <= 0) {
     redirectWithAlert("Invalid Loan ID");
 }
 
-if ($role !== 5) {
+if ($role !== 6) {
     redirectWithAlert("Not Authorized for this Action");
 }
 

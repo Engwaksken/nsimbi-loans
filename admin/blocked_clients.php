@@ -67,7 +67,7 @@ if (isset($_REQUEST['check']) && $_REQUEST['check'] == 2) {
                         <span class="badge badge-sm bg-gradient-<?php echo $badgeClass; ?>"><?php echo $statusText; ?></span>
                       </td>
                       <td class="align-middle text-center text-sm">
-                        <a href="view_client.php?client=<?php echo $client['id']; ?>" class="badge badge-sm bg-gradient-info">
+                        <a href="view_client.php?user_id=<?php echo (int)$client['user_id']; ?>" class="badge badge-sm bg-gradient-info">
                           View
                         </a>
                       </td>

@@ -3,7 +3,10 @@ require "nav-head.php";
 $current_user_role = isset($_SESSION['role']) ? $_SESSION['role'] : 0;
 
 // Staff loans only (organisation loans are not staff); officers see their own loans.
-$lget = mysqli_query($conn, 'SELECT * FROM loan WHERE status="PENDING" AND organisation_id IS NULL' . officer_loan_sql('loan') . ' ORDER BY id DESC');
+// Staff borrowers only: loans whose client is in members (user ids are unique,
+// so customers' loans never match).
+$lget = mysqli_query($conn, 'SELECT loan.* FROM loan INNER JOIN members ON members.user_id = loan.client_id'
+    . ' WHERE loan.status="PENDING" AND loan.organisation_id IS NULL' . officer_loan_sql('loan') . ' ORDER BY loan.id DESC');
 
 $phead = "STAFF PENDING LOANS";              
 ?>

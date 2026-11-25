@@ -4,6 +4,10 @@ declare(strict_types=1);
 /**
  * Loan officers own clients by district.
  *
+ * A client who named a referring officer at sign-up (customers.referred_by,
+ * Officer Referrals) belongs to that officer while they are an active loan
+ * officer. Everyone else follows the district rules.
+ *
  * Rules (Loans > Loan Settings, stored in app_settings 'officer_district_rules'):
  *   {"districts": {"Mbarara": 12}, "default": 15}
  * A client in a listed district goes to that officer; everyone else goes to
@@ -112,6 +116,21 @@ function officer_find_by_name(mysqli $conn, string $fullName): int
     return count($found) === 1 ? $found[0] : 0;
 }
 
+/**
+ * Officer for a client row (from officer_client_rows): their referring
+ * officer while active, otherwise the district rules.
+ */
+function officer_for_client_row(mysqli $conn, array $rules, array $row): int
+{
+    static $active = null;
+    $active ??= officer_list($conn);
+    $referrer = (int)($row['referred_by'] ?? 0);
+    if ($referrer > 0 && isset($active[$referrer])) {
+        return $referrer;
+    }
+    return officer_for_place($rules, (string)$row['district'], (string)$row['location']);
+}
+
 /** Officer for a place under the rules (0 when no rule applies). */
 function officer_for_place(array $rules, string $district, string $location = ''): int
 {
@@ -134,11 +153,13 @@ function officer_client_rows(mysqli $conn, string $kind, string $where = '1 = 1'
     if (!officer_has_column($conn, $kind)) {
         $where = str_replace(['(assigned_officer_id IS NULL OR assigned_officer_id = 0)'], ['1 = 1'], $where);
     }
+    $referredCol = $kind === 'customer' && loan_table_has_column($conn, 'customers', 'referred_by')
+        ? 'referred_by' : 'NULL AS referred_by';
     $sql = match ($kind) {
-        'customer'     => "SELECT user_id AS id, COALESCE(district, '') AS district, COALESCE(location, '') AS location, {$officerCol} FROM customers",
-        'member'       => "SELECT user_id AS id, '' AS district, COALESCE(home_address, '') AS location, {$officerCol} FROM members",
-        'startup'      => "SELECT id, '' AS district, COALESCE(company_location, '') AS location, {$officerCol} FROM startups",
-        'organisation' => "SELECT id, '' AS district, COALESCE(company_location, '') AS location, {$officerCol} FROM organisations",
+        'customer'     => "SELECT user_id AS id, COALESCE(district, '') AS district, COALESCE(location, '') AS location, {$officerCol}, {$referredCol} FROM customers",
+        'member'       => "SELECT user_id AS id, '' AS district, COALESCE(home_address, '') AS location, {$officerCol}, NULL AS referred_by FROM members",
+        'startup'      => "SELECT id, '' AS district, COALESCE(company_location, '') AS location, {$officerCol}, NULL AS referred_by FROM startups",
+        'organisation' => "SELECT id, '' AS district, COALESCE(company_location, '') AS location, {$officerCol}, NULL AS referred_by FROM organisations",
     };
     $sql .= ' WHERE ' . $where . ($limit > 0 ? ' LIMIT ' . $limit : '');
     try {
@@ -226,7 +247,7 @@ function officer_of_client(mysqli $conn, string $kind, int $clientId, ?array $ru
     if ((int)$rows[0]['assigned_officer_id'] > 0) {
         return (int)$rows[0]['assigned_officer_id'];
     }
-    $officerId = officer_for_place($rules ?? officer_rules($conn), (string)$rows[0]['district'], (string)$rows[0]['location']);
+    $officerId = officer_for_client_row($conn, $rules ?? officer_rules($conn), $rows[0]);
     if ($officerId > 0) {
         officer_set_client($conn, $kind, $clientId, $officerId);
     }
@@ -282,7 +303,7 @@ function officer_sync(mysqli $conn, bool $overwrite = false): array
     $where = $overwrite ? '1 = 1' : '(assigned_officer_id IS NULL OR assigned_officer_id = 0)';
     foreach (array_keys(OFFICER_CLIENT_TABLES) as $kind) {
         foreach (officer_client_rows($conn, $kind, $where, $overwrite ? 0 : 500) as $row) {
-            $officerId = officer_for_place($rules, (string)$row['district'], (string)$row['location']);
+            $officerId = officer_for_client_row($conn, $rules, $row);
             if ($officerId > 0 && $officerId !== (int)$row['assigned_officer_id']) {
                 officer_set_client($conn, $kind, (int)$row['id'], $officerId);
                 $counts['clients']++;
@@ -321,6 +342,46 @@ function officer_assignment_bootstrap(mysqli $conn): void
     }
     $counts = officer_sync($conn, true);
     app_setting_set($conn, 'officer_assignment_bootstrap', 'done ' . date('Y-m-d H:i') . " ({$counts['clients']} clients, {$counts['loans']} loans)", 0);
+}
+
+/**
+ * Once: clients who named a referring officer are moved (with their loans)
+ * to that officer. Later sign-ups get their referrer through officer_sync().
+ */
+function officer_apply_referrals_once(mysqli $conn): void
+{
+    if (app_setting_get($conn, 'officer_referral_assignment', '') !== ''
+        || !loan_table_has_column($conn, 'customers', 'referred_by')
+        || !officer_has_column($conn, 'customer')) {
+        return;
+    }
+    $active = officer_list($conn);
+    $moved = 0;
+    $loans = 0;
+    $result = $conn->query('SELECT user_id, referred_by FROM customers WHERE referred_by IS NOT NULL AND referred_by > 0');
+    while ($result && ($row = $result->fetch_assoc())) {
+        $officerId = (int)$row['referred_by'];
+        $userId = (int)$row['user_id'];
+        if (!isset($active[$officerId])) {
+            continue;
+        }
+        officer_set_client($conn, 'customer', $userId, $officerId);
+        // Their loans follow (officer_assign_loan resolves whose loan it is).
+        $stmt = $conn->prepare('SELECT id FROM loan WHERE client_id = ? AND organisation_id IS NULL');
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $ids = array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'id');
+        $stmt->close();
+        foreach ($ids as $loanId) {
+            $loanRow = (array)$conn->query('SELECT * FROM loan WHERE id = ' . (int)$loanId)->fetch_assoc();
+            [$kind, $ownerId] = officer_loan_client($conn, $loanRow);
+            if ($kind === 'customer' && $ownerId === $userId && officer_assign_loan($conn, (int)$loanId, true) === $officerId) {
+                $loans++;
+            }
+        }
+        $moved++;
+    }
+    app_setting_set($conn, 'officer_referral_assignment', 'done ' . date('Y-m-d H:i') . " ({$moved} clients, {$loans} loans)", 0);
 }
 
 /* ---------------------------------------------------------------------------

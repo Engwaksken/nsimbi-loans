@@ -19,7 +19,7 @@ require_once __DIR__ . '/loan_workflow.php';
 
 const LOAN_NOTIFY_ROLE_ADMIN      = 1;
 const LOAN_NOTIFY_ROLE_OFFICER    = 2;
-const LOAN_NOTIFY_ROLE_ACCOUNTANT = 5;
+const LOAN_NOTIFY_ROLE_ACCOUNTANT = 6; // role 5 is startups
 
 /* ---------------------------------------------------------------------------
  | Public entry points

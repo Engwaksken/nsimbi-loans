@@ -26,8 +26,8 @@ const PAYMENT_METHODS = [
     'cash'          => 'Cash at office',
     'other'         => 'Other',
 ];
-/** Staff who may review slips: reviewer (1), loan officer (2), accountant (5). */
-const PAYMENT_SLIP_REVIEW_ROLES = [1, 2, 5];
+/** Staff who may review slips: reviewer (1), loan officer (2), accountant (6). */
+const PAYMENT_SLIP_REVIEW_ROLES = [1, 2, 6];
 
 function payment_slips_ensure_schema(mysqli $conn): void
 {

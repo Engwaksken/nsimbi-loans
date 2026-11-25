@@ -45,7 +45,12 @@ function html_response($html) {
 }
 
 function role_name($role) {
-    return ((int)$role === 1) ? 'Admin' : (((int)$role === 2) ? 'Loan Officer' : 'Unknown Role');
+    return match ((int)$role) {
+        1 => 'Admin',
+        2 => 'Loan Officer',
+        6 => 'Accountant',
+        default => 'Unknown Role',
+    };
 }
 
 function can_manage_users() {
@@ -82,7 +87,7 @@ function fetch_user($conn, $userId) {
         SELECT id, fname, lname, username, email, role, status, datetime
         FROM user
         WHERE id = ?
-        AND role IN (1,2)
+        AND role IN (1,2,6)
         LIMIT 1
     ");
 
@@ -161,6 +166,7 @@ if ($action === 'add_form') {
                     <option value="">Select User Role</option>
                     <option value="1">Admin</option>
                     <option value="2">Loan Officer</option>
+                    <option value="6">Accountant</option>
                 </select>
             </div>
 
@@ -271,6 +277,7 @@ if ($action === 'edit_form') {
                 <select class="form-control" name="role" required>
                     <option value="1" <?= ((int)$user['role'] === 1) ? 'selected' : '' ?>>Admin</option>
                     <option value="2" <?= ((int)$user['role'] === 2) ? 'selected' : '' ?>>Loan Officer</option>
+                    <option value="6" <?= ((int)$user['role'] === 6) ? 'selected' : '' ?>>Accountant</option>
                 </select>
             </div>
 
@@ -328,7 +335,7 @@ if ($action === 'create') {
             json_response(false, 'Invalid email address.');
         }
 
-        if (!in_array($role, [1,2], true)) {
+        if (!in_array($role, [1,2,6], true)) {
             json_response(false, 'Invalid role selected.');
         }
 
@@ -401,7 +408,7 @@ if ($action === 'update') {
             json_response(false, 'Invalid email address.');
         }
 
-        if (!in_array($role, [1,2], true)) {
+        if (!in_array($role, [1,2,6], true)) {
             json_response(false, 'Invalid role selected.');
         }
 
@@ -522,7 +529,7 @@ if ($action === 'delete') {
             json_response(false, 'User not found.');
         }
 
-        $stmt = $conn->prepare("DELETE FROM user WHERE id = ? AND role IN (1,2)");
+        $stmt = $conn->prepare("DELETE FROM user WHERE id = ? AND role IN (1,2,6)");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $stmt->close();

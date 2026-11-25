@@ -14,10 +14,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $currentUserId = (int)$_SESSION['user_id'];
-$currentRole   = strtolower(trim((string)($_SESSION['role'] ?? '')));
+// The session stores the numeric role: admin 1, loan officer 2, accountant 6.
+$currentRole   = (int)($_SESSION['role'] ?? 0);
 
-$allowedRoles = ['admin', 'administrator', 'loan officer', 'loan_officer', 'accountant'];
-if (!in_array($currentRole, $allowedRoles, true)) {
+if (!in_array($currentRole, [1, 2, 6], true)) {
     exit("Access denied.");
 }
 

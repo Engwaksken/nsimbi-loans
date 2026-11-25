@@ -86,6 +86,7 @@ $_SESSION['email']    = $user['email'] ?? '';
 switch ($roleId) {
     case 1:
     case 2:
+    case 6: // accountant
         header('Location: /admin/dashboard');
         exit;
 

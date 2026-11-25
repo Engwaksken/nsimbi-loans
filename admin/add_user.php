@@ -66,6 +66,7 @@ if (!empty($_SESSION['message'])) {
                 <option value="" disabled selected>Select User Role</option>
                 <option value="1">Admin</option>
                 <option value="2">Loan Officer</option>
+                <option value="6">Accountant</option>
             </select>
               </div>
                 </div>

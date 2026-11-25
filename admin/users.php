@@ -14,7 +14,7 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $limit = 10;
 $offset = ($page - 1) * $limit;
 
-$where = "WHERE role IN (1,2)";
+$where = "WHERE role IN (1,2,6)";
 $params = [];
 $types = "";
 
@@ -67,7 +67,7 @@ $stats = $conn->query("
         SUM(CASE WHEN status != 1 THEN 1 ELSE 0 END) AS blocked_users,
         SUM(CASE WHEN role = 1 THEN 1 ELSE 0 END) AS admins
     FROM user
-    WHERE role IN (1,2)
+    WHERE role IN (1,2,6)
 ")->fetch_assoc();
 ?>
 

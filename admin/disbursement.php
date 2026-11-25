@@ -16,10 +16,10 @@ if (!isset($conn) || !$conn instanceof mysqli) {
     die("Database connection not established.");
 }
 
-// Assumption: role = 5 is "Accountant" - the only role that can disburse funds.
+// Accountants (role 6) disburse funds. Role 5 is startups.
 $currentRole   = isset($_SESSION['role']) ? (int)$_SESSION['role'] : 0;
 $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
-$isAccountant  = ($currentRole === 5);
+$isAccountant  = ($currentRole === 6);
 
 if (!$isAccountant) {
     die("Not authorized. This page is for accountants only.");

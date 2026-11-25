@@ -167,7 +167,7 @@ try {
         $roleRes = $conn->query("
             SELECT id, role
             FROM user
-            WHERE LOWER(role) IN ('admin', 'administrator', 'loan officer', 'loan_officer', 'accountant')
+            WHERE role IN (1, 2, 6) -- admin, loan officer, accountant
         ");
 
         if ($roleRes) {
