@@ -129,38 +129,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $flash = (string)($_SESSION['org_flash'] ?? '');
 unset($_SESSION['org_flash']);
 
+// Per-organisation loan figures (loan.organisation_id is added by organisations_ensure_table).
+$orgLoanCols = "
+    (SELECT COUNT(*) FROM loan l WHERE l.organisation_id = o.id AND UPPER(COALESCE(l.status, '')) <> 'PENDING') AS active_loans,
+    (SELECT COALESCE(SUM(l.loan_balance), 0) FROM loan l WHERE l.organisation_id = o.id
+        AND UPPER(COALESCE(l.status, '')) NOT IN ('PENDING', 'CLEARED', 'REJECTED', 'DELETED')) AS outstanding,
+    TRIM(CONCAT(COALESCE(ou.fname, ''), ' ', COALESCE(ou.lname, ''))) AS officer_name";
+$orgFrom = "FROM organisations o LEFT JOIN user ou ON ou.id = o.assigned_officer_id
+    WHERE 1 = 1" . officer_client_sql('o') . "
+    ORDER BY o.status = 'active' DESC, o.company_name";
+officer_assignment_ensure_schema($conn);
+
 $organisations = [];
 try {
     $result = $conn->query("
         SELECT o.*,
-               (SELECT COUNT(*) FROM loan l WHERE l.client_id = o.id AND LOWER(COALESCE(l.client_type, '')) = 'organisation') AS loans
-        FROM organisations o
-        WHERE 1 = 1" . officer_client_sql('o') . "
-        ORDER BY o.status = 'active' DESC, o.company_name
+               (SELECT COUNT(*) FROM loan l WHERE l.client_id = o.id AND LOWER(COALESCE(l.client_type, '')) = 'organisation') AS loans,
+               $orgLoanCols
+        $orgFrom
     ");
     $organisations = $result->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $e) {
     // Older databases without loan.client_type: list without the loan count.
-    $result = $conn->query("SELECT o.*, NULL AS loans FROM organisations o WHERE 1 = 1" . officer_client_sql('o') . " ORDER BY o.status = 'active' DESC, o.company_name");
+    $result = $conn->query("SELECT o.*, NULL AS loans, $orgLoanCols $orgFrom");
     $organisations = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
+foreach ($organisations as &$org) {
+    $org['district'] = location_district('', (string)$org['company_location']);
+}
+unset($org);
 
-// ---- Statistics (the same organisations as the list) ----
+// ---- Search and filters (applied to the list and the statistics) ----
+$showOfficer = officer_scope_id() <= 0;
+$search = trim((string)($_GET['q'] ?? ''));
+$statusFilter = in_array($_GET['status'] ?? '', ['active', 'inactive'], true) ? $_GET['status'] : '';
+$loansFilter = in_array($_GET['loans'] ?? '', ['with', 'without', 'outstanding'], true) ? $_GET['loans'] : '';
+$districtFilter = trim((string)($_GET['district'] ?? ''));
+$officerFilter = $showOfficer ? trim((string)($_GET['officer'] ?? '')) : '';
+if ($officerFilter !== '' && $officerFilter !== 'none' && !ctype_digit($officerFilter)) {
+    $officerFilter = '';
+}
+
+// Dropdown options come from every organisation the user can see.
+$districtOptions = array_values(array_unique(array_filter(array_column($organisations, 'district'))));
+sort($districtOptions);
+$hasNoDistrict = in_array('', array_column($organisations, 'district'), true);
+$officerOptions = [];
+foreach ($organisations as $org) {
+    if ((int)$org['assigned_officer_id'] > 0 && $org['officer_name'] !== '') {
+        $officerOptions[(int)$org['assigned_officer_id']] = $org['officer_name'];
+    }
+}
+asort($officerOptions);
+
+$allCount = count($organisations);
+$organisations = array_values(array_filter($organisations, static function (array $o) use ($search, $statusFilter, $loansFilter, $districtFilter, $officerFilter): bool {
+    if ($search !== '') {
+        $haystack = implode(' ', [$o['company_name'], $o['ceo_name'], $o['phone'], $o['email'], $o['company_location'], $o['bank'], $o['account_number']]);
+        if (mb_stripos($haystack, $search, 0, 'UTF-8') === false) {
+            return false;
+        }
+    }
+    if ($statusFilter !== '' && $o['status'] !== $statusFilter) {
+        return false;
+    }
+    if ($loansFilter === 'with' && (int)$o['active_loans'] === 0) {
+        return false;
+    }
+    if ($loansFilter === 'without' && (int)$o['active_loans'] > 0) {
+        return false;
+    }
+    if ($loansFilter === 'outstanding' && (float)$o['outstanding'] <= 0) {
+        return false;
+    }
+    if ($districtFilter === 'none' ? $o['district'] !== '' : ($districtFilter !== '' && strcasecmp($o['district'], $districtFilter) !== 0)) {
+        return false;
+    }
+    if ($officerFilter === 'none' ? $o['officer_name'] !== '' : ($officerFilter !== '' && (int)$o['assigned_officer_id'] !== (int)$officerFilter)) {
+        return false;
+    }
+    return true;
+}));
+$filtered = $search !== '' || $statusFilter !== '' || $loansFilter !== '' || $districtFilter !== '' || $officerFilter !== '';
+
+// ---- Statistics (the organisations listed below) ----
 $orgTotal = count($organisations);
 $orgActive = count(array_filter($organisations, static fn($o) => $o['status'] === 'active'));
-$orgStats = ['with_loans' => 0, 'outstanding' => 0.0];
-try {
-    $row = $conn->query("
-        SELECT COUNT(DISTINCT CASE WHEN UPPER(COALESCE(l.status, '')) <> 'PENDING' THEN o.id END) AS with_loans,
-               COALESCE(SUM(CASE WHEN UPPER(COALESCE(l.status, '')) NOT IN ('PENDING', 'CLEARED', 'REJECTED', 'DELETED') THEN l.loan_balance END), 0) AS outstanding
-        FROM organisations o
-        JOIN loan l ON l.organisation_id = o.id
-        WHERE 1 = 1" . officer_client_sql('o') . "
-    ")->fetch_assoc();
-    $orgStats = ['with_loans' => (int)$row['with_loans'], 'outstanding' => (float)$row['outstanding']];
-} catch (Throwable $e) {
-    error_log('Organisation stats failed: ' . $e->getMessage());
-}
+$orgStats = [
+    'with_loans'  => count(array_filter($organisations, static fn($o) => (int)$o['active_loans'] > 0)),
+    'outstanding' => array_sum(array_map(static fn($o) => (float)$o['outstanding'], $organisations)),
+];
 
 function org_e($value): string
 {
@@ -188,6 +246,11 @@ require 'nav-head.php';
 .org-view { display: grid; grid-template-columns: 150px 1fr; gap: .45rem .9rem; font-size: .9rem; margin: 0; }
 .org-view dt { color: #64748b; font-weight: 600; }
 .org-view dd { margin: 0; word-break: break-word; }
+.org-filters { display: flex; align-items: center; gap: .5rem; flex-wrap: nowrap; overflow-x: auto; margin-bottom: .85rem; }
+.org-filters .org-filter-search { flex: 1 1 260px; min-width: 220px; }
+.org-filters .form-select { width: auto; flex: 0 0 auto; max-width: 200px; }
+.org-filters .btn { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 991px) { .org-filters { flex-wrap: wrap; } .org-filters .org-filter-search { flex-basis: 100%; } }
 @media (max-width: 520px) { .org-view { grid-template-columns: 1fr; } .org-view dd { margin-bottom: .4rem; } }
 </style>
 
@@ -212,7 +275,7 @@ require 'nav-head.php';
         <div class="stat-card c-blue">
             <div class="stat-head"><div class="stat-ico c-blue"><i class="fas fa-city"></i></div></div>
             <div class="stat-value sm"><?= number_format($orgTotal) ?></div>
-            <div class="stat-label">Total Organisations</div>
+            <div class="stat-label"><?= $filtered ? 'Matching Organisations' : 'Total Organisations' ?></div>
         </div>
         <div class="stat-card c-green">
             <div class="stat-head"><div class="stat-ico c-green"><i class="fas fa-check-circle"></i></div></div>
@@ -232,6 +295,49 @@ require 'nav-head.php';
     </div>
 
     <div class="org-card">
+        <form method="get" class="org-filters">
+            <div class="input-group org-filter-search">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" name="q" class="form-control" value="<?= org_e($search) ?>"
+                       placeholder="Search company, CEO, phone, email, location..." aria-label="Search">
+            </div>
+            <select name="status" class="form-select" aria-label="Status" onchange="this.form.submit()">
+                <option value="">All statuses</option>
+                <option value="active"<?= $statusFilter === 'active' ? ' selected' : '' ?>>Active</option>
+                <option value="inactive"<?= $statusFilter === 'inactive' ? ' selected' : '' ?>>Inactive</option>
+            </select>
+            <select name="loans" class="form-select" aria-label="Loans" onchange="this.form.submit()">
+                <option value="">All loans</option>
+                <option value="with"<?= $loansFilter === 'with' ? ' selected' : '' ?>>Have loans</option>
+                <option value="outstanding"<?= $loansFilter === 'outstanding' ? ' selected' : '' ?>>Balance outstanding</option>
+                <option value="without"<?= $loansFilter === 'without' ? ' selected' : '' ?>>No loans</option>
+            </select>
+            <select name="district" class="form-select" aria-label="District" onchange="this.form.submit()">
+                <option value="">All districts</option>
+                <?php foreach ($districtOptions as $opt): ?>
+                    <option value="<?= org_e($opt) ?>"<?= strcasecmp($opt, $districtFilter) === 0 ? ' selected' : '' ?>><?= org_e($opt) ?></option>
+                <?php endforeach; ?>
+                <?php if ($hasNoDistrict): ?>
+                    <option value="none"<?= $districtFilter === 'none' ? ' selected' : '' ?>>District not recognised</option>
+                <?php endif; ?>
+            </select>
+            <?php if ($showOfficer): ?>
+                <select name="officer" class="form-select" aria-label="Loan officer" onchange="this.form.submit()">
+                    <option value="">All officers</option>
+                    <option value="none"<?= $officerFilter === 'none' ? ' selected' : '' ?>>Unassigned</option>
+                    <?php foreach ($officerOptions as $optId => $optName): ?>
+                        <option value="<?= (int)$optId ?>"<?= $officerFilter === (string)$optId ? ' selected' : '' ?>><?= org_e($optName) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
+            <button class="btn btn-primary" type="submit"><i class="fas fa-filter"></i> Filter</button>
+            <?php if ($filtered): ?>
+                <a href="organisations.php" class="btn btn-light">Reset</a>
+            <?php endif; ?>
+        </form>
+        <?php if ($filtered): ?>
+            <div class="org-muted mb-2">Showing <?= number_format($orgTotal) ?> of <?= number_format($allCount) ?> organisations.</div>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="org-table">
                 <thead>
@@ -239,7 +345,9 @@ require 'nav-head.php';
                 </thead>
                 <tbody>
                 <?php if (!$organisations): ?>
-                    <tr><td colspan="7" class="text-center org-muted py-4">No organisations yet. Click "Add organisation" to add one.</td></tr>
+                    <tr><td colspan="7" class="text-center org-muted py-4"><?= $filtered
+                        ? 'No organisations match these filters. <a href="organisations.php">Reset</a>'
+                        : 'No organisations yet. Click "Add organisation" to add one.' ?></td></tr>
                 <?php endif; ?>
                 <?php foreach ($organisations as $org):
                     $active = $org['status'] === 'active';
