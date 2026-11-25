@@ -53,6 +53,139 @@ $blocked = count(array_filter($rows, function ($r) {
 
 $inactive = max(0, $total - $active);
 
+/* ============================================================
+   CSV / PDF EXPORT
+   The search box filters the table in the browser; the export links send
+   the same text as ?q= so the file has the startups that are on screen.
+============================================================ */
+$export = (string)($_GET['export'] ?? '');
+if ($export === 'csv' || $export === 'pdf') {
+    $q = trim((string)($_GET['q'] ?? ''));
+    $exportRows = array_values(array_filter($rows, static function (array $r) use ($q): bool {
+        if ($q === '') {
+            return true;
+        }
+        $haystack = implode(' ', [
+            $r['company_name'] ?? '', $r['ceo_name'] ?? '', $r['phone'] ?? '', $r['email'] ?? '',
+            $r['username'] ?? '', $r['company_location'] ?? '', $r['bank_name'] ?? '', $r['account_number'] ?? '',
+            // The on-screen search also matches the status badges.
+            (int)($r['user_status'] ?? 0) === 1 ? 'Active' : 'Blocked', $r['startup_status'] ?? $r['status'] ?? 'inactive',
+        ]);
+        return mb_stripos($haystack, $q, 0, 'UTF-8') !== false;
+    }));
+    $startupStatus = static fn(array $r): string => ucfirst(strtolower((string)($r['startup_status'] ?? $r['status'] ?? 'inactive')));
+    $userStatus = static fn(array $r): string => (int)($r['user_status'] ?? 0) === 1 ? 'Active' : 'Blocked';
+    $stamp = date('Ymd_His');
+
+    if ($export === 'csv') {
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="Startups_' . $stamp . '.csv"');
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF"); // so Excel reads the file as UTF-8
+        fputcsv($out, ['#', 'Company', 'CEO', 'Phone', 'Email', 'Username', 'Location', 'Bank', 'Account Name',
+            'Account Number', 'Bank Branch', 'User Status', 'Startup Status']);
+        foreach ($exportRows as $i => $r) {
+            $line = [$i + 1, $r['company_name'] ?? '', $r['ceo_name'] ?? '', $r['phone'] ?? '', $r['email'] ?? '',
+                $r['username'] ?? '', $r['company_location'] ?? '', $r['bank_name'] ?? '', $r['account_name'] ?? '',
+                $r['account_number'] ?? '', $r['bank_branch'] ?? '', $userStatus($r), $startupStatus($r)];
+            // Stop spreadsheet apps treating a value as a formula (phone numbers like +256... are left alone).
+            $line = array_map(static fn($v) => is_string($v) && preg_match('/^(=|@|[+\-](?![\d\s()]+$))/', $v) ? "'" . $v : $v, $line);
+            fputcsv($out, $line);
+        }
+        fclose($out);
+        exit;
+    }
+
+    require_once __DIR__ . '/vendor/autoload.php';
+    date_default_timezone_set('Africa/Kampala');
+
+    $eTotal = count($exportRows);
+    $eActive = count(array_filter($exportRows, static fn($r) => $startupStatus($r) === 'Active'));
+    $eBlocked = count(array_filter($exportRows, static fn($r) => (int)($r['user_status'] ?? 0) === 0));
+
+    ob_start();
+    ?>
+    <!doctype html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page { margin: 16mm 10mm; }
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5px; color: #1f2937; }
+            h1 { color: #123299; margin: 0 0 6px; font-size: 17px; }
+            .meta { color: #64748b; margin-bottom: 8px; }
+            table { width: 100%; border-collapse: collapse; }
+            .summary td { border: 1px solid #e5e7eb; background: #f8fafc; padding: 7px; width: 25%; }
+            .label { color: #64748b; font-size: 7px; text-transform: uppercase; }
+            .value { font-size: 11px; font-weight: bold; color: #111827; }
+            .rpt th { background: #123299; color: #fff; padding: 5px 4px; text-align: left; font-size: 7.5px; }
+            .rpt td { border-bottom: 1px solid #e5e7eb; padding: 4px; vertical-align: top; }
+            .rpt tr:nth-child(even) td { background: #f8fafc; }
+        </style>
+    </head>
+    <body>
+    <h1>Startups</h1>
+    <div class="meta">
+        Generated: <?= h(date('F d, Y H:i')) ?> &middot; <?= number_format($eTotal) ?> startup(s)
+        <?php if ($q !== ''): ?><br>Search: "<?= h($q) ?>"<?php endif; ?>
+    </div>
+
+    <table class="summary">
+        <tr>
+            <td><div class="label"><?= $q !== '' ? 'Matching' : 'Total' ?></div><div class="value"><?= number_format($eTotal) ?></div></td>
+            <td><div class="label">Active</div><div class="value"><?= number_format($eActive) ?></div></td>
+            <td><div class="label">User Blocked</div><div class="value"><?= number_format($eBlocked) ?></div></td>
+            <td><div class="label">Inactive</div><div class="value"><?= number_format(max(0, $eTotal - $eActive)) ?></div></td>
+        </tr>
+    </table>
+    <br>
+
+    <table class="rpt">
+        <thead>
+        <tr>
+            <th>#</th><th>Company</th><th>CEO</th><th>Phone</th><th>Email</th><th>Username</th>
+            <th>Location</th><th>Bank</th><th>Account No.</th><th>User Status</th><th>Startup Status</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php if ($exportRows): ?>
+            <?php foreach ($exportRows as $i => $r): ?>
+                <tr>
+                    <td><?= $i + 1 ?></td>
+                    <td><?= h($r['company_name'] ?? 'Unnamed Startup') ?></td>
+                    <td><?= h($r['ceo_name'] ?? '') ?></td>
+                    <td><?= h($r['phone'] ?? '') ?></td>
+                    <td><?= h($r['email'] ?? '') ?></td>
+                    <td><?= h($r['username'] ?? '') ?></td>
+                    <td><?= h($r['company_location'] ?? '') ?></td>
+                    <td><?= h($r['bank_name'] ?? '') ?></td>
+                    <td><?= h($r['account_number'] ?? '') ?></td>
+                    <td><?= h($userStatus($r)) ?></td>
+                    <td><?= h($startupStatus($r)) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <tr><td colspan="11" style="text-align:center;padding:15px">No startups found.</td></tr>
+        <?php endif; ?>
+        </tbody>
+    </table>
+    </body>
+    </html>
+    <?php
+    $html = ob_get_clean();
+
+    $options = new \Dompdf\Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('defaultFont', 'DejaVu Sans');
+
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'landscape');
+    $dompdf->render();
+    $dompdf->stream('Startups_' . $stamp . '.pdf', ['Attachment' => false]);
+    exit;
+}
+
 require "nav-head.php";
 ?>
 
@@ -155,6 +288,14 @@ require "nav-head.php";
                         placeholder="Search startups..."
                         oninput="filterTable(this.value)">
                 </div>
+
+                <a href="startups.php?export=csv" class="su-btn su-btn-light" id="suExportCsv" title="Download the startups shown as CSV">
+                    <i class="fas fa-file-csv"></i> CSV
+                </a>
+
+                <a href="startups.php?export=pdf" class="su-btn su-btn-danger" id="suExportPdf" target="_blank" rel="noopener" title="Open the startups shown as PDF">
+                    <i class="fas fa-file-pdf"></i> PDF
+                </a>
             </div>
         </div>
 
@@ -311,7 +452,15 @@ require "nav-head.php";
 
 <script>
 function filterTable(query) {
-    query = String(query || '').toLowerCase().trim();
+    const exportQuery = String(query || '').trim();
+    ['csv', 'pdf'].forEach(type => {
+        const link = document.getElementById(type === 'csv' ? 'suExportCsv' : 'suExportPdf');
+        if (link) {
+            link.href = 'startups.php?export=' + type + (exportQuery ? '&q=' + encodeURIComponent(exportQuery) : '');
+        }
+    });
+
+    query = exportQuery.toLowerCase();
 
     const rows = document.querySelectorAll('#suTbody tr');
     const noResults = document.getElementById('suNoResults');
