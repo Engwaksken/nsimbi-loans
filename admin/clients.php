@@ -15,6 +15,14 @@ $search = trim($_GET['q'] ?? '');
 $type   = trim($_GET['type'] ?? '');
 $district = trim($_GET['district'] ?? '');
 
+// Loan officers only see their own clients, so the officer column and filter are for everyone else.
+$showOfficer = officer_scope_id() <= 0;
+// Officer filter: '' = all, 'none' = unassigned, otherwise an officer's user id.
+$officer = $showOfficer ? trim($_GET['officer'] ?? '') : '';
+if ($officer !== '' && $officer !== 'none' && !ctype_digit($officer)) {
+    $officer = '';
+}
+
 // ---- Period (by the date the client signed up) ----
 $periods = [
     'all'        => 'All time',
@@ -60,6 +68,21 @@ while ($res && $row = $res->fetch_assoc()) {
     $typeOptions[] = $row['name'];
 }
 
+// Active loan officers, plus anyone else who still has clients assigned.
+$officerOptions = [];
+if ($showOfficer) {
+    $res = $conn->query("
+        SELECT o.id, TRIM(CONCAT(COALESCE(o.fname, ''), ' ', COALESCE(o.lname, ''))) AS name
+        FROM user o
+        WHERE (o.role = 2 AND COALESCE(o.status, 1) = 1)
+           OR o.id IN (SELECT assigned_officer_id FROM customers WHERE assigned_officer_id > 0)
+        ORDER BY name
+    ");
+    while ($res && $row = $res->fetch_assoc()) {
+        $officerOptions[(int)$row['id']] = $row['name'] !== '' ? $row['name'] : 'Officer #' . $row['id'];
+    }
+}
+
 $districtOptions = [];
 $res = $conn->query("
     SELECT MIN(TRIM(c.district)) AS name
@@ -99,6 +122,15 @@ if ($type !== "") {
     $types .= "s";
 }
 
+if ($officer === 'none') {
+    $where .= " AND (c.assigned_officer_id IS NULL OR c.assigned_officer_id = 0
+        OR c.assigned_officer_id NOT IN (SELECT id FROM user))";
+} elseif ($officer !== '') {
+    $where .= " AND c.assigned_officer_id = ?";
+    $params[] = (int)$officer;
+    $types .= "i";
+}
+
 if ($district !== "") {
     $where .= " AND LOWER(TRIM(c.district)) = LOWER(?)";
     $params[] = $district;
@@ -117,7 +149,7 @@ if ($to !== null) {
     $types .= "s";
 }
 
-$filtered = $search !== '' || $type !== '' || $district !== '' || $period !== 'all';
+$filtered = $search !== '' || $type !== '' || $district !== '' || $officer !== '' || $period !== 'all';
 
 // Query string that keeps the filters across pages.
 $filterQuery = http_build_query(array_filter([
@@ -127,6 +159,7 @@ $filterQuery = http_build_query(array_filter([
     'to'       => $period === 'custom' ? ($to ?? '') : '',
     'type'     => $type,
     'district' => $district,
+    'officer'  => $officer,
 ], static fn($v) => $v !== ''));
 $query = $filterQuery !== '' ? '&' . $filterQuery : '';
 
@@ -144,9 +177,6 @@ $totalRows = (int)$countStmt->get_result()->fetch_assoc()['total'];
 $countStmt->close();
 
 $totalPages = max(1, (int)ceil($totalRows / $limit));
-
-// Loan officers only see their own clients, so the officer column is for everyone else.
-$showOfficer = officer_scope_id() <= 0;
 
 $sql = "
     SELECT 
@@ -347,6 +377,16 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
                     <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $district) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
                 <?php endforeach; ?>
             </select>
+
+            <?php if ($showOfficer): ?>
+                <select name="officer" class="form-select" aria-label="Loan officer" onchange="this.form.submit()">
+                    <option value="">All officers</option>
+                    <option value="none"<?= $officer === 'none' ? ' selected' : '' ?>>Unassigned</option>
+                    <?php foreach ($officerOptions as $optId => $optName): ?>
+                        <option value="<?= $optId ?>"<?= $officer === (string)$optId ? ' selected' : '' ?>><?= e($optName) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
 
             <button class="btn btn-primary" type="submit"><i class="fas fa-filter"></i> Filter</button>
 
