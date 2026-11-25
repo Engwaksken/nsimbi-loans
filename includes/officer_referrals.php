@@ -160,14 +160,20 @@ function referral_clients_of(mysqli $conn, int $officerId, ?string $from, ?strin
     referral_ensure_schema($conn);
     $paid = "'" . implode("','", REFERRAL_DISBURSED_STATUSES) . "'";
     $loanType = referral_loan_type_clause($conn);
+    $hasOfficer = loan_table_has_column($conn, 'customers', 'assigned_officer_id');
+    $officerCol = $hasOfficer ? 'c.assigned_officer_id' : 'NULL';
+    $officerJoin = $hasOfficer ? 'LEFT JOIN user ao ON ao.id = c.assigned_officer_id' : '';
     $sql = "
         SELECT c.user_id, c.phone, c.business_name, c.created_at, u.fname, u.lname,
+            {$officerCol} AS assigned_officer_id,
+            " . ($hasOfficer ? "MAX(TRIM(CONCAT(COALESCE(ao.fname, ''), ' ', COALESCE(ao.lname, ''))))" : "''") . " AS assigned_officer_name,
             COUNT(DISTINCT l.id) AS loans,
             COALESCE(SUM(CASE WHEN UPPER(l.status) IN ($paid) THEN l.amount END), 0) AS disbursed,
             MAX(CASE WHEN UPPER(l.status) = 'OVERDUE' THEN 1 ELSE 0 END) AS has_overdue,
             SUBSTRING_INDEX(GROUP_CONCAT(UPPER(l.status) ORDER BY l.id DESC), ',', 1) AS latest_status
         FROM customers c
         JOIN user u ON u.id = c.user_id
+        {$officerJoin}
         LEFT JOIN loan l ON l.client_id = c.user_id
             AND UPPER(COALESCE(l.status, '')) NOT IN ('DELETED', '')
             $loanType
@@ -184,7 +190,7 @@ function referral_clients_of(mysqli $conn, int $officerId, ?string $from, ?strin
         $types .= 's';
         $args[] = $to . ' 23:59:59';
     }
-    $sql .= ' GROUP BY c.user_id, c.phone, c.business_name, c.created_at, u.fname, u.lname ORDER BY c.created_at DESC';
+    $sql .= ' GROUP BY c.user_id, c.phone, c.business_name, c.created_at, u.fname, u.lname' . ($hasOfficer ? ', c.assigned_officer_id' : '') . ' ORDER BY c.created_at DESC';
     $s = $conn->prepare($sql);
     $s->bind_param($types, ...$args);
     $s->execute();

@@ -350,10 +350,21 @@ function officer_assignment_bootstrap(mysqli $conn): void
  */
 function officer_apply_referrals_once(mysqli $conn): void
 {
-    if (app_setting_get($conn, 'officer_referral_assignment', '') !== ''
-        || !loan_table_has_column($conn, 'customers', 'referred_by')
-        || !officer_has_column($conn, 'customer')) {
+    if (app_setting_get($conn, 'officer_referral_assignment', '') !== '') {
         return;
+    }
+    officer_apply_referrals($conn);
+}
+
+/**
+ * Move every client who named an active referring officer (and their loans)
+ * to that officer. Safe to run again (Officer Referrals button).
+ * @return array{clients: int, loans: int}
+ */
+function officer_apply_referrals(mysqli $conn): array
+{
+    if (!loan_table_has_column($conn, 'customers', 'referred_by') || !officer_has_column($conn, 'customer')) {
+        return ['clients' => 0, 'loans' => 0];
     }
     $active = officer_list($conn);
     $moved = 0;
@@ -382,6 +393,7 @@ function officer_apply_referrals_once(mysqli $conn): void
         $moved++;
     }
     app_setting_set($conn, 'officer_referral_assignment', 'done ' . date('Y-m-d H:i') . " ({$moved} clients, {$loans} loans)", 0);
+    return ['clients' => $moved, 'loans' => $loans];
 }
 
 /* ---------------------------------------------------------------------------

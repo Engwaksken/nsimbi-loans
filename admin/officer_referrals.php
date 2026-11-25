@@ -20,6 +20,27 @@ if (!isset($_SESSION['logged_in']) || (int)($_SESSION['role'] ?? 0) !== 1) {
     exit;
 }
 
+// "Assign referred clients": each client who named a referring officer
+// (and their loans) goes to that officer (includes/officer_assignment.php).
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+if (empty($_SESSION['referral_assign_csrf'])) {
+    $_SESSION['referral_assign_csrf'] = bin2hex(random_bytes(16));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'assign_referrals') {
+    if (hash_equals($_SESSION['referral_assign_csrf'], (string)($_POST['csrf'] ?? ''))) {
+        officer_assignment_ensure_schema($conn);
+        $done = officer_apply_referrals($conn);
+        $_SESSION['referral_assign_flash'] = "Assigned {$done['clients']} referred client(s) and {$done['loans']} loan(s) to their referring officers.";
+    } else {
+        $_SESSION['referral_assign_flash'] = 'Your session expired. Please try again.';
+    }
+    header('Location: officer_referrals.php', true, 303);
+    exit;
+}
+$referralAssignFlash = (string)($_SESSION['referral_assign_flash'] ?? '');
+unset($_SESSION['referral_assign_flash']);
+$referralAssignLast = app_setting_get($conn, 'officer_referral_assignment', '');
+
 if (!function_exists('h')) {
     function h($value): string
     {
@@ -147,6 +168,22 @@ require 'nav-head.php';
 .ref-table td, .ref-table th { white-space: nowrap; }
 .badge-secondary { background: #e5e7eb; color: #374151; }
 </style>
+
+<?php if ($referralAssignFlash !== ''): ?>
+    <div class="alert alert-success"><?= h($referralAssignFlash) ?></div>
+<?php endif; ?>
+<div class="card mb-3" style="padding:.9rem 1rem">
+    <form method="post" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
+        <div class="fs-sm">
+            <strong>Referred clients belong to their referring officer.</strong>
+            New sign-ups are assigned automatically.
+            <?php if ($referralAssignLast !== ''): ?><span class="text-muted">Last assigned: <?= h($referralAssignLast) ?>.</span><?php endif; ?>
+        </div>
+        <input type="hidden" name="action" value="assign_referrals">
+        <input type="hidden" name="csrf" value="<?= h($_SESSION['referral_assign_csrf']) ?>">
+        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-user-check"></i> Assign referred clients to their officers</button>
+    </form>
+</div>
 
 <div class="page-header mb-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div>
@@ -302,7 +339,7 @@ require 'nav-head.php';
                 <p class="ref-help mt-0"><?= h($periodLabel) ?>: <?= number_format($r['clients']) ?> client(s), <?= money($r['amount_disbursed']) ?> paid out.</p>
                 <div class="table-wrap">
                     <table class="table">
-                        <thead><tr><th>Client</th><th>Signed up</th><th>Loans</th><th>Paid out</th><th>Latest loan</th></tr></thead>
+                        <thead><tr><th>Client</th><th>Signed up</th><th>Assigned to</th><th>Loans</th><th>Paid out</th><th>Latest loan</th></tr></thead>
                         <tbody>
                         <?php foreach ($clientLists[(int)$r['id']] as $c): ?>
                             <tr>
@@ -311,6 +348,11 @@ require 'nav-head.php';
                                     <div class="fs-xs text-muted"><?= h(trim(($c['business_name'] ?? '') . ' · ' . ($c['phone'] ?? ''), ' ·')) ?></div>
                                 </td>
                                 <td><?= !empty($c['created_at']) ? h(date('j M Y', strtotime((string)$c['created_at']))) : '-' ?></td>
+                                <td>
+                                    <?php $assignedId = (int)($c['assigned_officer_id'] ?? 0); ?>
+                                    <?= h($assignedId > 0 ? ($c['assigned_officer_name'] ?: 'Officer #' . $assignedId) : 'Not assigned') ?>
+                                    <?php if ($assignedId !== (int)$r['id']): ?><div class="fs-xs text-warning">Not with referrer</div><?php endif; ?>
+                                </td>
                                 <td><?= number_format((int)$c['loans']) ?></td>
                                 <td><?= (float)$c['disbursed'] > 0 ? money($c['disbursed']) : '<span class="text-muted">-</span>' ?></td>
                                 <td>

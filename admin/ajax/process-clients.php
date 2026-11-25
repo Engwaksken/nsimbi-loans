@@ -1,7 +1,13 @@
 <?php
-
-
-require 'nav-head.php';   
+/*
+ * Client actions over AJAX (view, add, edit, delete, block, reset password,
+ * loan details). JSON/HTML responses only, so it loads the session and
+ * database directly instead of nav-head.php (which prints the page layout).
+ */
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once dirname(__DIR__) . '/db.php';
 require_once dirname(__DIR__, 2) . '/includes/officer_assignment.php';
 
 
@@ -37,17 +43,24 @@ function get_param(string $key, string $default = ''): string {
     return trim($_GET[$key] ?? $default);
 }
 
-/* -- Upload config --------------------------------------------- */
-define('UPLOAD_DIR',      'uploads/clients/');
-define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);  /* 5 MB */
-define('ALLOWED_MIME', [
-    'image/jpeg', 'image/png', 'image/webp',
-    'application/pdf',
-]);
-
-if (!is_dir(UPLOAD_DIR)) {
-    mkdir(UPLOAD_DIR, 0755, true);
+// Admins and loan officers only (officers are further limited to their own clients).
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2], true)) {
+    json_err('Not authorized.', 403);
 }
+
+/* -- Upload config --------------------------------------------- */
+// Saved in admin/uploads/clients/ and stored as "uploads/clients/<file>",
+// which includes/file_links.php finds under admin/.
+define('UPLOAD_DIR',      dirname(__DIR__) . '/uploads/clients/');
+define('UPLOAD_PATH',     'uploads/clients/');
+define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);  /* 5 MB */
+// The saved extension comes from the real file type, never the uploaded name.
+define('ALLOWED_MIME', [
+    'image/jpeg'      => 'jpg',
+    'image/png'       => 'png',
+    'image/webp'      => 'webp',
+    'application/pdf' => 'pdf',
+]);
 
 
 function handle_upload(string $field, string $existing = ''): string {
@@ -57,19 +70,21 @@ function handle_upload(string $field, string $existing = ''): string {
     $tmp  = $_FILES[$field]['tmp_name'];
     $mime = mime_content_type($tmp);
 
-    if (!in_array($mime, ALLOWED_MIME, true))
+    if (!isset(ALLOWED_MIME[$mime]))
         json_err("File type not allowed for field '{$field}'.");
 
     if ($_FILES[$field]['size'] > MAX_UPLOAD_BYTES)
         json_err("File too large for field '{$field}' (max 5 MB).");
 
-    $ext  = pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION);
-    $name = UPLOAD_DIR . $field . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . strtolower($ext);
-
-    if (!move_uploaded_file($tmp, $name))
+    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0755, true) && !is_dir(UPLOAD_DIR))
         json_err("Failed to save uploaded file for field '{$field}'.");
 
-    return $name;
+    $file = $field . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . ALLOWED_MIME[$mime];
+
+    if (!move_uploaded_file($tmp, UPLOAD_DIR . $file))
+        json_err("Failed to save uploaded file for field '{$field}'.");
+
+    return UPLOAD_PATH . $file;
 }
 
 /** Fetch full client row (customers JOIN user) or null. */
