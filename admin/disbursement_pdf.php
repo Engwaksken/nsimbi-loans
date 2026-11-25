@@ -165,7 +165,6 @@ $html = '
 </head>
 <body>
 
-    <p class="brand">NSIMBI IMPACT</p>
     <p class="subtitle">Loan Disbursement Voucher</p>
     <div class="divider"></div>
 
@@ -234,9 +233,11 @@ $options->set('isRemoteEnabled', false);
 $options->set('defaultFont', 'Helvetica');
 
 $dompdf = new Dompdf($options);
-$dompdf->loadHtml($html);
+require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+$dompdf->loadHtml(pdf_brand_html($conn, $html));
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
+pdf_brand_footer($dompdf, $conn);
 
 $filename = 'disbursement-voucher-loan-' . (int)$loan['id'] . '.pdf';
 $dompdf->stream($filename, ['Attachment' => false]);

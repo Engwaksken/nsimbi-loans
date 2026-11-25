@@ -653,9 +653,11 @@ if ($export === 'pdf') {
     $options->set('defaultFont', 'DejaVu Sans');
 
     $dompdf = new Dompdf($options);
-    $dompdf->loadHtml($html);
+    require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+    $dompdf->loadHtml(pdf_brand_html($conn, $html));
     $dompdf->setPaper('A4', 'landscape');
     $dompdf->render();
+    pdf_brand_footer($dompdf, $conn);
     $dompdf->stream('All_Loans_Report_' . date('Ymd_His') . '.pdf', ['Attachment' => false]);
     exit;
 }

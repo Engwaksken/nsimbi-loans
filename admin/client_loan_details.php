@@ -294,9 +294,11 @@ if ($wantsPdf) {
     $options->set('defaultFont', 'DejaVu Sans');
 
     $dompdf = new Dompdf($options);
-    $dompdf->loadHtml($html);
+    require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+    $dompdf->loadHtml(pdf_brand_html($conn, $html));
     $dompdf->setPaper('A4', 'portrait');
     $dompdf->render();
+    pdf_brand_footer($dompdf, $conn);
 
     $filename = 'Loan_' . $loan_id . '_Statement.pdf';
     $dompdf->stream($filename, ['Attachment' => false]);

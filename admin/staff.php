@@ -314,9 +314,11 @@ if ($exportPdf) {
     $options->set('defaultFont', 'DejaVu Sans');
 
     $dompdf = new \Dompdf\Dompdf($options);
-    $dompdf->loadHtml($html);
+    require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+    $dompdf->loadHtml(pdf_brand_html($conn, $html));
     $dompdf->setPaper('A4', 'landscape');
     $dompdf->render();
+    pdf_brand_footer($dompdf, $conn);
     $dompdf->stream('Staff_Members_' . date('Ymd_His') . '.pdf', ['Attachment' => false]);
     exit;
 }

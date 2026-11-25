@@ -179,9 +179,11 @@ if ($export === 'csv' || $export === 'pdf') {
     $options->set('defaultFont', 'DejaVu Sans');
 
     $dompdf = new \Dompdf\Dompdf($options);
-    $dompdf->loadHtml($html);
+    require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+    $dompdf->loadHtml(pdf_brand_html($conn, $html));
     $dompdf->setPaper('A4', 'landscape');
     $dompdf->render();
+    pdf_brand_footer($dompdf, $conn);
     $dompdf->stream('Startups_' . $stamp . '.pdf', ['Attachment' => false]);
     exit;
 }

@@ -18,7 +18,6 @@ use Dompdf\Options;
 date_default_timezone_set('Africa/Nairobi');
 
 /* ---------- CONFIG ---------- */
-$companyName  = "Nsimbi Impact Limited"; 
 $generatedAt  = date('F d, Y \a\t H:i:s');
 
 /* ---------- VALIDATE INPUT ---------- */
@@ -412,32 +411,11 @@ $options->set('defaultFont', 'Arial');
 $options->set('chroot', realpath(''));
 
 $dompdf = new Dompdf($options);
-$dompdf->loadHtml($html);
+require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+$dompdf->loadHtml(pdf_brand_html($conn, $html));
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
-
-/* PAGE NUMBERS + FOOTER (EVERY PAGE)  */
-$canvas = $dompdf->getCanvas();
-$font   = $dompdf->getFontMetrics()->getFont("Helvetica", "normal");
-
-// A4 portrait (points) - 595 x 842
-// Footer line (left)
-$canvas->page_text(
-    40, 820,
-    $companyName . " | Generated: " . $generatedAt,
-    $font,
-    9,
-    [0, 0, 0]
-);
-
-// Page numbers (right)
-$canvas->page_text(
-    460, 820,
-    "Page {PAGE_NUM} of {PAGE_COUNT}",
-    $font,
-    9,
-    [0, 0, 0]
-);
+pdf_brand_footer($dompdf, $conn);
 
 /* OUTPUT */
 $filename = 'Staff_Profile_' . str_replace(' ', '_', $staffData['fname'] . '_' . $staffData['lname']) . '_' . date('Ymd') . '.pdf';

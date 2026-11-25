@@ -89,9 +89,11 @@ if (($_GET['tab'] ?? '') === 'books' && ($_GET['export'] ?? '') === 'pdf') {
     $filename = 'Books_History_' . $slug . '_' . $books['month'] . '_' . date('Ymd_His') . '.pdf';
 
     $dompdf = new \Dompdf\Dompdf($options);
-    $dompdf->loadHtml($html);
+    require_once dirname(__DIR__) . '/includes/pdf_brand.php';
+    $dompdf->loadHtml(pdf_brand_html($conn, $html));
     $dompdf->setPaper('A4', 'landscape');
     $dompdf->render();
+    pdf_brand_footer($dompdf, $conn);
     $dompdf->stream($filename, ['Attachment' => false]);
     exit;
 }
