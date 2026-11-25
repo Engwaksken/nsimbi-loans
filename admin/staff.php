@@ -1,13 +1,23 @@
 <?php
 $phead = "STAFF MEMBERS";
-require "nav-head.php";
+
+// The PDF export runs before nav-head.php (which prints the page), so load
+// the session, database and officer scope here, and check access the same way.
+if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+if (empty($_SESSION['logged_in']) || !in_array((int)($_SESSION['role'] ?? 0), [1, 2, 6], true)) {
+    header('Location: ../login.php');
+    exit;
+}
+$exportPdf = ($_GET['export'] ?? '') === 'pdf';
 
 function e($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
-$limit  = 10;
-$page   = max(1, (int)($_GET['page'] ?? 1));
+$limit  = $exportPdf ? 1000000 : 10;
+$page   = $exportPdf ? 1 : max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
 $employer = trim($_GET['employer'] ?? '');
@@ -203,6 +213,115 @@ $totalStaff       = (int)($stats['total_staff'] ?? 0);
 $activeStaff      = (int)($stats['active_staff'] ?? 0);
 $staffWithLoans   = (int)($stats['staff_with_loans'] ?? 0);
 $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
+
+/* ============================================================
+   PDF EXPORT (every staff member matching the filters)
+============================================================ */
+if ($exportPdf) {
+    require_once __DIR__ . '/vendor/autoload.php';
+    date_default_timezone_set('Africa/Kampala');
+
+    // What the list was filtered by, for the heading.
+    $filterNotes = [];
+    if ($search !== '') $filterNotes[] = 'Search: "' . $search . '"';
+    if ($period !== 'all') {
+        $filterNotes[] = 'Registered: ' . ($period === 'custom'
+            ? ($from ?? 'start') . ' to ' . ($to ?? 'today')
+            : $periods[$period]);
+    }
+    if ($employer !== '') $filterNotes[] = 'Employer: ' . $employer;
+    if ($employment !== '') $filterNotes[] = 'Employment: ' . $employment;
+    if ($status !== '') $filterNotes[] = 'Status: ' . ucfirst($status);
+    if ($loans !== '') {
+        $filterNotes[] = 'Loans: ' . ['with' => 'Have loans', 'outstanding' => 'Balance outstanding', 'without' => 'No loans'][$loans];
+    }
+
+    ob_start();
+    ?>
+    <!doctype html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page { margin: 16mm 10mm; }
+            body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5px; color: #1f2937; }
+            h1 { color: #123299; margin: 0 0 6px; font-size: 17px; }
+            .meta { color: #64748b; margin-bottom: 8px; }
+            table { width: 100%; border-collapse: collapse; }
+            .summary td { border: 1px solid #e5e7eb; background: #f8fafc; padding: 7px; width: 25%; }
+            .label { color: #64748b; font-size: 7px; text-transform: uppercase; }
+            .value { font-size: 11px; font-weight: bold; color: #111827; }
+            .rpt th { background: #123299; color: #fff; padding: 5px 4px; text-align: left; font-size: 7.5px; }
+            .rpt td { border-bottom: 1px solid #e5e7eb; padding: 4px; vertical-align: top; }
+            .rpt tr:nth-child(even) td { background: #f8fafc; }
+            .num { text-align: right; }
+        </style>
+    </head>
+    <body>
+    <h1>Staff Members</h1>
+    <div class="meta">
+        Generated: <?= e(date('F d, Y H:i')) ?> &middot; <?= number_format($totalStaff) ?> staff member(s)
+        <?php if ($filterNotes): ?><br>Filtered by: <?= e(implode(' | ', $filterNotes)) ?><?php endif; ?>
+    </div>
+
+    <table class="summary">
+        <tr>
+            <td><div class="label"><?= $filtered ? 'Matching Staff' : 'Total Staff' ?></div><div class="value"><?= number_format($totalStaff) ?></div></td>
+            <td><div class="label">Active</div><div class="value"><?= number_format($activeStaff) ?><?= $totalStaff > $activeStaff ? ' (' . number_format($totalStaff - $activeStaff) . ' blocked)' : '' ?></div></td>
+            <td><div class="label">Have Loans</div><div class="value"><?= number_format($staffWithLoans) ?></div></td>
+            <td><div class="label">Total Outstanding</div><div class="value">UGX <?= number_format($totalOutstanding) ?></div></td>
+        </tr>
+    </table>
+    <br>
+
+    <table class="rpt">
+        <thead>
+        <tr>
+            <th>#</th><th>Staff Name</th><th>Phone</th><th>Email</th><th>Home Address</th><th>Employer</th>
+            <th>Employment</th><th>Bank</th><th>Bank Acc</th><th class="num">Loan Limit</th><th>Status</th><th>Registered</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php if ($staff): ?>
+            <?php foreach ($staff as $i => $row): ?>
+                <tr>
+                    <td><?= $i + 1 ?></td>
+                    <td><?= e(trim(($row['fname'] ?? '') . ' ' . ($row['lname'] ?? '')) ?: 'Unnamed Staff') ?></td>
+                    <td><?= e($row['phone'] ?? '') ?></td>
+                    <td><?= e($row['email'] ?? '') ?></td>
+                    <td><?= e($row['home_address'] ?? '') ?></td>
+                    <td><?= e($row['employer'] ?? '') ?></td>
+                    <td><?= e($row['employment_status'] ?? '') ?></td>
+                    <td><?= e($row['bank_name'] ?? '') ?></td>
+                    <td><?= e($row['bank_account'] ?? '') ?></td>
+                    <td class="num"><?= number_format((float)($row['loan_limit'] ?? 0)) ?></td>
+                    <td><?= (int)$row['status'] === 1 ? 'Active' : 'Blocked' ?></td>
+                    <td><?= !empty($row['created_at']) ? e(date('d/m/Y', strtotime((string)$row['created_at']))) : '-' ?></td>
+                </tr>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <tr><td colspan="12" style="text-align:center;padding:15px">No staff members found.</td></tr>
+        <?php endif; ?>
+        </tbody>
+    </table>
+    </body>
+    </html>
+    <?php
+    $html = ob_get_clean();
+
+    $options = new \Dompdf\Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('defaultFont', 'DejaVu Sans');
+
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'landscape');
+    $dompdf->render();
+    $dompdf->stream('Staff_Members_' . date('Ymd_His') . '.pdf', ['Attachment' => false]);
+    exit;
+}
+
+require "nav-head.php";
 ?>
 
 <div class="page-header">
@@ -215,6 +334,10 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
         <button type="button" class="btn btn-ghost btn-sm" onclick="download_table_as_csv('report','staff_members.csv')">
             <i class="fas fa-file-csv"></i> Export CSV
         </button>
+
+        <a href="?export=pdf<?= e($query) ?>" target="_blank" rel="noopener" class="btn btn-danger btn-sm" title="All staff matching the filters">
+            <i class="fas fa-file-pdf"></i> Export PDF
+        </a>
     </div>
 </div>
 
