@@ -145,6 +145,9 @@ $countStmt->close();
 
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
+// Loan officers only see their own clients, so the officer column is for everyone else.
+$showOfficer = officer_scope_id() <= 0;
+
 $sql = "
     SELECT 
         u.id,
@@ -162,6 +165,7 @@ $sql = "
         c.nok_name,
         c.nok_tel,
         c.active,
+        TRIM(CONCAT(COALESCE(o.fname, ''), ' ', COALESCE(o.lname, ''))) AS officer_name,
         (
             SELECT COUNT(*) 
             FROM loan 
@@ -177,6 +181,7 @@ $sql = "
         ) AS bal
     FROM customers c
     INNER JOIN user u ON c.user_id = u.id
+    LEFT JOIN user o ON o.id = c.assigned_officer_id
     $where
     ORDER BY c.id DESC
     LIMIT ? OFFSET ?
@@ -362,6 +367,9 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
                         <th>Business</th>
                         <th>Type</th>
                         <th>District</th>
+                        <?php if ($showOfficer): ?>
+                            <th>Loan Officer</th>
+                        <?php endif; ?>
                         <th>Loan Limit</th>
                         <th>Loans</th>
                         <th>Status</th>
@@ -410,6 +418,16 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
                                     <?= e($c['district'] ?: ($c['location'] ?: 'N/A')) ?>
                                 </td>
 
+                                <?php if ($showOfficer): ?>
+                                    <td class="fs-sm">
+                                        <?php if ($c['officer_name'] !== ''): ?>
+                                            <?= e($c['officer_name']) ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">Unassigned</span>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endif; ?>
+
                                 <td class="td-dark">
                                     UGX <?= number_format((float)($c['loan_limit'] ?? 0)) ?>
                                 </td>
@@ -453,7 +471,7 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="10">
+                            <td colspan="<?= $showOfficer ? 11 : 10 ?>">
                                 <div class="empty-state">
                                     <i class="fas fa-users"></i>
                                     <h3>No clients found</h3>
