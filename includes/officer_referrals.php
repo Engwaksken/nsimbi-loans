@@ -64,12 +64,29 @@ function referral_loan_type_clause(mysqli $conn): string
 }
 
 /**
- * One row per loan officer (and anyone else who has referrals), for clients
- * who signed up between $from and $to (Y-m-d, inclusive; null = no limit).
+ * Column tying a client to an officer: 'assigned' = the officer who owns the
+ * client (customers.assigned_officer_id), 'referred' = the officer the client
+ * named at sign-up (customers.referred_by).
  */
-function referral_leaderboard(mysqli $conn, ?string $from, ?string $to): array
+function referral_owner_column(mysqli $conn, string $basis): string
+{
+    if ($basis === 'assigned') {
+        $res = $conn->query("SHOW COLUMNS FROM customers LIKE 'assigned_officer_id'");
+        if ($res && $res->num_rows > 0) {
+            return 'assigned_officer_id';
+        }
+    }
+    return 'referred_by';
+}
+
+/**
+ * One row per loan officer (and anyone else who has clients on $basis), for
+ * clients who signed up between $from and $to (Y-m-d, inclusive; null = no limit).
+ */
+function referral_leaderboard(mysqli $conn, ?string $from, ?string $to, string $basis = 'referred'): array
 {
     referral_ensure_schema($conn);
+    $owner = referral_owner_column($conn, $basis);
     $paid = "'" . implode("','", REFERRAL_DISBURSED_STATUSES) . "'";
     $range = '';
     $types = '';
@@ -97,11 +114,11 @@ function referral_leaderboard(mysqli $conn, ?string $from, ?string $to): array
             COUNT(DISTINCT CASE WHEN UPPER(l.status) = 'OVERDUE' THEN l.id END) AS loans_overdue,
             COALESCE(SUM(CASE WHEN UPPER(l.status) = 'OVERDUE' THEN l.loan_balance END), 0) AS overdue_balance
         FROM user u
-        LEFT JOIN customers c ON c.referred_by = u.id $range
+        LEFT JOIN customers c ON c.{$owner} = u.id $range
         LEFT JOIN loan l ON l.client_id = c.user_id
             AND UPPER(COALESCE(l.status, '')) NOT IN ('DELETED', '')
             $loanType
-        WHERE u.role = 2 OR u.id IN (SELECT referred_by FROM customers WHERE referred_by IS NOT NULL)
+        WHERE u.role = 2 OR u.id IN (SELECT {$owner} FROM customers WHERE {$owner} IS NOT NULL AND {$owner} <> 0)
         GROUP BY u.id, u.fname, u.lname, u.role, u.status
     ";
     $s = $conn->prepare($sql);
@@ -127,11 +144,12 @@ function referral_leaderboard(mysqli $conn, ?string $from, ?string $to): array
     return $rows;
 }
 
-/** Sign-ups in the period with no referring officer. */
-function referral_unreferred_count(mysqli $conn, ?string $from, ?string $to): int
+/** Sign-ups in the period with no officer on $basis (unassigned / unreferred). */
+function referral_unreferred_count(mysqli $conn, ?string $from, ?string $to, string $basis = 'referred'): int
 {
     referral_ensure_schema($conn);
-    $sql = 'SELECT COUNT(*) AS n FROM customers c WHERE c.referred_by IS NULL';
+    $owner = referral_owner_column($conn, $basis);
+    $sql = "SELECT COUNT(*) AS n FROM customers c WHERE (c.{$owner} IS NULL OR c.{$owner} = 0)";
     $types = '';
     $args = [];
     if ($from !== null) {
@@ -154,10 +172,11 @@ function referral_unreferred_count(mysqli $conn, ?string $from, ?string $to): in
     return $n;
 }
 
-/** Clients one officer referred in the period, with how their loans stand. */
-function referral_clients_of(mysqli $conn, int $officerId, ?string $from, ?string $to): array
+/** One officer's clients (assigned or referred) in the period, with how their loans stand. */
+function referral_clients_of(mysqli $conn, int $officerId, ?string $from, ?string $to, string $basis = 'referred'): array
 {
     referral_ensure_schema($conn);
+    $owner = referral_owner_column($conn, $basis);
     $paid = "'" . implode("','", REFERRAL_DISBURSED_STATUSES) . "'";
     $loanType = referral_loan_type_clause($conn);
     $hasOfficer = loan_table_has_column($conn, 'customers', 'assigned_officer_id');
@@ -177,7 +196,7 @@ function referral_clients_of(mysqli $conn, int $officerId, ?string $from, ?strin
         LEFT JOIN loan l ON l.client_id = c.user_id
             AND UPPER(COALESCE(l.status, '')) NOT IN ('DELETED', '')
             $loanType
-        WHERE c.referred_by = ?";
+        WHERE c.{$owner} = ?";
     $types = 'i';
     $args = [$officerId];
     if ($from !== null) {

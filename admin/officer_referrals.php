@@ -81,10 +81,14 @@ if ($from !== null && $to !== null && $from > $to) {
     [$from, $to] = [$to, $from];
 }
 
+// ---- Count by: clients each officer owns (default) or clients who named them ----
+$basis = ($_GET['count'] ?? 'assigned') === 'referred' ? 'referred' : 'assigned';
+$basisLabel = $basis === 'assigned' ? 'Assigned clients' : 'Referred clients';
+
 // ---- Ranking ----
 $sorts = [
     'disbursed'  => 'Amount paid out',
-    'clients'    => 'Clients referred',
+    'clients'    => $basis === 'assigned' ? 'Clients' : 'Clients referred',
     'conversion' => 'Conversion rate',
     'quality'    => 'Lowest overdue rate',
 ];
@@ -97,8 +101,8 @@ $error = '';
 $rows = [];
 $unreferred = 0;
 try {
-    $rows = referral_leaderboard($conn, $from, $to);
-    $unreferred = referral_unreferred_count($conn, $from, $to);
+    $rows = referral_leaderboard($conn, $from, $to, $basis);
+    $unreferred = referral_unreferred_count($conn, $from, $to, $basis);
 } catch (Throwable $e) {
     error_log('Officer referrals: ' . $e->getMessage());
     $error = 'Could not load referral figures. Check the server log.';
@@ -137,7 +141,7 @@ if ($error === '') {
     foreach ($rows as $r) {
         if ($r['clients'] > 0) {
             try {
-                $clientLists[(int)$r['id']] = referral_clients_of($conn, (int)$r['id'], $from, $to);
+                $clientLists[(int)$r['id']] = referral_clients_of($conn, (int)$r['id'], $from, $to, $basis);
             } catch (Throwable $e) {
                 error_log('Officer referrals clients: ' . $e->getMessage());
             }
@@ -201,7 +205,7 @@ require 'nav-head.php';
             <span class="stat-badge flat"><i class="fas fa-calendar"></i> <?= h($periodLabel) ?></span>
         </div>
         <div class="stat-value"><?= number_format($totals['clients']) ?></div>
-        <div class="stat-label">Referred clients</div>
+        <div class="stat-label"><?= h($basisLabel) ?></div>
         <div class="stat-foot"><i class="fas fa-chart-pie"></i> <?= $allSignups > 0 ? $pct($totals['clients'] / $allSignups) : '0%' ?> of <?= number_format($allSignups) ?> sign-ups</div>
     </div>
     <div class="stat-card c-green">
@@ -234,9 +238,15 @@ require 'nav-head.php';
     <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div>
             <h5 class="mb-0">Loan officer ranking</h5>
-            <small class="text-muted">Counts clients who signed up in the period, and every loan they have taken since.</small>
+            <small class="text-muted"><?= $basis === 'assigned'
+                ? 'Counts the clients each officer is assigned (by referral or district) who signed up in the period, and every loan they have taken since.'
+                : 'Counts clients who named the officer as their referrer when signing up in the period, and every loan they have taken since.' ?></small>
         </div>
         <form method="get" class="ref-filters">
+            <select name="count" class="form-select form-select-sm" aria-label="Count" onchange="this.form.submit()">
+                <option value="assigned"<?= $basis === 'assigned' ? ' selected' : '' ?>>Count: Assigned clients</option>
+                <option value="referred"<?= $basis === 'referred' ? ' selected' : '' ?>>Count: Referred clients</option>
+            </select>
             <select name="period" class="form-select form-select-sm" aria-label="Sign-up period" onchange="this.form.querySelector('.ref-custom').hidden = this.value !== 'custom'; if (this.value !== 'custom') this.form.submit();">
                 <?php foreach ($periods as $key => $label): ?>
                     <option value="<?= h($key) ?>"<?= $period === $key ? ' selected' : '' ?>><?= h($label) ?></option>
@@ -260,7 +270,7 @@ require 'nav-head.php';
                 <tr>
                     <th>#</th>
                     <th>Loan officer</th>
-                    <th>Clients referred</th>
+                    <th><?= $basis === 'assigned' ? 'Clients' : 'Clients referred' ?></th>
                     <th>Applied</th>
                     <th>Got a loan</th>
                     <th>Paid out</th>
@@ -332,7 +342,7 @@ require 'nav-head.php';
         <div class="modal-box md" role="dialog" aria-modal="true" aria-labelledby="refModalTitle-<?= (int)$r['id'] ?>">
             <div class="modal-header">
                 <div class="modal-title"><div class="modal-ico"><i class="fas fa-users"></i></div>
-                    <span class="modal-title-text" id="refModalTitle-<?= (int)$r['id'] ?>">Clients referred by <?= h($name) ?></span></div>
+                    <span class="modal-title-text" id="refModalTitle-<?= (int)$r['id'] ?>"><?= $basis === 'assigned' ? 'Clients of' : 'Clients referred by' ?> <?= h($name) ?></span></div>
                 <button type="button" class="modal-close" data-ref-close aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
