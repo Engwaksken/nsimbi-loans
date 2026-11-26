@@ -57,6 +57,7 @@ $sql = "
         l.loan_balance AS current_balance,
         l.due_date AS current_due_date,
         u.fname, u.lname, u.email AS client_email,
+        c.phone AS client_phone,
         c.business_type AS assess_business_type,
         c.amount_last AS assess_amount_last,
         c.amount_this AS assess_amount_this,
@@ -112,13 +113,25 @@ foreach ($topups as $t) {
 
 .role-badge { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; color: #374151; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: .3rem .75rem; }
 
-.topup-card { background: #fff; border: 1px solid #e5e7eb; border-left: 5px solid #f59e0b; border-radius: 16px; padding: 1rem; margin-bottom: .9rem; box-shadow: 0 6px 18px rgba(15,23,42,.05); }
-.topup-card.status-info_requested { border-left-color: #0ea5e9; }
-.topup-card.status-info_provided { border-left-color: #7e22ce; }
+.pending-table-card { overflow: hidden; }
+.pending-table { margin: 0; }
+.pending-table thead th { white-space: nowrap; }
+.pending-table tr.topup-row td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
+.pending-table tr.topup-row.status-info_requested td:first-child { box-shadow: inset 4px 0 0 #0ea5e9; }
+.pending-table tr.topup-row.status-info_provided td:first-child { box-shadow: inset 4px 0 0 #7e22ce; }
+.pending-table .applicant-name { font-weight: 700; color: var(--text-dark); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.pending-table .amount-main { font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; }
+.pending-table .ai-amount { font-weight: 700; color: #1d4ed8; }
+.pending-table .row-actions { display: inline-flex; gap: .35rem; flex-wrap: nowrap; justify-content: flex-end; }
 
-.topup-card-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.cell-av { width: 42px; height: 42px; border-radius: 50%; background: #f59e0b; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
-.topup-meta { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+.cell-av { width: 34px; height: 34px; font-size: .85rem; border-radius: 50%; background: #f59e0b; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+
+.review-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .9rem 1.2rem;
+    padding: .9rem 1rem; border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; }
+.review-summary .rs-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+.review-summary .rs-value { font-weight: 700; color: #111827; overflow-wrap: anywhere; }
+.review-summary .amount-main { font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif; }
+.review-modal .review-panel { margin-top: 1rem; }
 
 .fs-sm { font-size: .85rem; }
 .fs-xs { font-size: .72rem; }
@@ -128,7 +141,7 @@ foreach ($topups as $t) {
 .badge-secondary { background: #e5e7eb; color: #374151; }
 .badge-info { background: #e0f2fe; color: #0369a1; }
 
-.workflow-note { margin-top: .6rem; padding: .6rem .8rem; border-radius: 10px; background: #f8fafc; border: 1px dashed #cbd5e1; font-size: .82rem; color: #334155; }
+.workflow-note { margin-top: .8rem; padding: .6rem .8rem; border-radius: 10px; background: #f8fafc; border: 1px dashed #cbd5e1; font-size: .82rem; color: #334155; }
 .workflow-note strong { color: #111827; }
 
 .audit-entry { border-bottom: 1px solid #eef0f3; padding: .55rem 0; }
@@ -140,23 +153,10 @@ foreach ($topups as $t) {
 .audit-action.topup_info_provided { color: #7e22ce; }
 .audit-action.topup_requested { color: #6b7280; }
 
-.review-panel { border: 1px solid #e5e7eb; border-radius: 14px; background: #fbfcfd; padding: 1rem; margin-top: .75rem; }
+.review-panel { border: 1px solid #e5e7eb; border-radius: 14px; background: #fbfcfd; padding: 1rem; }
 .review-tabs { display: flex; gap: .35rem; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; flex-wrap: wrap; }
 .review-tab-btn { border: none; background: transparent; padding: .5rem 1rem; font-size: .8rem; font-weight: 700; color: #64748b; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; cursor: pointer; }
 .review-tab-btn:hover { background: #f1f5f9; }
-.ai-recommend {
-    display: inline-flex;
-    align-items: center;
-    gap: .5rem;
-    margin-top: .75rem;
-    padding: .5rem .9rem;
-    border-radius: 10px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1e3a8a;
-    font-size: .9rem;
-}
-.ai-recommend strong { color: #1d4ed8; }
 .review-tab-btn.tab-approve.active { color: #16a34a; border-bottom-color: #16a34a; background: #f0fdf4; }
 .review-tab-btn.tab-reject.active { color: #dc2626; border-bottom-color: #dc2626; background: #fef2f2; }
 .review-tab-btn.tab-info.active { color: #0369a1; border-bottom-color: #0369a1; background: #f0f9ff; }
@@ -213,6 +213,22 @@ foreach ($topups as $t) {
 
 <?php else: ?>
 
+    <div class="card mb-3 pending-table-card">
+        <div class="table-wrap">
+            <table class="table pending-table">
+                <thead>
+                    <tr>
+                        <th>Applicant</th>
+                        <th>Status</th>
+                        <th>Top-up</th>
+                        <th>Current loan</th>
+                        <th>AI recommended</th>
+                        <th>Requested</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    <?php $reviewModals = []; ?>
     <?php foreach ($topups as $topup): ?>
         <?php
         $topupId = (int)$topup['id'];
@@ -222,62 +238,117 @@ foreach ($topups as $t) {
         $clientName = trim((string)($topup['fname'] ?? '') . ' ' . (string)($topup['lname'] ?? ''));
         $clientName = $clientName !== '' ? $clientName : ('Client #' . (int)$topup['client_id']);
         $initials = strtoupper(substr($clientName, 0, 1));
+        $phone = trim((string)($topup['client_phone'] ?? ''));
+        $contact = $phone !== '' ? $phone : 'Client ID: ' . (int)$topup['client_id'];
 
         $requestedDate = !empty($topup['created_at']) ? date('M j, Y', strtotime((string)$topup['created_at'])) : 'N/A';
+        $period = (int)($topup['loan_period'] ?? 0);
+        $periodLabel = '+' . $period . ' month' . ($period === 1 ? '' : 's');
 
         $officerName = trim((string)($topup['officer_fname'] ?? '') . ' ' . (string)($topup['officer_lname'] ?? ''));
         $officerResponse = trim((string)($topup['officer_response'] ?? ''));
         $infoRequestDetails = trim((string)($topup['info_request_details'] ?? ''));
 
         $trail = $auditTrailByTopup[$topupId] ?? [];
+
+        try {
+            $aiAmount = ai_recommended_amount($topup);
+        } catch (Throwable $e) {
+            error_log('pending_topups AI amount: ' . $e->getMessage());
+            $aiAmount = 0;
+        }
         ?>
-
-        <div class="topup-card status-<?= h(strtolower($status)) ?>">
-            <div class="topup-card-top">
-                <div class="d-flex align-center gap-3">
-                    <div class="cell-av"><?= h($initials ?: 'U') ?></div>
-                    <div>
-                        <div style="font-weight:700"><?= h($clientName) ?></div>
-                        <div class="fs-sm text-muted">
-                            Top-up on Loan #<?= $loanId ?> | Requested <?= h($requestedDate) ?>
-                        </div>
-                        <div class="mt-1">
-                            <span class="badge badge-primary">Top-Up</span>
+                    <tr class="topup-row status-<?= h(strtolower($status)) ?>">
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="cell-av"><?= h($initials ?: 'U') ?></div>
+                                <div style="min-width:0">
+                                    <div class="applicant-name"><?= h($clientName) ?></div>
+                                    <div class="fs-xs text-muted"><?= h($contact) ?></div>
+                                    <div class="fs-xs text-muted">Loan #<?= $loanId ?></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
                             <span class="badge <?= topupStatusBadge($status) ?>"><?= h(topupStatusLabel($status)) ?></span>
-                        </div>
-                    </div>
+                            <?php if ($status === 'INFO_PROVIDED'): ?>
+                                <div class="fs-xs text-muted mt-1"><i class="fas fa-reply"></i> <?= $officerName !== '' ? h($officerName) : 'Officer replied' ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-nowrap">
+                            <div class="amount-main"><?= money($topup['amount'] ?? 0) ?></div>
+                            <div class="fs-xs text-muted"><?= h($periodLabel) ?></div>
+                        </td>
+                        <td class="text-nowrap">
+                            <div><?= money($topup['current_amount'] ?? 0) ?></div>
+                            <div class="fs-xs text-muted">Balance <?= money($topup['current_balance'] ?? 0) ?></div>
+                        </td>
+                        <td class="text-nowrap">
+                            <?php if ($aiAmount > 0): ?>
+                                <span class="ai-amount"><?= money($aiAmount) ?></span>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-nowrap"><?= h($requestedDate) ?></td>
+                        <td class="text-end">
+                            <div class="row-actions">
+                                <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>" class="btn btn-ghost btn-sm" title="View loan">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                                <button type="button" class="btn <?= $isReviewer ? 'btn-outline-primary' : 'btn-ghost' ?> btn-sm"
+                                        data-review-open="topupModal-<?= $topupId ?>" aria-haspopup="dialog">
+                                    <i class="fas fa-<?= $isReviewer ? 'clipboard-check' : 'circle-info' ?>"></i> <?= $isReviewer ? 'Review' : 'Details' ?>
+                                </button>
+                            </div>
+                            <?php if (!$isReviewer): ?>
+                                <div class="fs-xs text-muted mt-1">Read-only for your role</div>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+        <?php ob_start(); ?>
+<div class="modal-overlay review-modal" id="topupModal-<?= $topupId ?>" aria-hidden="true">
+    <div class="modal-box md" role="dialog" aria-modal="true" aria-labelledby="topupModalTitle-<?= $topupId ?>">
+        <div class="modal-header">
+            <div class="modal-title">
+                <div class="modal-ico"><i class="fas fa-<?= $isReviewer ? 'clipboard-check' : 'circle-info' ?>"></i></div>
+                <span class="modal-title-text" id="topupModalTitle-<?= $topupId ?>"><?= $isReviewer ? 'Review top-up' : 'Top-up details' ?>: <?= h($clientName) ?></span>
+            </div>
+            <button type="button" class="modal-close" data-review-close aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="review-summary">
+                <div>
+                    <div class="rs-label">Applicant</div>
+                    <div class="rs-value"><?= h($clientName) ?></div>
+                    <div class="fs-xs text-muted"><?= h($contact) ?></div>
                 </div>
-
-                <div class="topup-meta">
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Top-Up Amount</div>
-                        <div style="font-weight:800;color:var(--primary)"><?= money($topup['amount'] ?? 0) ?></div>
-                    </div>
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Extra Period</div>
-                        <div class="fs-sm text-muted"><?= (int)($topup['loan_period'] ?? 0) ?> month(s)</div>
-                    </div>
-                    <div>
-                        <div class="fs-xs text-muted" style="text-transform:uppercase;letter-spacing:.06em">Current Balance</div>
-                        <div class="fs-sm text-muted"><?= money($topup['current_balance'] ?? 0) ?></div>
-                    </div>
+                <div>
+                    <div class="rs-label">Top-up</div>
+                    <div class="rs-value amount-main"><?= money($topup['amount'] ?? 0) ?></div>
+                    <div class="fs-xs text-muted"><?= h($periodLabel) ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">Current loan #<?= $loanId ?></div>
+                    <div class="rs-value"><?= money($topup['current_amount'] ?? 0) ?></div>
+                    <div class="fs-xs text-muted">Balance <?= money($topup['current_balance'] ?? 0) ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">AI recommended</div>
+                    <div class="rs-value"><?= $aiAmount > 0 ? money($aiAmount) : '-' ?></div>
+                </div>
+                <div>
+                    <div class="rs-label">Requested</div>
+                    <div class="rs-value"><?= h($requestedDate) ?></div>
+                    <div class="mt-1"><span class="badge <?= topupStatusBadge($status) ?>"><?= h(topupStatusLabel($status)) ?></span></div>
                 </div>
             </div>
 
-            <?php
-            try {
-                $aiAmount = ai_recommended_amount($topup);
-            } catch (Throwable $e) {
-                error_log('pending_topups AI amount: ' . $e->getMessage());
-                $aiAmount = 0;
-            }
-            ?>
-            <?php if ($aiAmount > 0): ?>
-                <div class="ai-recommend">AI recommended amount: <strong><?= money($aiAmount) ?></strong></div>
-            <?php endif; ?>
-
             <?php if (!empty($topup['request_notes'])): ?>
-                <div class="fs-xs text-muted mt-2">Requester notes: <?= nl2br(h($topup['request_notes'])) ?></div>
+                <div class="workflow-note">
+                    <strong><i class="fas fa-note-sticky"></i> Requester notes:</strong>
+                    <div class="mt-1"><?= nl2br(h($topup['request_notes'])) ?></div>
+                </div>
             <?php endif; ?>
 
             <?php if ($status === 'INFO_PROVIDED'): ?>
@@ -288,16 +359,11 @@ foreach ($topups as $t) {
                         <div class="mt-2 text-muted"><strong>Original request:</strong> <?= nl2br(h($infoRequestDetails)) ?></div>
                     <?php endif; ?>
                 </div>
-            <?php elseif ($status === 'INFO_REQUESTED'): ?>
-                <div class="workflow-note">
-                    <strong><i class="fas fa-user-clock"></i> Awaiting <?= $officerName !== '' ? h($officerName) : 'assigned officer' ?>:</strong>
-                    <div class="mt-1"><?= nl2br(h($infoRequestDetails)) ?></div>
-                </div>
             <?php endif; ?>
 
             <?php if (!empty($trail)): ?>
                 <div class="mt-2">
-                    <a class="fs-xs text-muted" href="#" onclick="var el=document.getElementById('taudit-<?= $topupId ?>'); el.classList.toggle('d-none'); return false;">
+                    <a class="fs-xs text-muted" href="#" onclick="document.getElementById('taudit-<?= $topupId ?>').classList.toggle('d-none'); return false;">
                         <i class="fas fa-clock-rotate-left"></i> View history (<?= count($trail) ?>)
                     </a>
                     <div class="d-none mt-2" id="taudit-<?= $topupId ?>">
@@ -324,25 +390,9 @@ foreach ($topups as $t) {
                 </div>
             <?php endif; ?>
 
-            <div class="d-flex gap-2 flex-wrap mt-3">
-                <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>" class="btn btn-ghost btn-sm">
-                    <i class="fas fa-eye"></i> View Loan
-                </a>
-
-                <?php if ($isReviewer): ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm review-toggle-btn"
-                            data-panel="topupReviewPanel-<?= $topupId ?>" aria-expanded="false">
-                        <i class="fas fa-clipboard-check"></i> Review Top-Up
-                        <i class="fas fa-chevron-down fs-xs"></i>
-                    </button>
-                <?php else: ?>
-                    <span class="fs-xs text-muted align-self-center">Read-only for your role</span>
-                <?php endif; ?>
-            </div>
-
             <?php if ($isReviewer): ?>
-                <div id="topupReviewPanel-<?= $topupId ?>" class="review-panel d-none">
-                    <div class="review-tabs">
+                <div class="review-panel">
+                    <div class="review-tabs" role="tablist">
                         <button type="button" class="review-tab-btn tab-approve active" data-tab="tapprove-<?= $topupId ?>">
                             <i class="fas fa-check"></i> Approve
                         </button>
@@ -370,8 +420,7 @@ foreach ($topups as $t) {
                     </div>
 
                     <div class="review-tab-content d-none" data-tab-content="treject-<?= $topupId ?>">
-                        <form method="POST" action="review_topup_action.php"
-                              onsubmit="return this.reason.value.trim().length > 0 || (alert('A rejection reason is required.') && false);">
+                        <form method="POST" action="review_topup_action.php">
                             <input type="hidden" name="topup_id" value="<?= $topupId ?>">
                             <input type="hidden" name="action" value="reject">
                             <label class="form-label fs-sm">Reason for rejection <span class="text-danger">*</span></label>
@@ -386,8 +435,7 @@ foreach ($topups as $t) {
                     </div>
 
                     <div class="review-tab-content d-none" data-tab-content="tinfo-<?= $topupId ?>">
-                        <form method="POST" action="review_topup_action.php"
-                              onsubmit="return this.info_details.value.trim().length > 0 || (alert('Please describe what information is needed.') && false);">
+                        <form method="POST" action="review_topup_action.php">
                             <input type="hidden" name="topup_id" value="<?= $topupId ?>">
                             <input type="hidden" name="action" value="request_info">
                             <label class="form-label fs-sm">What's needed from the applicant? <span class="text-danger">*</span></label>
@@ -415,20 +463,50 @@ foreach ($topups as $t) {
                 </div>
             <?php endif; ?>
         </div>
-
+        <div class="modal-footer">
+            <a href="view_loan.php?id=<?= urlencode((string)$loanId) ?>" class="btn btn-ghost"><i class="fas fa-eye"></i> Full loan details</a>
+            <button type="button" class="btn btn-secondary" data-review-close>Close</button>
+        </div>
+    </div>
+</div>
+        <?php $reviewModals[] = ob_get_clean(); ?>
     <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <?= implode('', $reviewModals) ?>
 
 <?php endif; ?>
 
 <script>
+function openReviewModal(id) {
+    var modal = document.getElementById(id);
+    if (!modal) return;
+    if (window.Modal) { Modal.open(id); } else { modal.classList.add('open'); }
+    modal.setAttribute('aria-hidden', 'false');
+}
+function closeReviewModal(id) {
+    var modal = document.getElementById(id);
+    if (!modal) return;
+    if (window.Modal) { Modal.close(id); } else { modal.classList.remove('open'); }
+    modal.setAttribute('aria-hidden', 'true');
+}
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelectorAll('.review-modal.open');
+    if (open.length) closeReviewModal(open[open.length - 1].id);
+});
 document.addEventListener('click', function (e) {
-    var toggleBtn = e.target.closest('.review-toggle-btn');
-    if (toggleBtn) {
-        var panel = document.getElementById(toggleBtn.getAttribute('data-panel'));
-        if (panel) {
-            var nowHidden = panel.classList.toggle('d-none');
-            toggleBtn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
-        }
+    var openBtn = e.target.closest('[data-review-open]');
+    if (openBtn) {
+        openReviewModal(openBtn.getAttribute('data-review-open'));
+        return;
+    }
+    var openModal = e.target.closest('.review-modal');
+    if (openModal && (e.target === openModal || e.target.closest('[data-review-close]'))) {
+        closeReviewModal(openModal.id);
         return;
     }
 
