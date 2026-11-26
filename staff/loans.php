@@ -214,6 +214,15 @@ $stmt->close();
         </div>
     </div>
 
+    <?php foreach (['success' => 'success', 'error' => 'danger'] as $flashKey => $flashClass): ?>
+        <?php if (!empty($_SESSION[$flashKey])): ?>
+            <div class="alert alert-<?= $flashClass ?> text-white mb-4" role="alert">
+                <?= e($_SESSION[$flashKey]) ?>
+            </div>
+            <?php unset($_SESSION[$flashKey]); ?>
+        <?php endif; ?>
+    <?php endforeach; ?>
+
     <div class="row g-3 mb-4">
 
         <div class="col-xl-3 col-md-6">
@@ -326,7 +335,8 @@ $stmt->close();
                                 $due_date = $loan['due_date'] ?? "-";
                                 $user_id = (int)($loan['client_id'] ?? $client_id);
 
-                                $can_topup = in_array($status, ["OUTSTANDING", "OVERDUE"], true)
+                                // Admin disbursement only merges top-ups into OUTSTANDING loans.
+                                $can_topup = $status === "OUTSTANDING"
                                     && (float)$loan['computed_outstanding'] > 0;
                             ?>
 
@@ -418,7 +428,6 @@ $stmt->close();
             <div class="modal-body">
 
                 <input type="hidden" name="loan_id" id="topup_loan_id">
-                <input type="hidden" name="client_id" value="<?= (int)$client_id ?>">
 
                 <div class="mb-3">
                     <label class="form-label">Loan Number</label>
@@ -443,11 +452,16 @@ $stmt->close();
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Requested Topup Amount</label>
-                    <input type="number" step="0.01" min="1" name="requested_amount" class="form-control" required>
+                    <label class="form-label">Additional Amount Needed (UGX)</label>
+                    <input type="number" step="1" min="1" name="requested_amount" class="form-control" required>
                     <small class="text-muted">
-                        Existing outstanding balance will be cleared first.
+                        This amount is added to your current loan once approved and disbursed.
                     </small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Top-up Period</label>
+                    <input type="text" class="form-control" value="3 months" readonly>
                 </div>
 
                 <div class="mb-3">

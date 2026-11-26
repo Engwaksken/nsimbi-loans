@@ -66,7 +66,10 @@ $sql = "
     LEFT JOIN user u ON u.id = t.client_id
     LEFT JOIN customers c ON c.user_id = t.client_id
     LEFT JOIN user officer ON officer.id = t.assigned_officer_id
-    WHERE t.status IN ('PENDING', 'INFO_PROVIDED')" . officer_loan_sql('l') . "
+    WHERE t.status IN ('PENDING', 'INFO_PROVIDED')" . (officer_scope_id() > 0
+        // Officers see their own loans plus requests sent to them (e.g. staff top-ups).
+        ? ' AND (l.assigned_officer_id = ' . officer_scope_id() . ' OR t.assigned_officer_id = ' . officer_scope_id() . ')'
+        : '') . "
     ORDER BY t.id DESC
 ";
 

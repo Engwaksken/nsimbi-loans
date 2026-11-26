@@ -1,394 +1,243 @@
 <?php
 declare(strict_types=1);
 
-session_start();
+/*
+ * Staff (members, role 4) ask to top up one of their outstanding loans.
+ *
+ * This files a request in loan_topup_requests - the same queue the admin
+ * Pending Top-Ups page reviews and Disbursement pays out - and sends it to
+ * loan officer Esther Kayondo by email and in-app notification. Nothing
+ * about the loan changes until an administrator approves and disburses it.
+ */
 
-require "db.php";
-require_once __DIR__ . "/../php/mail-function.php";
-
-date_default_timezone_set("Africa/Nairobi");
-
-if (!isset($conn) || !($conn instanceof mysqli)) {
-    exit("Database connection not found.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$conn->set_charset("utf8mb4");
+require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__) . '/includes/officer_assignment.php';
+require_once dirname(__DIR__) . '/admin/loan_audit.php';
+require_once dirname(__DIR__) . '/php/mail-function.php';
 
-function show_message_and_redirect(
-    string $message,
-    string $type = "success",
-    string $redirect = "pending_loans.php"
-): void {
-    $type = strtolower($type);
+date_default_timezone_set('Africa/Nairobi');
 
-    $bg = match ($type) {
-        "success" => "success",
-        "warning" => "warning",
-        default => "danger"
-    };
+const TOPUP_OFFICER_NAME = 'Esther Kayondo';
+const TOPUP_MEMBER_PERIOD = 3;      // staff top-ups are always 3 months
+const TOPUP_MEMBER_RATE = 10.0;     // matches admin/includes/process-loan-topup.php
 
-    $icon = match ($type) {
-        "success" => "fa-check",
-        "warning" => "fa-exclamation",
-        default => "fa-times"
-    };
-
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Loan Topup Status</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
-
-        <style>
-            body {
-                background: #f8fafc;
-                min-height: 100vh;
-            }
-
-            .modal-content {
-                border: none;
-                border-radius: 20px;
-                overflow: hidden;
-            }
-
-            .status-icon {
-                width: 90px;
-                height: 90px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin: 0 auto 20px;
-                font-size: 40px;
-                color: #fff;
-            }
-        </style>
-    </head>
-    <body>
-
-    <div class="modal fade show"
-         tabindex="-1"
-         style="display:block;background:rgba(15,23,42,.55);"
-         aria-modal="true"
-         role="dialog">
-
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content shadow-lg">
-
-                <div class="modal-body text-center p-5">
-
-                    <div class="status-icon bg-<?= htmlspecialchars($bg) ?>">
-                        <i class="fas <?= htmlspecialchars($icon) ?>"></i>
-                    </div>
-
-                    <h3 class="mb-3">
-                        <?= htmlspecialchars(ucfirst($type)) ?>
-                    </h3>
-
-                    <p class="text-muted mb-4">
-                        <?= htmlspecialchars($message) ?>
-                    </p>
-
-                    <div class="spinner-border text-<?= htmlspecialchars($bg) ?>" role="status"></div>
-
-                    <div class="mt-3 text-muted small">
-                        Redirecting...
-                    </div>
-
-                </div>
-
-            </div>
-        </div>
-    </div>
-
-    <script>
-        setTimeout(function () {
-            window.location.href = <?= json_encode($redirect) ?>;
-        }, 3000);
-    </script>
-
-    </body>
-    </html>
-    <?php
+function topup_back(string $message, string $type = 'error'): never
+{
+    $_SESSION[$type === 'success' ? 'success' : 'error'] = $message;
+    header('Location: loans.php');
     exit;
 }
 
-$client_id = (int)($_SESSION["logged_in"] ?? $_POST["client_id"] ?? 0);
-
-$fname = trim((string)($_SESSION["fname"] ?? ""));
-$lname = trim((string)($_SESSION["lname"] ?? ""));
-$userName = trim($fname . " " . $lname);
-$userEmail = trim((string)($_SESSION["email"] ?? ""));
-
-if ($userName === "") {
-    $userName = "Client";
+function topup_money(float $value): string
+{
+    return 'UGX ' . number_format($value);
 }
 
-$loan_id = (int)($_POST["loan_id"] ?? 0);
+/** Insert into notifications using only the columns this database has. */
+function topup_notify(mysqli $conn, int $recipientId, int $clientId, int $loanId, string $title, string $message): void
+{
+    $now = date('Y-m-d H:i:s');
+    $data = [
+        'user_id'    => [$recipientId, 'i'],
+        'client_id'  => [$clientId, 'i'],
+        'loan_id'    => [$loanId, 'i'],
+        'title'      => [$title, 's'],
+        'message'    => [$message, 's'],
+        'type'       => ['topup_request', 's'],
+        'status'     => ['unread', 's'],
+        'created_at' => [$now, 's'],
+        'updated_at' => [$now, 's'],
+    ];
 
-$requested_amount = (float)(
-    $_POST["requested_amount"]
-    ?? $_POST["amount"]
-    ?? 0
-);
-
-$reason = trim((string)($_POST["reason"] ?? "Loan topup request"));
-
-if ($client_id <= 0) {
-    show_message_and_redirect(
-        "Session expired. Please login again.",
-        "error",
-        "login.php"
-    );
-}
-
-if ($loan_id <= 0) {
-    show_message_and_redirect(
-        "Invalid request. Loan ID is missing.",
-        "error",
-        "loans.php"
-    );
-}
-
-if ($requested_amount <= 0) {
-    show_message_and_redirect(
-        "Invalid request. Topup amount is required.",
-        "error",
-        "loans.php"
-    );
-}
-
-$stmt = $conn->prepare("
-    SELECT *
-    FROM members
-    WHERE user_id = ?
-    LIMIT 1
-");
-$stmt->bind_param("i", $client_id);
-$stmt->execute();
-$client = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if (!$client) {
-    show_message_and_redirect(
-        "Client not found.",
-        "error",
-        "loans.php"
-    );
-}
-
-$stmt = $conn->prepare("
-    SELECT *
-    FROM loan
-    WHERE id = ?
-    AND client_id = ?
-    LIMIT 1
-");
-$stmt->bind_param("ii", $loan_id, $client_id);
-$stmt->execute();
-$oldLoan = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if (!$oldLoan) {
-    show_message_and_redirect(
-        "Original loan not found.",
-        "error",
-        "loans.php"
-    );
-}
-
-$old_status = strtoupper(trim((string)($oldLoan["status"] ?? "")));
-
-if ($old_status === "CLEARED") {
-    show_message_and_redirect(
-        "This loan is already cleared. Please request a new loan.",
-        "warning",
-        "loans.php"
-    );
-}
-
-$principal_balance = (float)(
-    $oldLoan["principal_balance"]
-    ?? $oldLoan["loan_balance"]
-    ?? 0
-);
-
-$interest_balance = (float)($oldLoan["interest_balance"] ?? 0);
-$outstanding_balance = (float)($oldLoan["outstanding_balance"] ?? 0);
-
-if ($outstanding_balance <= 0) {
-    $outstanding_balance = $principal_balance + $interest_balance;
-}
-
-if ($outstanding_balance <= 0) {
-    show_message_and_redirect(
-        "This loan has no outstanding balance.",
-        "warning",
-        "loans.php"
-    );
-}
-
-if ($requested_amount <= $outstanding_balance) {
-    show_message_and_redirect(
-        "Topup amount must be greater than the current outstanding balance of UGX " .
-        number_format($outstanding_balance, 2),
-        "warning",
-        "loans.php"
-    );
-}
-
-$loan_limit = (float)($client["loan_limit"] ?? 0);
-
-if ($loan_limit > 0 && $requested_amount > $loan_limit) {
-    show_message_and_redirect(
-        "FAILED. Topup request exceeds your loan limit.",
-        "error",
-        "loans.php"
-    );
-}
-
-$phone = trim((string)(
-    $_POST["phone"]
-    ?? $client["phone"]
-    ?? $oldLoan["phone"]
-    ?? ""
-));
-
-$bank_name = trim((string)(
-    $_POST["bank_name"]
-    ?? $client["bank_name"]
-    ?? $oldLoan["bank_name"]
-    ?? ""
-));
-
-$bank_account = trim((string)(
-    $_POST["bank_account"]
-    ?? $client["bank_account"]
-    ?? $oldLoan["bank_account"]
-    ?? ""
-));
-
-$loan_period = (int)(
-    $_POST["loan_period"]
-    ?? $oldLoan["loan_period"]
-    ?? 1
-);
-
-if ($loan_period <= 0) {
-    $loan_period = 1;
-}
-
-$loan_method = trim((string)(
-    $_POST["loan_method"]
-    ?? "topup"
-));
-
-$interest_rate = (float)($oldLoan["interest_rate"] ?? 10);
-
-if ($interest_rate <= 0) {
-    $interest_rate = 10;
-}
-
-$interest = $requested_amount * ($interest_rate / 100);
-$loan_balance = $requested_amount + $interest;
-$status = "PENDING";
-$due_date = (new DateTime())->modify("+{$loan_period} months")->format("Y-m-d H:i:s");
-
-$conn->begin_transaction();
-
-try {
-    $stmt = $conn->prepare("
-        INSERT INTO loan (
-            amount,
-            principal_balance,
-            interest_balance,
-            outstanding_balance,
-            interest_rate,
-            client_id,
-            status,
-            datetime,
-            updated_at,
-            due_date,
-            loan_balance,
-            sur_charge,
-            interest,
-            loan_period,
-            loan_method,
-            bank_name,
-            bank_account,
-            phone
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, 0, ?, ?, ?, ?, ?, ?
-        )
-    ");
-
-    $stmt->bind_param(
-        "dddddissddissss",
-        $requested_amount,
-        $requested_amount,
-        $interest,
-        $loan_balance,
-        $interest_rate,
-        $client_id,
-        $status,
-        $due_date,
-        $loan_balance,
-        $interest,
-        $loan_period,
-        $loan_method,
-        $bank_name,
-        $bank_account,
-        $phone
-    );
-
-    $stmt->execute();
-    $new_loan_id = $stmt->insert_id;
-    $stmt->close();
-
-    $stmt = $conn->prepare("
-        INSERT INTO loan_messages (
-            user_id,
-            sender_name,
-            message_type,
-            is_read,
-            created_at
-        ) VALUES (
-            ?,
-            ?,
-            'loan_topup_request',
-            0,
-            NOW()
-        )
-    ");
-
-    $stmt->bind_param("is", $client_id, $userName);
-    $stmt->execute();
-    $stmt->close();
-
-    $conn->commit();
-
-    if (function_exists("sendAdminLoanRequest")) {
-        sendAdminLoanRequest($userName, $userEmail, $conn);
+    $cols = [];
+    $types = '';
+    $params = [];
+    foreach ($data as $col => [$val, $type]) {
+        if (loan_table_has_column($conn, 'notifications', $col)) {
+            $cols[] = $col;
+            $types .= $type;
+            $params[] = $val;
+        }
+    }
+    if (!in_array('message', $cols, true)) {
+        return;
     }
 
-    show_message_and_redirect(
-        "Loan topup request submitted successfully.",
-        "success",
-        "pending_loans.php"
-    );
+    $sql = 'INSERT INTO notifications (' . implode(',', $cols) . ') VALUES (' . implode(',', array_fill(0, count($cols), '?')) . ')';
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    topup_back('Invalid request method.');
+}
+
+if (empty($_SESSION['logged_in']) || (string)($_SESSION['role'] ?? '') !== '4') {
+    header('Location: ../index.php');
+    exit;
+}
+
+if (!isset($conn) || !($conn instanceof mysqli)) {
+    topup_back('Database connection not found.');
+}
+$conn->set_charset('utf8mb4');
+
+// Always the signed-in member; never trust a client_id from the form.
+$clientId = (int)$_SESSION['logged_in'];
+$loanId   = (int)($_POST['loan_id'] ?? 0);
+$amount   = (float)str_replace([',', ' '], '', (string)($_POST['requested_amount'] ?? $_POST['amount'] ?? '0'));
+$reason   = trim((string)($_POST['reason'] ?? ''));
+
+if ($loanId <= 0) {
+    topup_back('Invalid request. The loan is missing.');
+}
+if ($amount <= 0) {
+    topup_back('Please enter the top-up amount you need.');
+}
+if ($reason === '') {
+    topup_back('Please give a reason for the top-up.');
+}
+
+$stmt = $conn->prepare('SELECT * FROM loan WHERE id = ? AND client_id = ? LIMIT 1');
+$stmt->bind_param('ii', $loanId, $clientId);
+$stmt->execute();
+$loan = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$loan) {
+    topup_back('Loan not found.');
+}
+if (strtoupper(trim((string)$loan['status'])) !== 'OUTSTANDING') {
+    topup_back('Only outstanding loans can be topped up. Please clear any overdue balance first.');
+}
+
+$stmt = $conn->prepare("
+    SELECT id FROM loan_topup_requests
+    WHERE loan_id = ? AND status NOT IN ('REJECTED', 'DISBURSED')
+    LIMIT 1
+");
+$stmt->bind_param('i', $loanId);
+$stmt->execute();
+$existing = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if ($existing) {
+    topup_back('You already have a top-up request in progress for LOAN-' . $loanId . '. Please wait for it to be reviewed.');
+}
+
+// Same limit check the admin side uses: current balance + new money.
+$stmt = $conn->prepare('SELECT loan_limit FROM members WHERE user_id = ? LIMIT 1');
+$stmt->bind_param('i', $clientId);
+$stmt->execute();
+$member = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$loanLimit = (float)($member['loan_limit'] ?? 0);
+$currentBalance = (float)($loan['loan_balance'] ?? 0);
+if ($loanLimit > 0 && ($currentBalance + $amount) > $loanLimit) {
+    topup_back('This top-up would take you over your loan limit of ' . topup_money($loanLimit)
+        . '. The most you can request is ' . topup_money(max(0, $loanLimit - $currentBalance)) . '.');
+}
+
+// Esther Kayondo handles staff top-ups; fall back to the loan's own officer.
+$officerId = officer_find_by_name($conn, TOPUP_OFFICER_NAME);
+if ($officerId <= 0) {
+    $officerId = (int)($loan['assigned_officer_id'] ?? 0);
+    error_log('Staff top-up: ' . TOPUP_OFFICER_NAME . ' not found as an active loan officer; using loan officer #' . $officerId);
+}
+
+$proposedInterest = $amount * (TOPUP_MEMBER_RATE / 100);
+$clientType = 'member';
+$period = TOPUP_MEMBER_PERIOD;
+$rate = TOPUP_MEMBER_RATE;
+$officerParam = $officerId > 0 ? $officerId : null;
+
+try {
+    $conn->begin_transaction();
+
+    $stmt = $conn->prepare("
+        INSERT INTO loan_topup_requests
+            (loan_id, client_id, client_type, amount, loan_period,
+             proposed_interest_rate, proposed_interest_amount, request_notes,
+             status, requested_by, assigned_officer_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+    ");
+    $stmt->bind_param(
+        'iisdiddsii',
+        $loanId,
+        $clientId,
+        $clientType,
+        $amount,
+        $period,
+        $rate,
+        $proposedInterest,
+        $reason,
+        $clientId,
+        $officerParam
+    );
+    $stmt->execute();
+    $topupId = (int)$stmt->insert_id;
+    $stmt->close();
+
+    logTopupAudit($conn, $loanId, $topupId, $clientId, 4, 'topup_requested', $reason, null, null, 'PENDING');
+
+    $conn->commit();
 } catch (Throwable $e) {
     $conn->rollback();
-
-    show_message_and_redirect(
-        "Topup request failed: " . $e->getMessage(),
-        "error",
-        "loans.php"
-    );
+    error_log('Staff top-up request failed: ' . $e->getMessage());
+    topup_back('Your top-up request could not be submitted. Please try again or contact the loans office.');
 }
-?>
+
+// Tell the officer. Failures here are logged, not shown: the request is saved.
+$staffName = trim((string)($_SESSION['fname'] ?? '') . ' ' . (string)($_SESSION['lname'] ?? '')) ?: 'A staff member';
+$title = 'Loan Top-Up Request';
+$message = "{$staffName} has requested a top-up of " . topup_money($amount)
+    . " on LOAN-{$loanId} (current balance " . topup_money($currentBalance) . "). Reason: {$reason}";
+
+if ($officerId > 0) {
+    try {
+        topup_notify($conn, $officerId, $clientId, $loanId, $title, $message);
+    } catch (Throwable $e) {
+        error_log('Staff top-up notification failed: ' . $e->getMessage());
+    }
+
+    $stmt = $conn->prepare('SELECT fname, email FROM user WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $officerId);
+    $stmt->execute();
+    $officer = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    $officerEmail = trim((string)($officer['email'] ?? ''));
+    if (filter_var($officerEmail, FILTER_VALIDATE_EMAIL)) {
+        $esc = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+        $link = 'https://nsimbiimpact.com/loans/admin/pending_topups.php';
+        $body = '<p>Hello ' . $esc($officer['fname'] ?? '') . ',</p>'
+            . '<p>A staff member has requested a loan top-up on the <strong>Nsimbi Impact Loan System</strong>.</p>'
+            . '<p><strong>Staff member:</strong> ' . $esc($staffName) . '<br>'
+            . '<strong>Loan:</strong> LOAN-' . $loanId . '<br>'
+            . '<strong>Current balance:</strong> ' . $esc(topup_money($currentBalance)) . '<br>'
+            . '<strong>Top-up requested:</strong> ' . $esc(topup_money($amount)) . '<br>'
+            . '<strong>Period:</strong> ' . $period . ' months<br>'
+            . '<strong>Reason:</strong> ' . nl2br($esc($reason)) . '</p>'
+            . "<p><a href='{$link}' style='padding:10px 20px;background-color:#007BFF;color:white;text-decoration:none;'>Review top-up requests</a></p>";
+        try {
+            sendEmail($officerEmail, 'Loan Top-Up Request - Nsimbi Impact', $body, strip_tags(str_replace('<br>', "\n", $body)));
+        } catch (Throwable $e) {
+            error_log('Staff top-up email failed: ' . $e->getMessage());
+        }
+    } else {
+        error_log("Staff top-up: officer #{$officerId} has no valid email address.");
+    }
+} else {
+    error_log('Staff top-up #' . $topupId . ' saved with no loan officer to notify.');
+}
+
+topup_back('Your top-up request of ' . topup_money($amount) . ' has been sent to the loan officer for review.', 'success');
