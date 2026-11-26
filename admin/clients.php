@@ -14,6 +14,10 @@ $offset = ($page - 1) * $limit;
 $search = trim($_GET['q'] ?? '');
 $type   = trim($_GET['type'] ?? '');
 $district = trim($_GET['district'] ?? '');
+// Sign-up answer "Have you ever received Financial/Business training?"
+require_once dirname(__DIR__) . '/includes/client_learning.php';
+learning_ensure_schema($conn);
+$training = in_array($_GET['training'] ?? '', ['yes', 'no', 'unanswered'], true) ? $_GET['training'] : '';
 
 // Loan officers only see their own clients, so the officer column and filter are for everyone else.
 $showOfficer = officer_scope_id() <= 0;
@@ -149,7 +153,15 @@ if ($to !== null) {
     $types .= "s";
 }
 
-$filtered = $search !== '' || $type !== '' || $district !== '' || $officer !== '' || $period !== 'all';
+if ($training !== '') {
+    $where .= match ($training) {
+        'yes' => ' AND c.business_training = 1',
+        'no'  => ' AND c.business_training = 0',
+        default => ' AND c.business_training IS NULL',
+    };
+}
+
+$filtered = $search !== '' || $type !== '' || $district !== '' || $officer !== '' || $training !== '' || $period !== 'all';
 
 // Query string that keeps the filters across pages.
 $filterQuery = http_build_query(array_filter([
@@ -160,6 +172,7 @@ $filterQuery = http_build_query(array_filter([
     'type'     => $type,
     'district' => $district,
     'officer'  => $officer,
+    'training' => $training,
 ], static fn($v) => $v !== ''));
 $query = $filterQuery !== '' ? '&' . $filterQuery : '';
 
@@ -376,6 +389,13 @@ $totalOutstanding = (float)($stats['total_outstanding'] ?? 0);
                 <?php foreach ($districtOptions as $opt): ?>
                     <option value="<?= e($opt) ?>"<?= strcasecmp($opt, $district) === 0 ? ' selected' : '' ?>><?= e($opt) ?></option>
                 <?php endforeach; ?>
+            </select>
+
+            <select name="training" class="form-select" aria-label="Business training" onchange="this.form.submit()">
+                <option value="">Any training</option>
+                <option value="no"<?= $training === 'no' ? ' selected' : '' ?>>No business training</option>
+                <option value="yes"<?= $training === 'yes' ? ' selected' : '' ?>>Had business training</option>
+                <option value="unanswered"<?= $training === 'unanswered' ? ' selected' : '' ?>>Training not answered</option>
             </select>
 
             <?php if ($showOfficer): ?>

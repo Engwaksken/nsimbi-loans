@@ -113,6 +113,25 @@ if (!$client) {
     exit;
 }
 
+// Who referred the client and whether they have had business training (sign-up answers).
+require_once dirname(__DIR__) . '/includes/esos.php';
+require_once dirname(__DIR__) . '/includes/client_learning.php';
+$referral = referral_describe($conn, (int)$client['user_id']);
+$trainingLabel = 'Not answered';
+$notesShared = 0;
+try {
+    learning_ensure_schema($conn);
+    $lq = $conn->prepare('SELECT c.business_training, (SELECT COUNT(*) FROM literacy_note_shares s WHERE s.user_id = c.user_id) AS shared FROM customers c WHERE c.user_id = ? LIMIT 1');
+    $lq->bind_param('i', $client['user_id']);
+    $lq->execute();
+    $lrow = $lq->get_result()->fetch_assoc() ?: [];
+    $lq->close();
+    $trainingLabel = learning_training_label($lrow['business_training'] ?? null);
+    $notesShared = (int)($lrow['shared'] ?? 0);
+} catch (Throwable $e) {
+    error_log('Client profile learning info: ' . $e->getMessage());
+}
+
 $loanStmt = $conn->prepare("
     SELECT 
         l.id,
@@ -445,6 +464,18 @@ $generatedAt = date('d M Y, H:i');
             <div class="info-item"><div class="lbl">Sales - Prior Period</div><div class="val"><?= h($client['amount_this'] !== null && $client['amount_this'] !== '' ? money($client['amount_this']) : '-') ?></div></div>
             <div class="info-item"><div class="lbl">Credit Score</div><div class="val"><?= h($client['credit_score'] ?? '-') ?> / 10</div></div>
             <div class="info-item"><div class="lbl">Loan Limit</div><div class="val"><?= money($client['loan_limit'] ?? 0) ?></div></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Referral &amp; Learning</h2>
+        <div class="info-grid">
+            <div class="info-item"><div class="lbl">Referred By</div><div class="val"><?= h($referral['type']) ?><?= $referral['name'] !== '' ? ': ' . h($referral['name']) : '' ?></div></div>
+            <div class="info-item"><div class="lbl">Had Financial/Business Training</div><div class="val"><?= h($trainingLabel) ?></div></div>
+            <div class="info-item"><div class="lbl">Learning Notes Sent</div><div class="val"><?= number_format($notesShared) ?></div></div>
+            <div class="info-item"><div class="lbl">&nbsp;</div><div class="val">
+                <a href="learning_notes.php?client=<?= (int)$client['user_id'] ?>"><i class="fas fa-graduation-cap"></i> Send learning notes</a>
+            </div></div>
         </div>
     </div>
 

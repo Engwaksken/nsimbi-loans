@@ -59,6 +59,18 @@ function cn($p,$c){ return $p===$c?' active':''; }
     <a href="loan_payments" class="nav-link<?= cn('loan_payments.php',$cp) ?>"><span class="ni"><i class="fas fa-money-bill-wave"></i></span>Payment History</a>
     
      <a href="books" class="nav-link<?= cn('books.php',$cp) ?>"><span class="ni"><i class="fas fa-book"></i></span>My Books</a>
+    <?php
+    // Learning notes shared by the loan team that the client hasn't opened yet.
+    $learning_unread = 0;
+    try {
+        $lq = $conn->prepare('SELECT COUNT(*) FROM literacy_note_shares WHERE user_id = ? AND viewed_at IS NULL');
+        $lq->bind_param('i', $user_id); $lq->execute();
+        $learning_unread = (int)$lq->get_result()->fetch_row()[0]; $lq->close();
+    } catch (Throwable $ignored) {
+        // The table is created when the first note is uploaded.
+    }
+    ?>
+    <a href="learning_notes" class="nav-link<?= cn('learning_notes.php',$cp) ?>"><span class="ni"><i class="fas fa-graduation-cap"></i></span>Learning Notes<?php if ($learning_unread > 0): ?><span class="nav-pill red" style="margin-left:auto"><?= $learning_unread ?></span><?php endif; ?></a>
     <a href="repayment_schedule" class="nav-link<?= cn('repayment_schedule.php',$cp) ?>"><span class="ni"><i class="fas fa-calendar-alt"></i></span>Schedules</a>
     <div class="nav-group">Support</div>
     <?php require_once dirname(__DIR__) . '/includes/portal_mail.php'; $mail_unread = pm_unread_count($conn, $user_id); ?>

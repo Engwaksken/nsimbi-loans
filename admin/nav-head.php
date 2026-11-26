@@ -22,6 +22,10 @@ try {
 } catch (Throwable $e) {
     error_log('Officer assignment sync failed: ' . $e->getMessage());
 }
+// Weekly "keep your books" message to clients, sent in small batches after
+// staff pages load (see includes/bookkeeping_nudge.php).
+require_once dirname(__DIR__) . '/includes/bookkeeping_nudge.php';
+bookkeeping_nudge_maybe_run($conn);
 $user_id  = $_SESSION['logged_in'] ?? null;
 $role     = $_SESSION['role'];
 $fname    = $_SESSION['fname'] ?? '';
@@ -190,6 +194,8 @@ $navSections = [
     ['staff.php', 'fa-user-tie', 'Staff'],
     ['startups.php', 'fa-building', 'Startups'],
     ['organisations.php', 'fa-city', 'Organisations'],
+    ...((int)$role === 1 ? [['esos.php', 'fa-handshake', 'ESOs']] : []),
+    ...(in_array((int)$role, [1, 2], true) ? [['learning_notes.php', 'fa-graduation-cap', 'Learning Notes']] : []),
     ['users.php', 'fa-user-shield', 'Users'],
   ]],
   'staffhr' => ['Staff HR', $hrLinks],

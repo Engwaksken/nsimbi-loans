@@ -132,6 +132,8 @@ function saveSignature($base64) {
 
 require_once dirname(__DIR__) . '/includes/loan_assessment.php';
 require_once dirname(__DIR__) . '/includes/officer_referrals.php';
+require_once dirname(__DIR__) . '/includes/esos.php';
+require_once dirname(__DIR__) . '/includes/client_learning.php';
 
 function amountToNumber($value) {
     // Shared reader: range options, plain numbers, 200k, 1.5M, ...
@@ -250,8 +252,10 @@ try {
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
     $active = 1;
 
-    // Before the transaction: adding the column (first run only) would commit it.
+    // Before the transaction: adding the columns (first run only) would commit it.
     referral_ensure_schema($conn);
+    esos_ensure_schema($conn);
+    learning_ensure_schema($conn);
 
     $conn->begin_transaction();
 
@@ -365,15 +369,20 @@ try {
     $customer_id = $stmt->insert_id;
     $stmt->close();
 
-    // Optional: the loan officer who referred this client. Anything that is
-    // not an active loan officer is ignored rather than failing sign-up.
-    $referred_by = referral_valid_officer($conn, $_POST['referred_by'] ?? '');
-    if ($referred_by !== null) {
-        $stmt = $conn->prepare("UPDATE customers SET referred_by = ? WHERE id = ?");
-        $stmt->bind_param("ii", $referred_by, $customer_id);
-        if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
-        }
+    // Who referred this client: a loan officer, an ESO, "Other" (typed) or
+    // "None". An invalid answer is left unrecorded rather than failing sign-up.
+    referral_save($conn, (int)$customer_id, referral_parse_choice(
+        $conn,
+        (string)($_POST['referred_by'] ?? ''),
+        (string)($_POST['referral_other'] ?? '')
+    ));
+
+    // Have they had financial/business training? (Learning Notes go to those who haven't.)
+    $business_training = learning_parse_training($_POST['business_training'] ?? '');
+    if ($business_training !== null) {
+        $stmt = $conn->prepare("UPDATE customers SET business_training = ? WHERE id = ?");
+        $stmt->bind_param("ii", $business_training, $customer_id);
+        $stmt->execute();
         $stmt->close();
     }
 

@@ -2,14 +2,16 @@
 require_once dirname(__DIR__) . '/includes/site_cms.php';
 $brand = site_settings($conn);
 
-// Loan officers the client can name as their referrer (optional).
-// /apply?ref=<officer id> pre-selects one, so officers can share a link.
-require_once dirname(__DIR__) . '/includes/officer_referrals.php';
+// "Who referred you?": loan officers and ESOs (includes/esos.php), Other or None.
+// /apply?ref=<officer id> pre-selects an officer, so officers can share a link.
+require_once dirname(__DIR__) . '/includes/esos.php';
 $referralOfficers = [];
+$referralEsos = [];
 try {
   $referralOfficers = referral_officers($conn);
+  $referralEsos = esos_list($conn);
 } catch (Throwable $e) {
-  error_log('Apply: could not load loan officers: ' . $e->getMessage());
+  error_log('Apply: could not load referrers: ' . $e->getMessage());
 }
 $referralPick = (int)($_GET['ref'] ?? 0);
 
@@ -273,6 +275,14 @@ $applyAsset = static function (string $path): string {
                           </select>
                         </div>
                         <div class="col-md-6">
+                          <label class="form-label" for="business_training">Have you ever received Financial/Business training?</label>
+                          <select name="business_training" id="business_training" class="form-control" required>
+                            <option value="">Select Yes or No</option>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
+                          </select>
+                        </div>
+                        <div class="col-md-6">
                           <label class="form-label">Upload Trading License (Optional)</label>
                           <input type="file" class="form-control" name="license" accept="image/*,application/pdf">
                         </div>
@@ -335,17 +345,47 @@ $applyAsset = static function (string $path): string {
                             <input type="file" class="selfie-input" name="profile_img" accept="image/jpeg,image/png" capture="user" required aria-label="Your selfie">
                           </div>
                         </div>
-                        <?php if ($referralOfficers): ?>
                         <div class="col-md-6">
-                          <label for="referred_by">Which loan officer referred you? (optional)</label>
-                          <select class="form-control" name="referred_by" id="referred_by">
-                            <option value="">No one, I found you myself</option>
-                            <?php foreach ($referralOfficers as $officer): ?>
-                              <option value="<?= (int)$officer['id'] ?>"<?= $referralPick === (int)$officer['id'] ? ' selected' : '' ?>><?= site_e(trim($officer['fname'] . ' ' . $officer['lname'])) ?></option>
-                            <?php endforeach; ?>
+                          <label for="referred_by">Who referred you?</label>
+                          <select class="form-control" name="referred_by" id="referred_by" required>
+                            <option value="">Select who referred you</option>
+                            <?php if ($referralOfficers): ?>
+                            <optgroup label="Loan officers">
+                              <?php foreach ($referralOfficers as $officer): ?>
+                                <option value="officer:<?= (int)$officer['id'] ?>"<?= $referralPick === (int)$officer['id'] ? ' selected' : '' ?>><?= site_e(trim($officer['fname'] . ' ' . $officer['lname'])) ?></option>
+                              <?php endforeach; ?>
+                            </optgroup>
+                            <?php endif; ?>
+                            <?php if ($referralEsos): ?>
+                            <optgroup label="ESOs (Enterprise Support Organisations)">
+                              <?php foreach ($referralEsos as $eso): ?>
+                                <option value="eso:<?= (int)$eso['id'] ?>"><?= site_e($eso['name']) ?></option>
+                              <?php endforeach; ?>
+                            </optgroup>
+                            <?php endif; ?>
+                            <optgroup label="Something else">
+                              <option value="other">Other (type the name)</option>
+                              <option value="none">None, I found you myself</option>
+                            </optgroup>
                           </select>
+                          <input type="text" class="form-control mt-2" name="referral_other" id="referral_other" maxlength="190"
+                                 placeholder="Who referred you? Type the name" hidden>
                         </div>
-                        <?php endif; ?>
+                        <script>
+                          // "Other" shows a box for the name and makes it required.
+                          (function () {
+                            var pick = document.getElementById('referred_by');
+                            var other = document.getElementById('referral_other');
+                            function sync() {
+                              var on = pick.value === 'other';
+                              other.hidden = !on;
+                              other.required = on;
+                              if (!on) other.value = '';
+                            }
+                            pick.addEventListener('change', sync);
+                            sync();
+                          })();
+                        </script>
                       </div>
                          <div class="col-md-6">
                           <label for="signature-pad">Your signature: sign in the box with your finger (or mouse)</label>
