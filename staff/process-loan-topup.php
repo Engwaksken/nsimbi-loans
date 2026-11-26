@@ -160,40 +160,52 @@ $period = TOPUP_MEMBER_PERIOD;
 $rate = TOPUP_MEMBER_RATE;
 $officerParam = $officerId > 0 ? $officerId : null;
 
-try {
-    $conn->begin_transaction();
+// Only write the columns this database actually has (older installs differ).
+$fields = [
+    'loan_id'                  => [$loanId, 'i'],
+    'client_id'                => [$clientId, 'i'],
+    'client_type'              => [$clientType, 's'],
+    'amount'                   => [$amount, 'd'],
+    'loan_period'              => [$period, 'i'],
+    'proposed_interest_rate'   => [$rate, 'd'],
+    'proposed_interest_amount' => [$proposedInterest, 'd'],
+    'request_notes'            => [$reason, 's'],
+    'status'                   => ['PENDING', 's'],
+    'requested_by'             => [$clientId, 'i'],
+    'assigned_officer_id'      => [$officerParam, 'i'],
+    'created_at'               => [date('Y-m-d H:i:s'), 's'],
+];
 
-    $stmt = $conn->prepare("
-        INSERT INTO loan_topup_requests
-            (loan_id, client_id, client_type, amount, loan_period,
-             proposed_interest_rate, proposed_interest_amount, request_notes,
-             status, requested_by, assigned_officer_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-    ");
-    $stmt->bind_param(
-        'iisdiddsii',
-        $loanId,
-        $clientId,
-        $clientType,
-        $amount,
-        $period,
-        $rate,
-        $proposedInterest,
-        $reason,
-        $clientId,
-        $officerParam
+try {
+    $cols = [];
+    $types = '';
+    $params = [];
+    foreach ($fields as $col => [$val, $type]) {
+        if (loan_table_has_column($conn, 'loan_topup_requests', $col)) {
+            $cols[] = $col;
+            $types .= $type;
+            $params[] = $val;
+        }
+    }
+
+    $stmt = $conn->prepare(
+        'INSERT INTO loan_topup_requests (' . implode(',', $cols) . ') VALUES ('
+        . implode(',', array_fill(0, count($cols), '?')) . ')'
     );
+    $stmt->bind_param($types, ...$params);
     $stmt->execute();
     $topupId = (int)$stmt->insert_id;
     $stmt->close();
-
-    logTopupAudit($conn, $loanId, $topupId, $clientId, 4, 'topup_requested', $reason, null, null, 'PENDING');
-
-    $conn->commit();
 } catch (Throwable $e) {
-    $conn->rollback();
     error_log('Staff top-up request failed: ' . $e->getMessage());
-    topup_back('Your top-up request could not be submitted. Please try again or contact the loans office.');
+    topup_back('Your top-up request could not be submitted (' . $e->getMessage() . '). Please contact the loans office.');
+}
+
+// The audit trail is a record, not a gate: never lose the request over it.
+try {
+    logTopupAudit($conn, $loanId, $topupId, $clientId, 4, 'topup_requested', $reason, null, null, 'PENDING');
+} catch (Throwable $e) {
+    error_log('Staff top-up audit failed: ' . $e->getMessage());
 }
 
 // Tell the officer. Failures here are logged, not shown: the request is saved.
