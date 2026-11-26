@@ -103,8 +103,79 @@ function approveTopupRequest(mysqli $conn, array $topup, int $actorId, int $role
     return true;
 }
 
-// Bulk approve: ids[] from the checkboxes on Pending Top-Ups.
-if ($action === 'bulk_approve') {
+/**
+ * Reject one top-up: set REJECTED with the reason, log it, tell the
+ * assigned officer and email the client. Returns false when the request was
+ * no longer awaiting review (or the update failed).
+ */
+function rejectTopupRequest(mysqli $conn, array $topup, int $actorId, int $role, string $reason, string $comments): bool
+{
+    $topupId = (int)$topup['id'];
+    $loanId = (int)$topup['loan_id'];
+    $oldStatus = (string)($topup['status'] ?? '');
+    $newStatus = 'REJECTED';
+
+    try {
+        $stmt = $conn->prepare("
+            UPDATE loan_topup_requests
+            SET status = ?, rejection_reason = ?, updated_at = NOW()
+            WHERE id = ? AND status IN ('PENDING', 'INFO_PROVIDED')
+        ");
+        $stmt->bind_param("ssi", $newStatus, $reason, $topupId);
+        $stmt->execute();
+        $changed = $stmt->affected_rows > 0;
+        $stmt->close();
+    } catch (Throwable $e) {
+        error_log("rejectTopupRequest #{$topupId}: " . $e->getMessage());
+        return false;
+    }
+    if (!$changed) {
+        return false;
+    }
+
+    logTopupAudit($conn, $loanId, $topupId, $actorId, $role, 'topup_rejected',
+        $comments !== '' ? $comments : null, $reason, $oldStatus, $newStatus);
+
+    try {
+        $assignedOfficer = (int)($topup['assigned_officer_id'] ?? 0);
+        if ($assignedOfficer > 0) {
+            notifyUser($conn, $assignedOfficer, $loanId, 'topup_rejected',
+                "The top-up request you were assisting with (loan #{$loanId}) was rejected. Reason: {$reason}");
+        }
+
+        $clientId = (int)$topup['client_id'];
+        $stmt = $conn->prepare("SELECT fname, lname, email FROM user WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $clientId);
+        $stmt->execute();
+        $client = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $clientName = $client ? trim($client['fname'] . ' ' . $client['lname']) : 'Client';
+        $clientEmail = $client['email'] ?? '';
+        $topupAmount = number_format((float)$topup['amount'], 2);
+
+        if (!empty($clientEmail)) {
+            $subject = "Your Loan Top-Up Request Was Rejected - Nsimbi Impact";
+            $body = "
+                <h3>Dear " . htmlspecialchars($clientName, ENT_QUOTES, 'UTF-8') . ",</h3>
+                <p>We regret to inform you that your request to top up loan #{$loanId} by <strong>UGX {$topupAmount}</strong> has been <strong>REJECTED</strong>.</p>
+                <p><strong>Reason:</strong> " . htmlspecialchars($reason, ENT_QUOTES, 'UTF-8') . "</p>
+                <p>Please contact support for more information.</p>
+                <p>Best regards,<br>Nsimbi Impact Team</p>
+            ";
+            sendEmail($clientEmail, $subject, $body, strip_tags($body));
+        }
+    } catch (Throwable $e) {
+        // The rejection stands even if a notification can't be sent.
+        error_log("rejectTopupRequest #{$topupId} notify: " . $e->getMessage());
+    }
+
+    return true;
+}
+
+// Bulk approve / reject: ids[] from the checkboxes on Pending Top-Ups.
+if ($action === 'bulk_approve' || $action === 'bulk_reject') {
+    $rejecting = $action === 'bulk_reject';
     if ($role !== 1) {
         redirectWithAlert("Not Authorized for this Action");
     }
@@ -116,26 +187,29 @@ if ($action === 'bulk_approve') {
         static fn(int $id): bool => $id > 0
     )));
     if ($ids === []) {
-        redirectWithAlert("Select at least one top-up request to approve");
+        redirectWithAlert("Select at least one top-up request");
+    }
+    if ($rejecting && $rejectionReason === '') {
+        redirectWithAlert("A reason for rejection is required");
     }
 
-    $approved = 0;
+    $done = 0;
     $skipped = 0;
     $stmt = $conn->prepare("SELECT * FROM loan_topup_requests WHERE id = ? LIMIT 1");
     foreach ($ids as $id) {
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
-        if ($row && in_array((string)$row['status'], ['PENDING', 'INFO_PROVIDED'], true)
-            && approveTopupRequest($conn, $row, $actorId, $role, $comments)) {
-            $approved++;
-        } else {
-            $skipped++;
-        }
+        $ok = $row && in_array((string)$row['status'], ['PENDING', 'INFO_PROVIDED'], true)
+            && ($rejecting
+                ? rejectTopupRequest($conn, $row, $actorId, $role, $rejectionReason, $comments)
+                : approveTopupRequest($conn, $row, $actorId, $role, $comments));
+        $ok ? $done++ : $skipped++;
     }
     $stmt->close();
 
-    $message = "{$approved} top-up request" . ($approved === 1 ? '' : 's') . " approved and sent to accounts for disbursement";
+    $message = "{$done} top-up request" . ($done === 1 ? '' : 's')
+        . ($rejecting ? ' rejected' : ' approved and sent to accounts for disbursement');
     if ($skipped > 0) {
         $message .= ". {$skipped} skipped (no longer awaiting review)";
     }
@@ -203,56 +277,8 @@ if ($action === 'reject') {
         redirectWithAlert("A reason for rejection is required");
     }
 
-    $newStatus = 'REJECTED';
-
-    $stmtUpdate = $conn->prepare("
-        UPDATE loan_topup_requests
-        SET status = ?, rejection_reason = ?, updated_at = NOW()
-        WHERE id = ? AND status IN ('PENDING', 'INFO_PROVIDED')
-    ");
-    $stmtUpdate->bind_param("ssi", $newStatus, $rejectionReason, $topupId);
-
-    if (!$stmtUpdate->execute()) {
-        $stmtUpdate->close();
+    if (!rejectTopupRequest($conn, $topup, $actorId, $role, $rejectionReason, $comments)) {
         redirectWithAlert("Error rejecting top-up request");
-    }
-    $stmtUpdate->close();
-
-    logTopupAudit(
-        $conn,
-        $loanId,
-        $topupId,
-        $actorId,
-        $role,
-        'topup_rejected',
-        $comments !== '' ? $comments : null,
-        $rejectionReason,
-        $currentStatus,
-        $newStatus
-    );
-
-    $assignedOfficer = (int)($topup['assigned_officer_id'] ?? 0);
-    if ($assignedOfficer > 0) {
-        notifyUser(
-            $conn,
-            $assignedOfficer,
-            $loanId,
-            'topup_rejected',
-            "The top-up request you were assisting with (loan #{$loanId}) was rejected. Reason: {$rejectionReason}"
-        );
-    }
-
-    if (!empty($clientEmail)) {
-        $subject = "Your Loan Top-Up Request Was Rejected - Nsimbi Impact";
-        $body = "
-            <h3>Dear " . htmlspecialchars($clientName, ENT_QUOTES, 'UTF-8') . ",</h3>
-            <p>We regret to inform you that your request to top up loan #{$loanId} by <strong>UGX {$topupAmount}</strong> has been <strong>REJECTED</strong>.</p>
-            <p><strong>Reason:</strong> " . htmlspecialchars($rejectionReason, ENT_QUOTES, 'UTF-8') . "</p>
-            <p>Please contact support for more information.</p>
-            <p>Best regards,<br>Nsimbi Impact Team</p>
-        ";
-
-        sendEmail($clientEmail, $subject, $body, strip_tags($body));
     }
 
     redirectWithAlert("Top-up request rejected");

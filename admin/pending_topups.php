@@ -223,8 +223,8 @@ foreach ($topups as $t) {
 
     <?php if ($isReviewer): ?>
     <form method="POST" action="review_topup_action.php" id="bulkTopupForm">
-        <input type="hidden" name="action" value="bulk_approve">
-        <div class="bulk-bar" aria-label="Bulk top-up approval">
+        <input type="hidden" name="action" value="bulk_approve" id="bulkTopupAction">
+        <div class="bulk-bar" aria-label="Bulk top-up review">
             <label class="d-flex align-items-center gap-2 mb-0">
                 <input class="topup-pick" type="checkbox" id="selectAllTopups" aria-label="Select all top-up requests">
                 <strong>Select all</strong>
@@ -233,9 +233,19 @@ foreach ($topups as $t) {
             <button class="btn btn-sm btn-outline-secondary" id="clearTopupSelection" type="button">Clear</button>
             <input type="text" name="comments" class="form-control form-control-sm bulk-comment"
                    placeholder="Reviewer comment for all selected (optional)" aria-label="Reviewer comment">
-            <button class="btn btn-success btn-sm ms-auto" type="submit" id="submitBulkTopups" disabled>
-                <i class="fas fa-check-double"></i> Approve selected
-            </button>
+            <div class="d-flex gap-2 ms-auto">
+                <button class="btn btn-success btn-sm bulk-submit" type="submit" data-bulk-action="bulk_approve" disabled>
+                    <i class="fas fa-check-double"></i> Approve selected
+                </button>
+                <button class="btn btn-danger btn-sm bulk-submit" type="submit" data-bulk-action="bulk_reject" disabled>
+                    <i class="fas fa-times"></i> Reject selected
+                </button>
+            </div>
+            <div class="w-100" id="bulkRejectRow" hidden>
+                <label class="fs-sm mb-1" for="bulkRejectReason"><strong>Reason for rejection</strong> <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="bulkRejectReason" name="reason" rows="2"
+                          placeholder="Sent to every selected applicant and their loan officer"></textarea>
+            </div>
         </div>
     </form>
     <?php endif; ?>
@@ -560,14 +570,21 @@ document.addEventListener('click', function (e) {
     }
 });
 
-// Multi-select: tick top-ups and approve them together.
+// Multi-select: tick top-ups and approve or reject them together.
 document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('bulkTopupForm');
     if (!form) return;
     var checks = Array.prototype.slice.call(document.querySelectorAll('.topup-row-check'));
     var selectAll = document.getElementById('selectAllTopups');
     var counter = document.getElementById('topupSelectionCount');
-    var submit = document.getElementById('submitBulkTopups');
+    var buttons = Array.prototype.slice.call(form.querySelectorAll('.bulk-submit'));
+    var actionInput = document.getElementById('bulkTopupAction');
+    var rejectRow = document.getElementById('bulkRejectRow');
+    var rejectReason = document.getElementById('bulkRejectReason');
+    var pressed = 'bulk_approve';
+    buttons.forEach(function (b) {
+        b.addEventListener('click', function () { pressed = b.getAttribute('data-bulk-action'); });
+    });
 
     function selectedCount() {
         return checks.filter(function (x) { return x.checked; }).length;
@@ -578,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function () {
         selectAll.checked = checks.length > 0 && count === checks.length;
         selectAll.indeterminate = count > 0 && count < checks.length;
         checks.forEach(function (x) { x.closest('tr').classList.toggle('selected-topup', x.checked); });
-        submit.disabled = count === 0;
+        buttons.forEach(function (b) { b.disabled = count === 0; });
     }
 
     checks.forEach(function (x) { x.addEventListener('change', update); });
@@ -596,7 +613,15 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
         var count = selectedCount();
         if (!count) return;
-        var question = 'Approve ' + count + ' selected top-up request' + (count === 1 ? '' : 's') + '?';
+        var rejecting = pressed === 'bulk_reject';
+        actionInput.value = pressed;
+        if (rejecting && rejectReason.value.trim() === '') {
+            // First press shows the reason box; the next press sends.
+            rejectRow.hidden = false;
+            rejectReason.focus();
+            return;
+        }
+        var question = (rejecting ? 'Reject ' : 'Approve ') + count + ' selected top-up request' + (count === 1 ? '' : 's') + '?';
         var ask = window.Popup ? Popup.confirm(question) : Promise.resolve(window.confirm(question));
         ask.then(function (ok) {
             if (!ok) return;
