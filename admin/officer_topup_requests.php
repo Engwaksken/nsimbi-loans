@@ -41,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compl
         $error = "Please describe what you found out before marking this complete.";
     } else {
         $stmtCheck = $conn->prepare("
-            SELECT id, loan_id, status FROM loan_topup_requests
-            WHERE id = ? AND assigned_officer_id = ? AND status = 'INFO_REQUESTED'
+            SELECT t.id, t.loan_id, t.status FROM loan_topup_requests t
+            WHERE t.id = ? AND " . TOPUP_OPEN_FOR_OFFICER_SQL . "
             LIMIT 1
         ");
         $stmtCheck->bind_param("ii", $topupId, $userId);
@@ -55,12 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compl
         } else {
             $newStatus = 'INFO_PROVIDED';
 
+            $oldStatus = (string)$topupRow['status'];
+            // Whoever forwards an unassigned staff request becomes its officer.
             $stmtUpdate = $conn->prepare("
                 UPDATE loan_topup_requests
-                SET status = ?, officer_response = ?, updated_at = NOW()
-                WHERE id = ? AND assigned_officer_id = ? AND status = 'INFO_REQUESTED'
+                SET status = ?, officer_response = ?, assigned_officer_id = ?, updated_at = NOW()
+                WHERE id = ? AND status = ?
             ");
-            $stmtUpdate->bind_param("ssii", $newStatus, $response, $topupId, $userId);
+            $stmtUpdate->bind_param("ssiis", $newStatus, $response, $userId, $topupId, $oldStatus);
 
             if ($stmtUpdate->execute()) {
                 logTopupAudit(
@@ -72,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compl
                     'topup_info_provided',
                     $response,
                     null,
-                    'INFO_REQUESTED',
+                    $oldStatus,
                     $newStatus
                 );
 
@@ -107,11 +109,11 @@ $stmt = $conn->prepare("
     SELECT t.*, u.fname, u.lname
     FROM loan_topup_requests t
     LEFT JOIN user u ON u.id = t.client_id
-    WHERE t.assigned_officer_id = ?
-      AND t.status IN ('INFO_REQUESTED', 'INFO_PROVIDED')
-    ORDER BY t.status = 'INFO_REQUESTED' DESC, t.id DESC
+    WHERE " . TOPUP_OPEN_FOR_OFFICER_SQL . "
+       OR (t.assigned_officer_id = ? AND t.status = 'INFO_PROVIDED')
+    ORDER BY t.status = 'INFO_PROVIDED' ASC, t.id DESC
 ");
-$stmt->bind_param("i", $userId);
+$stmt->bind_param("ii", $userId, $userId);
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -178,7 +180,9 @@ $stmt->close();
 
             <div class="mt-2 fs-sm">
                 <strong>To do:</strong>
-                <?= nl2br(h($topup['info_request_details'] ?? '')) ?>
+                <?= nl2br(h(trim((string)($topup['info_request_details'] ?? '')) !== ''
+                    ? $topup['info_request_details']
+                    : 'Check the request and the loan, then forward it to the administrator with your recommendation.')) ?>
             </div>
 
             <?php if ($isDone): ?>

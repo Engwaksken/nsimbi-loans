@@ -57,7 +57,8 @@ try {
     $tq = $conn->query("SELECT COUNT(*) AS c FROM loan_topup_requests WHERE status IN ('PENDING','INFO_PROVIDED')");
     if ($tq) $count_topups_admin = (int)($tq->fetch_assoc()['c'] ?? 0);
     if ((int)($_SESSION['role'] ?? 0) === 2 && $admin_id) {
-        $tq = $conn->prepare("SELECT COUNT(*) AS c FROM loan_topup_requests WHERE status = 'INFO_REQUESTED' AND assigned_officer_id = ?");
+        require_once dirname(__DIR__) . '/includes/topup_notify.php';
+        $tq = $conn->prepare("SELECT COUNT(*) AS c FROM loan_topup_requests t WHERE " . TOPUP_OPEN_FOR_OFFICER_SQL);
         $tq->bind_param('i', $admin_id); $tq->execute();
         $count_topups_officer = (int)($tq->get_result()->fetch_assoc()['c'] ?? 0); $tq->close();
     }

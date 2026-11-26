@@ -12,6 +12,14 @@ declare(strict_types=1);
 
 const TOPUP_ADMIN_URL = 'https://nsimbiimpact.com/loans/admin/';
 
+/**
+ * Top-ups (alias t) waiting on the officer bound to the one "?": assigned to
+ * them and not yet forwarded, or a staff member's own request that no
+ * officer was assigned to (any officer can pick those up).
+ */
+const TOPUP_OPEN_FOR_OFFICER_SQL = "(t.status IN ('PENDING', 'INFO_REQUESTED') AND (t.assigned_officer_id = ?"
+    . " OR (COALESCE(t.assigned_officer_id, 0) = 0 AND t.status = 'PENDING' AND t.requested_by = t.client_id)))";
+
 /** In-app notification, writing only the columns this database has. */
 function topup_notify_bell(mysqli $conn, int $recipientId, int $loanId, string $title, string $message, int $clientId = 0): void
 {
