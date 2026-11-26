@@ -73,12 +73,18 @@ $sql = "
     ORDER BY t.id DESC
 ";
 
-$result = $conn->query($sql);
+// The database throws on errors (mysqli strict mode), so a schema difference
+// must not take the whole page down: show the problem instead of a blank page.
 $topups = [];
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
+$loadError = '';
+try {
+    $result = $conn->query($sql);
+    while ($result && ($row = $result->fetch_assoc())) {
         $topups[] = $row;
     }
+} catch (Throwable $e) {
+    error_log('pending_topups: ' . $e->getMessage());
+    $loadError = $e->getMessage();
 }
 
 $auditTrailByTopup = getTopupAuditTrailBulk($conn, array_column($topups, 'id'));
@@ -189,6 +195,10 @@ foreach ($topups as $t) {
     </div>
 </div>
 
+<?php if ($loadError !== ''): ?>
+    <div class="alert alert-danger">Could not load top-up requests: <?= h($loadError) ?></div>
+<?php endif; ?>
+
 <?php if (empty($topups)): ?>
 
     <div class="card">
@@ -254,7 +264,14 @@ foreach ($topups as $t) {
                 </div>
             </div>
 
-            <?php $aiAmount = ai_recommended_amount($topup); ?>
+            <?php
+            try {
+                $aiAmount = ai_recommended_amount($topup);
+            } catch (Throwable $e) {
+                error_log('pending_topups AI amount: ' . $e->getMessage());
+                $aiAmount = 0;
+            }
+            ?>
             <?php if ($aiAmount > 0): ?>
                 <div class="ai-recommend">AI recommended amount: <strong><?= money($aiAmount) ?></strong></div>
             <?php endif; ?>

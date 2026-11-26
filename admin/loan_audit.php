@@ -349,6 +349,12 @@ function getTopupAuditTrail(mysqli $conn, int $topupId): array
 }
 
 
+/**
+ * Audit entries per top-up id. Never throws: databases whose
+ * loan_audit_trail has no topup_id column get the entries logTopupAudit()
+ * wrote as plain loan audits ("Top-up #N: ..."), and any other failure just
+ * returns no history, so the history can never blank the page showing it.
+ */
 function getTopupAuditTrailBulk(mysqli $conn, array $topupIds): array
 {
     $topupIds = array_values(
@@ -364,45 +370,50 @@ function getTopupAuditTrailBulk(mysqli $conn, array $topupIds): array
         return [];
     }
 
-    $placeholders = implode(',', array_fill(0, count($topupIds), '?'));
-    $types = str_repeat('i', count($topupIds));
-
-    $stmt = $conn->prepare("
-        SELECT
-            at.*,
-            u.fname,
-            u.lname
-        FROM loan_audit_trail AS at
-        LEFT JOIN user AS u
-            ON u.id = at.actor_id
-        WHERE at.topup_id IN ($placeholders)
-        ORDER BY at.created_at DESC, at.id DESC
-    ");
-
-    if (!$stmt) {
-        error_log('getTopupAuditTrailBulk prepare failed: ' . $conn->error);
-        return [];
-    }
-
-    $stmt->bind_param($types, ...$topupIds);
-
-    if (!$stmt->execute()) {
-        error_log('getTopupAuditTrailBulk execute failed: ' . $stmt->error);
+    try {
+        $placeholders = implode(',', array_fill(0, count($topupIds), '?'));
+        $stmt = $conn->prepare("
+            SELECT at.*, u.fname, u.lname
+            FROM loan_audit_trail AS at
+            LEFT JOIN user AS u ON u.id = at.actor_id
+            WHERE at.topup_id IN ($placeholders)
+            ORDER BY at.created_at DESC, at.id DESC
+        ");
+        $stmt->bind_param(str_repeat('i', count($topupIds)), ...$topupIds);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $grouped = [];
+        while ($row = $result->fetch_assoc()) {
+            $grouped[(int)$row['topup_id']][] = $row;
+        }
         $stmt->close();
+        return $grouped;
+    } catch (Throwable $e) {
+        error_log('getTopupAuditTrailBulk: ' . $e->getMessage() . ' - falling back to loan audit entries');
+    }
+
+    try {
+        $wanted = array_flip($topupIds);
+        $result = $conn->query("
+            SELECT at.*, u.fname, u.lname
+            FROM loan_audit_trail AS at
+            LEFT JOIN user AS u ON u.id = at.actor_id
+            WHERE at.comments LIKE 'Top-up #%'
+            ORDER BY at.created_at DESC, at.id DESC
+        ");
+        $grouped = [];
+        while ($result && ($row = $result->fetch_assoc())) {
+            if (!preg_match('/^Top-up #(\d+):? ?(.*)$/s', (string)$row['comments'], $m) || !isset($wanted[(int)$m[1]])) {
+                continue;
+            }
+            $row['comments'] = $m[2];
+            $grouped[(int)$m[1]][] = $row;
+        }
+        return $grouped;
+    } catch (Throwable $e) {
+        error_log('getTopupAuditTrailBulk fallback failed: ' . $e->getMessage());
         return [];
     }
-
-    $result = $stmt->get_result();
-    $grouped = [];
-
-    while ($row = $result->fetch_assoc()) {
-        $topupId = (int) $row['topup_id'];
-        $grouped[$topupId][] = $row;
-    }
-
-    $stmt->close();
-
-    return $grouped;
 }
 
 
