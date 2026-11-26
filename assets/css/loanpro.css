@@ -3015,3 +3015,41 @@ a.profile-tab-btn{text-decoration:none;}
     .clients-filter-form{ flex-wrap:wrap; }
     .clients-filter-form .clients-filter-search{ flex-basis:100%; }
 }
+
+/* =========================================================
+   STANDARD STAT CARD SIZE
+   One height, padding and icon size for every statistics card on every
+   page. Placed last and marked !important because several pages restyle
+   .stat-card in their own <style> blocks, which load after this file.
+========================================================= */
+.stats-grid{align-items:stretch !important}
+.stat-card{
+    min-height:108px !important;
+    height:100% !important;
+    padding:.9rem 1rem !important;
+    border-radius:12px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+    min-width:0 !important;
+}
+.stat-card .stat-head{margin-bottom:.5rem !important;align-items:center !important}
+.stat-card .stat-flex{gap:.75rem !important}
+.stat-card .stat-ico,.stat-card .stat-icon{
+    width:40px !important;height:40px !important;min-width:40px;
+    border-radius:10px !important;font-size:.95rem !important;
+}
+.stat-card .stat-value,.stat-card .stat-value.sm{
+    font-size:clamp(1rem,1.2vw,1.2rem) !important;
+    line-height:1.2 !important;
+    margin:0 0 .15rem !important;
+    overflow-wrap:anywhere;
+}
+.stat-card .stat-label{font-size:.68rem !important;margin-bottom:.2rem !important;line-height:1.3 !important}
+.stat-card .stat-small{font-size:.72rem !important;margin-top:.2rem !important}
+.stat-card .stat-foot{margin-top:.5rem !important;padding-top:.4rem !important;font-size:.66rem !important}
+@media(max-width:480px){
+    .stat-card{min-height:92px !important;padding:.7rem .75rem !important}
+    .stat-card .stat-ico,.stat-card .stat-icon{width:34px !important;height:34px !important;min-width:34px;font-size:.85rem !important}
+    .stat-card .stat-value,.stat-card .stat-value.sm{font-size:.95rem !important}
+}
