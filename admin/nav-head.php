@@ -51,6 +51,20 @@ if ($admin_id) {
 $pr = $conn->query("SELECT COUNT(*) AS c FROM loan WHERE status='PENDING'");
 if ($pr) $count_pending = $pr->fetch_assoc()['c'] ?? 0;
 
+// Top-ups: admins approve PENDING / INFO_PROVIDED; officers review the ones assigned to them.
+$count_topups_admin = 0; $count_topups_officer = 0;
+try {
+    $tq = $conn->query("SELECT COUNT(*) AS c FROM loan_topup_requests WHERE status IN ('PENDING','INFO_PROVIDED')");
+    if ($tq) $count_topups_admin = (int)($tq->fetch_assoc()['c'] ?? 0);
+    if ((int)($_SESSION['role'] ?? 0) === 2 && $admin_id) {
+        $tq = $conn->prepare("SELECT COUNT(*) AS c FROM loan_topup_requests WHERE status = 'INFO_REQUESTED' AND assigned_officer_id = ?");
+        $tq->bind_param('i', $admin_id); $tq->execute();
+        $count_topups_officer = (int)($tq->get_result()->fetch_assoc()['c'] ?? 0); $tq->close();
+    }
+} catch (Throwable $ignored) {
+    // Older databases without the top-up table or officer column.
+}
+
 $cp = basename($_SERVER['PHP_SELF']);
 function nav_cls($p, $c) { return $p === $c ? ' active' : ''; }
 
@@ -157,6 +171,8 @@ $navSections = [
   'loans' => ['Loans', [
     ['loans.php', 'fa-file-invoice-dollar', 'All Loans'],
     ['pending_loans.php', 'fa-hourglass-half', 'Pending', (int)$count_pending, 'red'],
+    ...((int)$role === 1 ? [['pending_topups.php', 'fa-plus-circle', 'Pending Top-Ups', $count_topups_admin, 'red']] : []),
+    ...((int)$role === 2 ? [['officer_topup_requests.php', 'fa-plus-circle', 'Top-Up Reviews', $count_topups_officer, 'red']] : []),
     ['payment_slips.php', 'fa-receipt', 'Payment Slips', $payment_slips_pending, 'red', ['payment_slip_file.php']],
     ...((int)$role === 6 ? [['disbursement.php', 'fa-hand-holding-usd', 'Disbursement']] : []),
     ['outstanding.php', 'fa-exclamation-circle', 'Outstanding'],

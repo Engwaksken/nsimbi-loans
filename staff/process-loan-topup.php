@@ -18,6 +18,7 @@ require_once __DIR__ . '/db.php';
 require_once dirname(__DIR__) . '/includes/officer_assignment.php';
 require_once dirname(__DIR__) . '/admin/loan_audit.php';
 require_once dirname(__DIR__) . '/php/mail-function.php';
+require_once dirname(__DIR__) . '/includes/topup_notify.php';
 
 date_default_timezone_set('Africa/Nairobi');
 
@@ -35,45 +36,6 @@ function topup_back(string $message, string $type = 'error'): never
 function topup_money(float $value): string
 {
     return 'UGX ' . number_format($value);
-}
-
-/** Insert into notifications using only the columns this database has. */
-function topup_notify(mysqli $conn, int $recipientId, int $clientId, int $loanId, string $title, string $message): void
-{
-    $now = date('Y-m-d H:i:s');
-    $data = [
-        'user_id'    => [$recipientId, 'i'],
-        'client_id'  => [$clientId, 'i'],
-        'loan_id'    => [$loanId, 'i'],
-        'title'      => [$title, 's'],
-        'message'    => [$message, 's'],
-        'type'       => ['topup_request', 's'],
-        'status'     => ['unread', 's'],
-        'created_at' => [$now, 's'],
-        'updated_at' => [$now, 's'],
-    ];
-
-    $cols = [];
-    $types = '';
-    $params = [];
-    foreach ($data as $col => [$val, $type]) {
-        if (loan_table_has_column($conn, 'notifications', $col)) {
-            $cols[] = $col;
-            $types .= $type;
-            $params[] = $val;
-        }
-    }
-    if (!in_array('message', $cols, true)) {
-        return;
-    }
-
-    $sql = 'INSERT INTO notifications (' . implode(',', $cols) . ') VALUES (' . implode(',', array_fill(0, count($cols), '?')) . ')';
-    $stmt = $conn->prepare($sql);
-    if ($stmt) {
-        $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        $stmt->close();
-    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -160,8 +122,16 @@ $period = TOPUP_MEMBER_PERIOD;
 $rate = TOPUP_MEMBER_RATE;
 $officerParam = $officerId > 0 ? $officerId : null;
 
+// With an officer, the request starts on the officer's Top-Up Reviews page
+// (INFO_REQUESTED); she forwards it (INFO_PROVIDED) for an admin to approve.
+// Without one it goes straight to the admins' Pending Top-Ups (PENDING).
+$toOfficer = $officerId > 0 && loan_table_has_column($conn, 'loan_topup_requests', 'assigned_officer_id');
+$initialStatus = $toOfficer ? 'INFO_REQUESTED' : 'PENDING';
+$officerTask = 'Staff top-up request: check the request and the loan, then forward it to the administrator with your recommendation.';
+
 // Only write the columns this database actually has (older installs differ).
 $fields = [
+    'info_request_details'     => [$toOfficer ? $officerTask : null, 's'],
     'loan_id'                  => [$loanId, 'i'],
     'client_id'                => [$clientId, 'i'],
     'client_type'              => [$clientType, 's'],
@@ -170,7 +140,7 @@ $fields = [
     'proposed_interest_rate'   => [$rate, 'd'],
     'proposed_interest_amount' => [$proposedInterest, 'd'],
     'request_notes'            => [$reason, 's'],
-    'status'                   => ['PENDING', 's'],
+    'status'                   => [$initialStatus, 's'],
     'requested_by'             => [$clientId, 'i'],
     'assigned_officer_id'      => [$officerParam, 'i'],
     'created_at'               => [date('Y-m-d H:i:s'), 's'],
@@ -203,53 +173,44 @@ try {
 
 // The audit trail is a record, not a gate: never lose the request over it.
 try {
-    logTopupAudit($conn, $loanId, $topupId, $clientId, 4, 'topup_requested', $reason, null, null, 'PENDING');
+    logTopupAudit($conn, $loanId, $topupId, $clientId, 4, 'topup_requested', $reason, null, null, $initialStatus);
 } catch (Throwable $e) {
     error_log('Staff top-up audit failed: ' . $e->getMessage());
 }
 
-// Tell the officer. Failures here are logged, not shown: the request is saved.
+
+// Tell the officer (or the admins when no officer could be assigned).
+// Failures here are logged, not shown: the request is already saved.
 $staffName = trim((string)($_SESSION['fname'] ?? '') . ' ' . (string)($_SESSION['lname'] ?? '')) ?: 'A staff member';
-$title = 'Loan Top-Up Request';
+$details = [
+    'Staff member'     => $staffName,
+    'Loan'             => 'LOAN-' . $loanId,
+    'Current balance'  => topup_money($currentBalance),
+    'Top-up requested' => topup_money($amount),
+    'Period'           => $period . ' months',
+    'Reason'           => $reason,
+];
 $message = "{$staffName} has requested a top-up of " . topup_money($amount)
     . " on LOAN-{$loanId} (current balance " . topup_money($currentBalance) . "). Reason: {$reason}";
 
-if ($officerId > 0) {
-    try {
-        topup_notify($conn, $officerId, $clientId, $loanId, $title, $message);
-    } catch (Throwable $e) {
-        error_log('Staff top-up notification failed: ' . $e->getMessage());
-    }
-
-    $stmt = $conn->prepare('SELECT fname, email FROM user WHERE id = ? LIMIT 1');
-    $stmt->bind_param('i', $officerId);
-    $stmt->execute();
-    $officer = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    $officerEmail = trim((string)($officer['email'] ?? ''));
-    if (filter_var($officerEmail, FILTER_VALIDATE_EMAIL)) {
-        $esc = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-        $link = 'https://nsimbiimpact.com/loans/admin/pending_topups.php';
-        $body = '<p>Hello ' . $esc($officer['fname'] ?? '') . ',</p>'
-            . '<p>A staff member has requested a loan top-up on the <strong>Nsimbi Impact Loan System</strong>.</p>'
-            . '<p><strong>Staff member:</strong> ' . $esc($staffName) . '<br>'
-            . '<strong>Loan:</strong> LOAN-' . $loanId . '<br>'
-            . '<strong>Current balance:</strong> ' . $esc(topup_money($currentBalance)) . '<br>'
-            . '<strong>Top-up requested:</strong> ' . $esc(topup_money($amount)) . '<br>'
-            . '<strong>Period:</strong> ' . $period . ' months<br>'
-            . '<strong>Reason:</strong> ' . nl2br($esc($reason)) . '</p>'
-            . "<p><a href='{$link}' style='padding:10px 20px;background-color:#007BFF;color:white;text-decoration:none;'>Review top-up requests</a></p>";
-        try {
-            sendEmail($officerEmail, 'Loan Top-Up Request - Nsimbi Impact', $body, strip_tags(str_replace('<br>', "\n", $body)));
-        } catch (Throwable $e) {
-            error_log('Staff top-up email failed: ' . $e->getMessage());
-        }
-    } else {
-        error_log("Staff top-up: officer #{$officerId} has no valid email address.");
-    }
+if ($toOfficer) {
+    topup_notify_bell($conn, $officerId, $loanId, 'Top-Up Needs Your Review', $message, $clientId);
+    topup_notify_email(
+        $conn,
+        $officerId,
+        'Loan Top-Up Request Needs Your Review - Nsimbi Impact',
+        'A staff member has requested a loan top-up. Please review it and forward it to the administrator for approval.',
+        $details,
+        'officer_topup_requests.php',
+        'Review top-up request'
+    );
 } else {
-    error_log('Staff top-up #' . $topupId . ' saved with no loan officer to notify.');
+    error_log('Staff top-up #' . $topupId . ': no loan officer assigned; sent straight to administrators.');
+    foreach (topup_admin_ids($conn) as $adminId) {
+        topup_notify_bell($conn, $adminId, $loanId, 'Loan Top-Up Request', $message, $clientId);
+        topup_notify_email($conn, $adminId, 'Loan Top-Up Request - Nsimbi Impact',
+            'A staff member has requested a loan top-up.', $details, 'pending_topups.php', 'Review top-up requests');
+    }
 }
 
 topup_back('Your top-up request of ' . topup_money($amount) . ' has been sent to the loan officer for review.', 'success');

@@ -843,6 +843,20 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
     <span class="role-badge"><i class="fas fa-user-shield"></i> Viewing as: <?= h($roleLabel) ?></span>
 </div>
 
+<?php if ($isReviewer && !empty($count_topups_admin)): ?>
+    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <span><i class="fas fa-plus-circle me-1"></i>
+            <?= (int)$count_topups_admin ?> loan top-up request<?= (int)$count_topups_admin === 1 ? '' : 's' ?> awaiting your approval.</span>
+        <a href="pending_topups.php" class="btn btn-sm btn-warning">Review top-ups</a>
+    </div>
+<?php elseif ($isOfficer && !empty($count_topups_officer)): ?>
+    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <span><i class="fas fa-plus-circle me-1"></i>
+            <?= (int)$count_topups_officer ?> loan top-up request<?= (int)$count_topups_officer === 1 ? '' : 's' ?> waiting for your review.</span>
+        <a href="officer_topup_requests.php" class="btn btn-sm btn-warning">Review top-ups</a>
+    </div>
+<?php endif; ?>
+
 <div class="stats-grid">
     <div class="stat-card border-purple-band">
         <div class="stat-flex">

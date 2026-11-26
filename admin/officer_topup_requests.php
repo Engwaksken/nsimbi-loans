@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 session_start();
 
-$phead = 'My Top-Up Info Requests';
+$phead = 'Top-Up Reviews';
 require "nav-head.php";
 require "services_check.php";
 require_once __DIR__ . "/loan_audit.php";
+require_once __DIR__ . '/../php/mail-function.php';
+require_once __DIR__ . '/../includes/topup_notify.php';
 
 if (!isset($conn) || !$conn instanceof mysqli) {
     die("Database connection not established.");
@@ -74,7 +76,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compl
                     $newStatus
                 );
 
-                $success = "Marked as complete and returned to the reviewer.";
+                $success = "Forwarded to the administrator for approval.";
+
+                // Tell the admins it is ready for approval.
+                $officerName = trim((string)($_SESSION['fname'] ?? '') . ' ' . (string)($_SESSION['lname'] ?? '')) ?: 'The loan officer';
+                $loanRef = 'LOAN-' . (int)$topupRow['loan_id'];
+                $note = "{$officerName} reviewed the top-up on {$loanRef} and forwarded it for approval: {$response}";
+                foreach (topup_admin_ids($conn) as $adminId) {
+                    topup_notify_bell($conn, $adminId, (int)$topupRow['loan_id'], 'Top-Up Ready for Approval', $note);
+                    topup_notify_email(
+                        $conn,
+                        $adminId,
+                        'Loan Top-Up Ready for Approval - Nsimbi Impact',
+                        'A loan officer has reviewed a top-up request and forwarded it to you for approval.',
+                        ['Loan' => $loanRef, 'Reviewed by' => $officerName, 'Officer review' => $response],
+                        'pending_topups.php',
+                        'Approve or reject'
+                    );
+                }
             } else {
                 $error = "Could not update this request. Please try again.";
             }
@@ -113,7 +132,7 @@ $stmt->close();
 
 <div class="page-header mb-4">
     <div class="title"><?= h($phead) ?></div>
-    <div class="sub">Top-up requests a reviewer has assigned to you</div>
+    <div class="sub">Top-up requests waiting for your review. Forward each one to the administrator with your recommendation.</div>
 </div>
 
 <?php if (!empty($success)): ?>
@@ -129,7 +148,7 @@ $stmt->close();
             <div class="empty-state">
                 <i class="fas fa-check-circle" style="color:var(--secondary);opacity:.5"></i>
                 <h3>Nothing assigned</h3>
-                <p>You have no open top-up information requests right now.</p>
+                <p>You have no top-up requests to review right now.</p>
             </div>
         </div>
     </div>
@@ -146,32 +165,36 @@ $stmt->close();
             <div class="d-flex justify-content-between flex-wrap gap-2">
                 <div>
                     <div style="font-weight:700"><?= h($clientName) ?> - Top-Up on Loan #<?= (int)$topup['loan_id'] ?></div>
-                    <div class="fs-sm text-muted"><?= money($topup['amount'] ?? 0) ?> requested</div>
+                    <div class="fs-sm text-muted"><?= money($topup['amount'] ?? 0) ?> requested over <?= (int)($topup['loan_period'] ?? 0) ?> months</div>
                 </div>
                 <span class="badge <?= $isDone ? 'badge-purple' : 'badge-info' ?>">
-                    <?= $isDone ? 'Sent back to reviewer' : 'Awaiting your response' ?>
+                    <?= $isDone ? 'Forwarded to admin' : 'Awaiting your review' ?>
                 </span>
             </div>
 
+            <?php if (!empty($topup['request_notes'])): ?>
+                <div class="mt-2 fs-sm"><strong>Reason given:</strong> <?= nl2br(h($topup['request_notes'])) ?></div>
+            <?php endif; ?>
+
             <div class="mt-2 fs-sm">
-                <strong>Reviewer requested:</strong>
+                <strong>To do:</strong>
                 <?= nl2br(h($topup['info_request_details'] ?? '')) ?>
             </div>
 
             <?php if ($isDone): ?>
                 <div class="mt-2 fs-sm text-muted">
-                    <strong>Your response:</strong>
+                    <strong>Your review:</strong>
                     <?= nl2br(h($topup['officer_response'] ?? '')) ?>
                 </div>
             <?php else: ?>
                 <form method="POST" class="mt-3">
                     <input type="hidden" name="action" value="complete">
                     <input type="hidden" name="id" value="<?= $topupId ?>">
-                    <label class="form-label fs-sm">What did you find out / obtain from the applicant?</label>
+                    <label class="form-label fs-sm">Your review and recommendation</label>
                     <textarea name="response" class="form-control mb-2" rows="3" required
-                              placeholder="Summarize the information gathered so the reviewer can finish their assessment..."></textarea>
+                              placeholder="What you checked, and whether you recommend approving this top-up..."></textarea>
                     <button type="submit" class="btn btn-sm btn-success">
-                        <i class="fas fa-check"></i> Mark Complete &amp; Return to Reviewer
+                        <i class="fas fa-paper-plane"></i> Forward to Admin for Approval
                     </button>
                 </form>
             <?php endif; ?>

@@ -208,7 +208,38 @@ function notifyUser(
 }
 
 
+/**
+ * Record a top-up action. Never throws: on databases whose loan_audit_trail
+ * has no topup_id column it falls back to a plain loan audit entry, and any
+ * other failure is only logged, so an audit problem can't break the action.
+ */
 function logTopupAudit(
+    mysqli $conn,
+    int $loanId,
+    int $topupId,
+    int $actorId,
+    int $actorRole,
+    string $action,
+    ?string $comments = null,
+    ?string $reason = null,
+    ?string $oldStatus = null,
+    ?string $newStatus = null
+): bool {
+    try {
+        return logTopupAuditWithId($conn, $loanId, $topupId, $actorId, $actorRole, $action, $comments, $reason, $oldStatus, $newStatus);
+    } catch (Throwable $e) {
+        error_log('logTopupAudit: ' . $e->getMessage() . ' - falling back to loan audit');
+    }
+    try {
+        $note = "Top-up #{$topupId}" . ($comments !== null && $comments !== '' ? ": {$comments}" : '');
+        return logLoanAudit($conn, $loanId, $actorId, $actorRole, $action, $note, $reason, $oldStatus, $newStatus);
+    } catch (Throwable $e) {
+        error_log('logTopupAudit fallback failed: ' . $e->getMessage());
+        return false;
+    }
+}
+
+function logTopupAuditWithId(
     mysqli $conn,
     int $loanId,
     int $topupId,
