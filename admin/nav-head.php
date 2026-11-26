@@ -216,6 +216,7 @@ $navSections = [
     ['loan_messages.php', 'fa-envelope', 'Notifications', (int)$new_messages, ''],
     ['recalculate_limits.php', 'fa-calculator', 'Recalculate Loan Limits'],
     ['ai_settings.php', 'fa-microchip', 'AI Settings'],
+    ...((int)$role === 1 ? [['cron_jobs.php', 'fa-stopwatch', 'Cron Jobs']] : []),
     ['manage-score-weights.php', 'fa-briefcase', 'Manage Score Weights'],
     ['manage-sectors.php', 'fa-industry', 'Manage Sectors'],
     ['business_types.php', 'fa-tags', 'Business Types', $bt_unscored, ''],

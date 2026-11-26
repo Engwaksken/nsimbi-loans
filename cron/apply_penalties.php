@@ -6,16 +6,14 @@ declare(strict_types=1);
  *
  * Penalties also run at most once an hour when staff or the app use the
  * system; schedule this for exact timing, e.g. daily in cPanel > Cron Jobs:
- *   15 0 * * * php /home/<account>/public_html/cron/apply_penalties.php
+ *   15 0 * * * /usr/local/bin/php /home/<account>/public_html/cron/apply_penalties.php
+ * or, where only a web address works (needs CRON_KEY in .env):
+ *   15 0 * * * wget -q -O /dev/null "https://<site>/cron/apply_penalties.php?key=<CRON_KEY>"
+ * Admin > System > Cron Jobs shows the exact commands for this server.
  */
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once dirname(__DIR__) . '/includes/env.php';
+require_once dirname(__DIR__) . '/includes/cron_jobs.php';
+$via = cron_authorise();
 
 require_once dirname(__DIR__) . '/includes/database.php';
-require_once dirname(__DIR__) . '/includes/loan_products.php';
-
-$charged = loan_penalties_run($conn);
-app_setting_set($conn, 'loan_penalties_last_run', (string)time(), 0);
-echo date('Y-m-d H:i:s') . " penalties charged on {$charged} loan(s)\n";
+echo cron_job_run($conn, 'apply_penalties', $via) . "\n";

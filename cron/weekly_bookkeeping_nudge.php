@@ -6,19 +6,14 @@ declare(strict_types=1);
  *
  * Reminders also go out in small batches as staff use the system; schedule
  * this for a set day and time, e.g. Monday 8am in cPanel > Cron Jobs:
- *   0 8 * * 1 php /home/<account>/public_html/cron/weekly_bookkeeping_nudge.php
+ *   0 8 * * 1 /usr/local/bin/php /home/<account>/public_html/cron/weekly_bookkeeping_nudge.php
+ * or, where only a web address works (needs CRON_KEY in .env):
+ *   0 8 * * 1 wget -q -O /dev/null "https://<site>/cron/weekly_bookkeeping_nudge.php?key=<CRON_KEY>"
+ * Admin > System > Cron Jobs shows the exact commands for this server.
  */
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once dirname(__DIR__) . '/includes/env.php';
+require_once dirname(__DIR__) . '/includes/cron_jobs.php';
+$via = cron_authorise();
 
 require_once dirname(__DIR__) . '/includes/database.php';
-require_once dirname(__DIR__) . '/includes/bookkeeping_nudge.php';
-
-$total = 0;
-$week = bookkeeping_nudge_week();
-while (bookkeeping_nudge_due($conn, $week, 1)) {
-    $total += bookkeeping_nudge_send($conn, 100);
-}
-echo date('Y-m-d H:i:s') . " bookkeeping reminder sent to {$total} client(s) for " . bookkeeping_nudge_week() . "\n";
+echo cron_job_run($conn, 'weekly_bookkeeping_nudge', $via) . "\n";
