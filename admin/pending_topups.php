@@ -56,7 +56,7 @@ $sql = "
         l.amount AS current_amount,
         l.loan_balance AS current_balance,
         l.due_date AS current_due_date,
-        u.fname, u.lname, u.email AS client_email, u.phone AS client_phone,
+        u.fname, u.lname, u.email AS client_email,
         c.business_type AS assess_business_type,
         c.amount_last AS assess_amount_last,
         c.amount_this AS assess_amount_this,

@@ -34,7 +34,8 @@ if (!$loan_id) {
 }
 
 $stmt = $conn->prepare("
-    SELECT l.*, u.fname, u.lname, u.email, u.phone
+    SELECT l.*, u.fname, u.lname, u.email,
+           (SELECT c.phone FROM customers c WHERE c.user_id = u.id LIMIT 1) AS phone
     FROM loan l
     LEFT JOIN user u ON u.id = l.client_id
     WHERE l.id = ?

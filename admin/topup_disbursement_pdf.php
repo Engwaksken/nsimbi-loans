@@ -27,7 +27,8 @@ $stmt = $conn->prepare("
     SELECT t.*, l.amount AS loan_amount, l.interest_rate AS loan_interest_rate,
            l.loan_period AS loan_total_period, l.due_date AS loan_due_date,
            l.loan_balance AS loan_balance,
-           u.fname, u.lname, u.email, u.phone
+           u.fname, u.lname, u.email,
+           (SELECT c.phone FROM customers c WHERE c.user_id = u.id LIMIT 1) AS phone
     FROM loan_topup_requests t
     INNER JOIN loan l ON l.id = t.loan_id
     LEFT JOIN user u ON u.id = t.client_id
