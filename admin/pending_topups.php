@@ -163,6 +163,14 @@ foreach ($topups as $t) {
 .review-tab-content.d-none { display: none; }
 .d-none { display: none; }
 
+.pending-table .col-pick { width: 44px; padding-right: 0; }
+.pending-table tr.topup-row.selected-topup td { background: #eff6ff; }
+.bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; padding: 1rem;
+    border: 1px solid #cbd5e1; border-left: 5px solid #16a34a; background: #f0fdf4; border-radius: 14px; margin-bottom: 1rem; }
+.bulk-bar .selection-count { font-weight: 800; color: #166534; }
+.bulk-bar .bulk-comment { flex: 1 1 220px; max-width: 360px; }
+.topup-pick { width: 19px; height: 19px; accent-color: #16a34a; cursor: pointer; flex-shrink: 0; }
+
 @media (max-width: 768px) { .stats-grid { grid-template-columns: 1fr; } }
 </style>
 
@@ -213,11 +221,31 @@ foreach ($topups as $t) {
 
 <?php else: ?>
 
+    <?php if ($isReviewer): ?>
+    <form method="POST" action="review_topup_action.php" id="bulkTopupForm">
+        <input type="hidden" name="action" value="bulk_approve">
+        <div class="bulk-bar" aria-label="Bulk top-up approval">
+            <label class="d-flex align-items-center gap-2 mb-0">
+                <input class="topup-pick" type="checkbox" id="selectAllTopups" aria-label="Select all top-up requests">
+                <strong>Select all</strong>
+            </label>
+            <span class="selection-count" id="topupSelectionCount" aria-live="polite">0 selected</span>
+            <button class="btn btn-sm btn-outline-secondary" id="clearTopupSelection" type="button">Clear</button>
+            <input type="text" name="comments" class="form-control form-control-sm bulk-comment"
+                   placeholder="Reviewer comment for all selected (optional)" aria-label="Reviewer comment">
+            <button class="btn btn-success btn-sm ms-auto" type="submit" id="submitBulkTopups" disabled>
+                <i class="fas fa-check-double"></i> Approve selected
+            </button>
+        </div>
+    </form>
+    <?php endif; ?>
+
     <div class="card mb-3 pending-table-card">
         <div class="table-wrap">
             <table class="table pending-table">
                 <thead>
                     <tr>
+                        <?php if ($isReviewer): ?><th class="col-pick"></th><?php endif; ?>
                         <th>Applicant</th>
                         <th>Status</th>
                         <th>Top-up</th>
@@ -259,6 +287,12 @@ foreach ($topups as $t) {
         }
         ?>
                     <tr class="topup-row status-<?= h(strtolower($status)) ?>">
+                        <?php if ($isReviewer): ?>
+                            <td class="col-pick">
+                                <input type="checkbox" class="topup-pick topup-row-check" form="bulkTopupForm"
+                                       name="ids[]" value="<?= $topupId ?>" aria-label="Select top-up for <?= h($clientName) ?>">
+                            </td>
+                        <?php endif; ?>
                         <td>
                             <div class="d-flex align-items-center gap-2">
                                 <div class="cell-av"><?= h($initials ?: 'U') ?></div>
@@ -524,6 +558,54 @@ document.addEventListener('click', function (e) {
         var activeContent = panelRoot.querySelector('[data-tab-content="' + target + '"]');
         if (activeContent) activeContent.classList.remove('d-none');
     }
+});
+
+// Multi-select: tick top-ups and approve them together.
+document.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('bulkTopupForm');
+    if (!form) return;
+    var checks = Array.prototype.slice.call(document.querySelectorAll('.topup-row-check'));
+    var selectAll = document.getElementById('selectAllTopups');
+    var counter = document.getElementById('topupSelectionCount');
+    var submit = document.getElementById('submitBulkTopups');
+
+    function selectedCount() {
+        return checks.filter(function (x) { return x.checked; }).length;
+    }
+    function update() {
+        var count = selectedCount();
+        counter.textContent = count + ' selected';
+        selectAll.checked = checks.length > 0 && count === checks.length;
+        selectAll.indeterminate = count > 0 && count < checks.length;
+        checks.forEach(function (x) { x.closest('tr').classList.toggle('selected-topup', x.checked); });
+        submit.disabled = count === 0;
+    }
+
+    checks.forEach(function (x) { x.addEventListener('change', update); });
+    selectAll.addEventListener('change', function () {
+        checks.forEach(function (x) { x.checked = selectAll.checked; });
+        update();
+    });
+    document.getElementById('clearTopupSelection').addEventListener('click', function () {
+        checks.forEach(function (x) { x.checked = false; });
+        update();
+    });
+
+    form.addEventListener('submit', function (e) {
+        if (form.dataset.bulkOk === '1') { delete form.dataset.bulkOk; return; }
+        e.preventDefault();
+        var count = selectedCount();
+        if (!count) return;
+        var question = 'Approve ' + count + ' selected top-up request' + (count === 1 ? '' : 's') + '?';
+        var ask = window.Popup ? Popup.confirm(question) : Promise.resolve(window.confirm(question));
+        ask.then(function (ok) {
+            if (!ok) return;
+            form.dataset.bulkOk = '1';
+            form.requestSubmit ? form.requestSubmit() : form.submit();
+        });
+    });
+
+    update();
 });
 </script>
 

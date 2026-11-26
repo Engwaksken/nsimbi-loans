@@ -39,6 +39,109 @@ function redirectWithAlert(string $message, string $url = 'pending_topups.php'):
     exit;
 }
 
+/**
+ * Approve one top-up (a loan_topup_requests row): set APPROVED, log it and
+ * email the client. Returns false when the request was no longer awaiting
+ * review (or the update failed), so nothing else is done for it.
+ */
+function approveTopupRequest(mysqli $conn, array $topup, int $actorId, int $role, string $comments): bool
+{
+    $topupId = (int)$topup['id'];
+    $loanId = (int)$topup['loan_id'];
+    $oldStatus = (string)($topup['status'] ?? '');
+    $newStatus = 'APPROVED';
+
+    try {
+        $stmt = $conn->prepare("
+            UPDATE loan_topup_requests
+            SET status = ?, updated_at = NOW()
+            WHERE id = ? AND status IN ('PENDING', 'INFO_PROVIDED')
+        ");
+        $stmt->bind_param("si", $newStatus, $topupId);
+        $stmt->execute();
+        $changed = $stmt->affected_rows > 0;
+        $stmt->close();
+    } catch (Throwable $e) {
+        error_log("approveTopupRequest #{$topupId}: " . $e->getMessage());
+        return false;
+    }
+    if (!$changed) {
+        return false;
+    }
+
+    logTopupAudit($conn, $loanId, $topupId, $actorId, $role, 'topup_approved',
+        $comments !== '' ? $comments : null, null, $oldStatus, $newStatus);
+
+    try {
+        $clientId = (int)$topup['client_id'];
+        $stmt = $conn->prepare("SELECT fname, lname, email FROM user WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $clientId);
+        $stmt->execute();
+        $client = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $clientName = $client ? trim($client['fname'] . ' ' . $client['lname']) : 'Client';
+        $clientEmail = $client['email'] ?? '';
+        $topupAmount = number_format((float)$topup['amount'], 2);
+
+        if (!empty($clientEmail)) {
+            $subject = "Your Loan Top-Up Has Been Approved - Nsimbi Impact";
+            $body = "
+                <h3>Dear " . htmlspecialchars($clientName, ENT_QUOTES, 'UTF-8') . ",</h3>
+                <p>Your request to top up loan #{$loanId} by <strong>UGX {$topupAmount}</strong> has been <strong>APPROVED</strong>.</p>
+                <p>Our accounts team will now process disbursement of the additional funds.</p>
+                " . ($comments !== '' ? "<p><strong>Reviewer Notes:</strong> " . htmlspecialchars($comments, ENT_QUOTES, 'UTF-8') . "</p>" : "") . "
+                <p>Best regards,<br>Nsimbi Impact Team</p>
+            ";
+            sendEmail($clientEmail, $subject, $body, strip_tags($body));
+        }
+    } catch (Throwable $e) {
+        // The approval stands even if the email can't be sent.
+        error_log("approveTopupRequest #{$topupId} email: " . $e->getMessage());
+    }
+
+    return true;
+}
+
+// Bulk approve: ids[] from the checkboxes on Pending Top-Ups.
+if ($action === 'bulk_approve') {
+    if ($role !== 1) {
+        redirectWithAlert("Not Authorized for this Action");
+    }
+    if ($actorId <= 0) {
+        redirectWithAlert("Your session is missing a user id. Please log in again.");
+    }
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', (array)($_POST['ids'] ?? [])),
+        static fn(int $id): bool => $id > 0
+    )));
+    if ($ids === []) {
+        redirectWithAlert("Select at least one top-up request to approve");
+    }
+
+    $approved = 0;
+    $skipped = 0;
+    $stmt = $conn->prepare("SELECT * FROM loan_topup_requests WHERE id = ? LIMIT 1");
+    foreach ($ids as $id) {
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        if ($row && in_array((string)$row['status'], ['PENDING', 'INFO_PROVIDED'], true)
+            && approveTopupRequest($conn, $row, $actorId, $role, $comments)) {
+            $approved++;
+        } else {
+            $skipped++;
+        }
+    }
+    $stmt->close();
+
+    $message = "{$approved} top-up request" . ($approved === 1 ? '' : 's') . " approved and sent to accounts for disbursement";
+    if ($skipped > 0) {
+        $message .= ". {$skipped} skipped (no longer awaiting review)";
+    }
+    redirectWithAlert($message);
+}
+
 if (!$topupId || $topupId <= 0) {
     redirectWithAlert("Invalid top-up request ID");
 }
@@ -88,47 +191,9 @@ $topupAmount = number_format((float)$topup['amount'], 2);
 
 
 if ($action === 'approve') {
-    $newStatus = 'APPROVED';
-
-    $stmtUpdate = $conn->prepare("
-        UPDATE loan_topup_requests
-        SET status = ?, updated_at = NOW()
-        WHERE id = ? AND status IN ('PENDING', 'INFO_PROVIDED')
-    ");
-    $stmtUpdate->bind_param("si", $newStatus, $topupId);
-
-    if (!$stmtUpdate->execute()) {
-        $stmtUpdate->close();
+    if (!approveTopupRequest($conn, $topup, $actorId, $role, $comments)) {
         redirectWithAlert("Error approving top-up request");
     }
-    $stmtUpdate->close();
-
-    logTopupAudit(
-        $conn,
-        $loanId,
-        $topupId,
-        $actorId,
-        $role,
-        'topup_approved',
-        $comments !== '' ? $comments : null,
-        null,
-        $currentStatus,
-        $newStatus
-    );
-
-    if (!empty($clientEmail)) {
-        $subject = "Your Loan Top-Up Has Been Approved - Nsimbi Impact";
-        $body = "
-            <h3>Dear " . htmlspecialchars($clientName, ENT_QUOTES, 'UTF-8') . ",</h3>
-            <p>Your request to top up loan #{$loanId} by <strong>UGX {$topupAmount}</strong> has been <strong>APPROVED</strong>.</p>
-            <p>Our accounts team will now process disbursement of the additional funds.</p>
-            " . ($comments !== '' ? "<p><strong>Reviewer Notes:</strong> " . htmlspecialchars($comments, ENT_QUOTES, 'UTF-8') . "</p>" : "") . "
-            <p>Best regards,<br>Nsimbi Impact Team</p>
-        ";
-
-        sendEmail($clientEmail, $subject, $body, strip_tags($body));
-    }
-
     redirectWithAlert("Top-up request approved and sent to accounts for disbursement", "pending_topups.php");
 }
 
