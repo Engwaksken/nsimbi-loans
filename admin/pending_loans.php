@@ -508,6 +508,48 @@ $stmt->close();
 // Pull the full audit trail for every loan on this page in a single query.
 $auditTrailByLoan = getLoanAuditTrailBulk($conn, array_column($loans, 'id'));
 
+// Warnings for loans that look already dealt with (seen with organisation
+// loans that stayed here after being rejected):
+// - the audit trail records a rejection but the loan is still pending;
+// - an organisation loan matches an already rejected loan of the same
+//   organisation and amount, i.e. it is probably a duplicate entry.
+$rejectedButPending = [];
+foreach ($auditTrailByLoan as $trailLoanId => $trailEntries) {
+    foreach ($trailEntries as $entry) {
+        if (($entry['action'] ?? '') === 'rejected' || strtoupper((string)($entry['new_status'] ?? '')) === 'REJECTED') {
+            $rejectedButPending[(int)$trailLoanId] = $entry;
+            break;
+        }
+    }
+}
+$possibleDuplicateOf = [];
+$orgIdsOnPage = array_values(array_unique(array_filter(array_map(
+    static fn($row) => (int)($row['organisation_id'] ?? 0), $loans
+))));
+if ($orgIdsOnPage) {
+    try {
+        $rejectedByOrg = [];
+        $res = $conn->query("
+            SELECT id, organisation_id, amount FROM loan
+            WHERE organisation_id IN (" . implode(',', $orgIdsOnPage) . ") AND UPPER(TRIM(status)) = 'REJECTED'
+            ORDER BY id DESC
+        ");
+        while ($res && ($row = $res->fetch_assoc())) {
+            $rejectedByOrg[(int)$row['organisation_id']][] = $row;
+        }
+        foreach ($loans as $row) {
+            foreach ($rejectedByOrg[(int)($row['organisation_id'] ?? 0)] ?? [] as $rejected) {
+                if (abs((float)$rejected['amount'] - (float)$row['amount']) < 1) {
+                    $possibleDuplicateOf[(int)$row['id']] = (int)$rejected['id'];
+                    break;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Pending loans duplicate check: ' . $e->getMessage());
+    }
+}
+
 // Officers available for the "Assign to Loan Officer" dropdown.
 $loanOfficers = getLoanOfficers($conn);
 
@@ -1235,6 +1277,16 @@ function paginationUrl(int $targetPage, string $search, string $typeFilter, int 
                                 <div class="fs-xs text-muted mt-1"><i class="fas fa-reply"></i> Officer replied</div>
                             <?php elseif ($status === 'INFO_REQUESTED'): ?>
                                 <div class="fs-xs text-muted mt-1"><i class="fas fa-user-clock"></i> <?= $officerName !== '' ? h($officerName) : 'With officer' ?></div>
+                            <?php endif; ?>
+                            <?php if (isset($rejectedButPending[$loanId])): ?>
+                                <?php $rej = $rejectedButPending[$loanId]; ?>
+                                <div class="fs-xs text-danger mt-1"><i class="fas fa-triangle-exclamation"></i>
+                                    Recorded as rejected<?= !empty($rej['created_at']) ? ' on ' . h(date('M j, Y', strtotime((string)$rej['created_at']))) : '' ?>, but still pending. Reject it again.</div>
+                            <?php endif; ?>
+                            <?php if (isset($possibleDuplicateOf[$loanId])): ?>
+                                <div class="fs-xs text-danger mt-1"><i class="fas fa-clone"></i>
+                                    Possible duplicate of rejected loan
+                                    <a href="view_loan.php?id=<?= (int)$possibleDuplicateOf[$loanId] ?>">#<?= (int)$possibleDuplicateOf[$loanId] ?></a></div>
                             <?php endif; ?>
                         </td>
                         <td class="text-nowrap">
